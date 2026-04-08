@@ -68,6 +68,9 @@ backend_port: 8001
 # rate_limit_daily: 150
 # staleness_days: 30
 
+# ── Demo ─────────────────────────────────────────────────
+# demo_mode: false          # true when using demo database
+
 # ── Observability (off by default) ───────────────────────
 # langfuse_enabled: false
 """

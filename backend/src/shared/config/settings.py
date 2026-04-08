@@ -147,6 +147,7 @@ class LinkedOutSettings(BaseSettings):
     data_dir: str = Field(default='~/linkedout-data')
     environment: str = Field(default='local')
     debug: bool = Field(default=False)
+    demo_mode: bool = Field(default=False)
 
     # ── Server ──────────────────────────────────────────────
     backend_host: str = Field(default='localhost')
