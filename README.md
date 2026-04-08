@@ -1,3 +1,15 @@
+```
+ _     _       _            _
+| |   (_)_ __ | | _____  __| |
+| |   | | '_ \| |/ / _ \/ _` |
+| |___| | | | |   <  __/ (_| |
+|_____|_|_| |_|_|\_\___|\__,_|
+                            \
+                             █▀▀█ █  █ ▀█▀
+                             █  █ █  █  █
+                             █▄▄█ ▀▄▄▀  █
+```
+
 # LinkedOut
 
 [![CI](https://github.com/sridherj/linkedout-oss/actions/workflows/ci.yml/badge.svg)](https://github.com/sridherj/linkedout-oss/actions/workflows/ci.yml)
