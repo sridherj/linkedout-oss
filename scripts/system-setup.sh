@@ -182,10 +182,14 @@ install_macos() {
         exit 1
     fi
 
-    # Install PostgreSQL 16 and pgvector via Homebrew (no sudo needed)
-    if ! brew install postgresql@16; then
-        fail "Failed to install postgresql@16 via Homebrew."
-        exit 1
+    # Skip install if PostgreSQL is already available
+    if command -v psql &>/dev/null; then
+        ok "PostgreSQL already installed ($(psql --version 2>/dev/null | head -1))."
+    else
+        if ! brew install postgresql; then
+            fail "Failed to install postgresql via Homebrew."
+            exit 1
+        fi
     fi
 
     if ! brew install pgvector; then
@@ -193,7 +197,7 @@ install_macos() {
         exit 1
     fi
 
-    ok "PostgreSQL 16 and pgvector installed via Homebrew."
+    ok "PostgreSQL and pgvector installed via Homebrew."
 }
 
 install_arch() {
@@ -250,9 +254,13 @@ start_postgres() {
     local platform="$1"
 
     if [[ "$platform" == "macos" ]]; then
-        # Homebrew services
+        # Homebrew services — detect which postgresql formula is installed
         info "Starting PostgreSQL via Homebrew services..."
-        brew services start postgresql@16 2>/dev/null || brew services restart postgresql@16 2>/dev/null || true
+        local pg_formula
+        pg_formula="$(brew list --formula | grep '^postgresql' | head -1)"
+        if [[ -n "$pg_formula" ]]; then
+            brew services start "$pg_formula" 2>/dev/null || brew services restart "$pg_formula" 2>/dev/null || true
+        fi
         # Give it a moment to start
         sleep 2
     else

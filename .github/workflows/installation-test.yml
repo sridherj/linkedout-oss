@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Installation Tests (Tier 3) — multi-platform matrix + end-to-end flow
 #
-# 12 matrix jobs: 2 OS x 3 Python x 2 PostgreSQL
-# PostgreSQL is installed natively to support both Linux and macOS runners.
+# 6 matrix jobs: 2 OS x 3 Python
+# PostgreSQL is installed natively (distro default) on both Linux and macOS.
 
 name: Installation Tests (Tier 3)
 
@@ -31,7 +31,6 @@ jobs:
       matrix:
         os: [ubuntu-24.04, macos-latest]
         python-version: ['3.11', '3.12', '3.13']
-        postgres-version: ['16', '17']
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
 
@@ -47,25 +46,28 @@ jobs:
       - name: Install PostgreSQL (Ubuntu)
         if: runner.os == 'Linux'
         run: |
-          # Add PostgreSQL APT repo for version selection
+          # Install distro-default PostgreSQL, contrib (pg_trgm), and pgvector
           sudo apt-get update -qq
-          sudo apt-get install -y -qq curl ca-certificates
-          sudo install -d /usr/share/postgresql-common/pgdg
-          sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
-            --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
-          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
-            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
-            | sudo tee /etc/apt/sources.list.d/pgdg.list
-          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql postgresql-contrib
 
-          # Install PostgreSQL and pgvector
-          sudo apt-get install -y -qq \
-            postgresql-${{ matrix.postgres-version }} \
-            postgresql-${{ matrix.postgres-version }}-pgvector
+          # Detect installed major version and install matching pgvector
+          PG_MAJOR="$(psql --version | grep -oP '\d+' | head -1)"
+          sudo apt-get install -y -qq "postgresql-${PG_MAJOR}-pgvector" || {
+            # Fall back to PGDG repo if distro doesn't ship pgvector
+            sudo apt-get install -y -qq curl ca-certificates
+            sudo install -d /usr/share/postgresql-common/pgdg
+            sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+              --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
+            echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+              https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+              | sudo tee /etc/apt/sources.list.d/pgdg.list
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq "postgresql-${PG_MAJOR}-pgvector"
+          }
 
-          # Start and configure
-          sudo systemctl start postgresql@${{ matrix.postgres-version }}-main
-          sudo systemctl enable postgresql@${{ matrix.postgres-version }}-main
+          # Start service
+          sudo systemctl start postgresql
+          sudo systemctl enable postgresql
 
           # Create test user and database
           sudo -u postgres psql -c "CREATE USER linkedout_test WITH PASSWORD 'linkedout_test' SUPERUSER;"
@@ -79,11 +81,12 @@ jobs:
       - name: Install PostgreSQL (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install postgresql@${{ matrix.postgres-version }} pgvector
+          brew install postgresql pgvector
 
-          # Add to PATH and start
-          export PATH="$(brew --prefix postgresql@${{ matrix.postgres-version }})/bin:$PATH"
-          echo "$(brew --prefix postgresql@${{ matrix.postgres-version }})/bin" >> "$GITHUB_PATH"
+          # Detect the installed formula and add to PATH
+          PG_FORMULA="$(brew list --formula | grep '^postgresql' | head -1)"
+          export PATH="$(brew --prefix "$PG_FORMULA")/bin:$PATH"
+          echo "$(brew --prefix "$PG_FORMULA")/bin" >> "$GITHUB_PATH"
 
           initdb -D /tmp/pgdata
           pg_ctl -D /tmp/pgdata -l /tmp/pg.log start
@@ -136,7 +139,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: installation-diag-${{ matrix.os }}-py${{ matrix.python-version }}-pg${{ matrix.postgres-version }}
+          name: installation-diag-${{ matrix.os }}-py${{ matrix.python-version }}
           path: |
             ~/linkedout-data/logs/
             ~/linkedout-data/reports/
@@ -155,21 +158,26 @@ jobs:
         with:
           python-version: '3.12'
 
-      # ── PostgreSQL 17 ────────────────────────────────────────────────
-      - name: Install PostgreSQL 17
+      - name: Install PostgreSQL
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq curl ca-certificates
-          sudo install -d /usr/share/postgresql-common/pgdg
-          sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
-            --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
-          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
-            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
-            | sudo tee /etc/apt/sources.list.d/pgdg.list
-          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql postgresql-contrib
 
-          sudo apt-get install -y -qq postgresql-17 postgresql-17-pgvector
-          sudo systemctl start postgresql@17-main
+          PG_MAJOR="$(psql --version | grep -oP '\d+' | head -1)"
+          sudo apt-get install -y -qq "postgresql-${PG_MAJOR}-pgvector" || {
+            sudo apt-get install -y -qq curl ca-certificates
+            sudo install -d /usr/share/postgresql-common/pgdg
+            sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+              --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
+            echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+              https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+              | sudo tee /etc/apt/sources.list.d/pgdg.list
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq "postgresql-${PG_MAJOR}-pgvector"
+          }
+
+          sudo systemctl start postgresql
+          sudo systemctl enable postgresql
 
           sudo -u postgres psql -c "CREATE USER linkedout_test WITH PASSWORD 'linkedout_test' SUPERUSER;"
           sudo -u postgres psql -c "CREATE DATABASE linkedout_test OWNER linkedout_test;"
@@ -222,20 +230,26 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install PostgreSQL 17
+      - name: Install PostgreSQL
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq curl ca-certificates
-          sudo install -d /usr/share/postgresql-common/pgdg
-          sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
-            --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
-          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
-            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
-            | sudo tee /etc/apt/sources.list.d/pgdg.list
-          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql postgresql-contrib
 
-          sudo apt-get install -y -qq postgresql-17 postgresql-17-pgvector
-          sudo systemctl start postgresql@17-main
+          PG_MAJOR="$(psql --version | grep -oP '\d+' | head -1)"
+          sudo apt-get install -y -qq "postgresql-${PG_MAJOR}-pgvector" || {
+            sudo apt-get install -y -qq curl ca-certificates
+            sudo install -d /usr/share/postgresql-common/pgdg
+            sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+              --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
+            echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+              https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+              | sudo tee /etc/apt/sources.list.d/pgdg.list
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq "postgresql-${PG_MAJOR}-pgvector"
+          }
+
+          sudo systemctl start postgresql
+          sudo systemctl enable postgresql
 
           sudo -u postgres psql -c "CREATE USER linkedout_test WITH PASSWORD 'linkedout_test' SUPERUSER;"
           sudo -u postgres psql -c "CREATE DATABASE linkedout_test OWNER linkedout_test;"
