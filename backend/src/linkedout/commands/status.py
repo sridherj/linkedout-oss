@@ -2,12 +2,13 @@
 """``linkedout status`` — quick system health check.
 
 Reports DB connectivity, profile/company counts, embedding coverage,
-and backend server status.
+backend server status, and demo mode indicator.
 """
 import json as _json
 import os
 from pathlib import Path
 from urllib.error import URLError
+from urllib.parse import urlparse
 from urllib.request import urlopen
 
 import click
@@ -65,12 +66,16 @@ def status_command(output_json: bool):
     profiles = 0
     companies = 0
     embedding_pct = 0.0
+    demo_mode = False
+    database_name = 'linkedout'
     try:
         from shared.config import get_config
         from shared.utilities.health_checks import check_db_connection, get_db_stats
 
         config = get_config()
         port = config.backend_port
+        demo_mode = config.demo_mode
+        database_name = urlparse(config.database_url).path.lstrip('/')
 
         db_result = check_db_connection()
         db_ok = db_result.status == 'pass'
@@ -86,6 +91,8 @@ def status_command(output_json: bool):
         from shared.config import get_config
         config = get_config()
         port = config.backend_port
+        demo_mode = config.demo_mode
+        database_name = urlparse(config.database_url).path.lstrip('/')
 
     # --- Backend check ---
     backend = _check_backend(port)
@@ -93,6 +100,8 @@ def status_command(output_json: bool):
     if output_json:
         data = {
             'version': __version__,
+            'demo_mode': demo_mode,
+            'database_name': database_name,
             'db_connected': db_ok,
             'profiles': profiles,
             'companies': companies,
@@ -105,6 +114,9 @@ def status_command(output_json: bool):
         }
         click.echo(_json.dumps(data, indent=2))
     else:
+        db_label = f'DB: {database_name}'
+        if demo_mode:
+            db_label += ' (demo)'
         db_status = 'connected' if db_ok else 'NOT connected'
         backend_status = (
             f"running (PID {backend['pid']}, port {backend['port']})"
@@ -112,14 +124,19 @@ def status_command(output_json: bool):
             else 'not running'
         )
 
+        title = 'LinkedOut v{}'.format(__version__)
+        if demo_mode:
+            title += ' [DEMO]'
+
         parts = [
-            f'LinkedOut v{__version__}',
+            title,
+            db_label,
             f'{profiles:,} profiles',
             f'{companies:,} companies',
             f'embeddings: {embedding_pct:.1f}%',
             f'backend: {backend_status}',
         ]
         if not db_ok:
-            parts = [f'LinkedOut v{__version__}', f'DB: {db_status}', f'backend: {backend_status}']
+            parts = [title, db_label, f'DB: {db_status}', f'backend: {backend_status}']
 
         click.echo(' | '.join(parts))
