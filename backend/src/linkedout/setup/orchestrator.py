@@ -38,6 +38,15 @@ _LINKEDOUT_VERSION = "0.1.0"
 # Steps that must re-run when the LinkedOut version changes
 _VERSION_SENSITIVE_STEPS = frozenset({"database", "python_env", "skills"})
 
+# Steps skipped when the user accepts the demo path (steps 5-11)
+DEMO_SKIPPABLE_STEPS = frozenset({
+    "api_keys", "user_profile", "csv_import", "contacts_import",
+    "seed_data", "embeddings", "affinity",
+})
+
+# Number of infrastructure steps common to both paths
+_INFRA_STEP_COUNT = 4
+
 
 # ── Data classes ────────────────────────────────────────────────────
 
@@ -221,6 +230,10 @@ def should_run_step(
     # Never completed
     if not completed_at:
         return True, "not yet completed"
+
+    # Demo-skipped counts as completed
+    if completed_at == "demo-skipped":
+        return False, "skipped (demo mode)"
 
     # Version bump forces re-run for version-sensitive steps
     if (
@@ -541,11 +554,12 @@ def run_setup(
     the ``/linkedout-setup`` skill. It:
 
     1. Loads persisted state (or starts fresh on first run).
-    2. Iterates through all 14 setup steps.
-    3. For each step, decides whether to skip or run.
-    4. Saves state after each successful step (atomic writes).
-    5. On failure, saves partial state and generates a diagnostic.
-    6. On success, updates ``setup_version`` and ``last_run``.
+    2. Runs infrastructure steps 1-4 (common to both paths).
+    3. After step 4, presents the demo offer (fresh installs only).
+    4. If demo accepted: runs D1-D5, marks steps 5-11 as demo-skipped.
+    5. If demo declined: continues with steps 5-14 as normal.
+    6. On re-run in demo mode: offers transition to full setup.
+    7. Saves state after each successful step (atomic writes).
 
     Args:
         data_dir: Override data directory. Defaults to ``~/linkedout-data``
@@ -572,7 +586,6 @@ def run_setup(
     # Load state
     state = load_setup_state(data_dir)
     steps = _build_step_registry()
-    total_steps = len(steps)
 
     # Build context
     context = SetupContext(
@@ -599,15 +612,40 @@ def run_setup(
             _LINKEDOUT_VERSION,
         )
 
-    # Execute steps
+    # ── Detect demo mode and transition ───────────────────────────
+    is_demo = _is_demo_mode_active(data_dir)
+
+    if is_demo:
+        # User is in demo mode — offer transition
+        from linkedout.setup.demo_offer import offer_transition
+
+        if offer_transition():
+            # Accept transition: clear demo-skipped, switch to real DB
+            _clear_demo_state(state, data_dir)
+            is_demo = False
+            log.info("Transition accepted — switching to full setup")
+        else:
+            # Decline transition: show all steps as complete/skipped, exit
+            _show_demo_rerun_summary(steps, state)
+            log.info("Transition declined — demo mode unchanged")
+            return
+
+    # ── Determine step numbering ──────────────────────────────────
+    # On a fresh install (no steps beyond step 4 complete), we show
+    # "Step N of 4" for the infra steps. Once the user decides, we
+    # either run demo D1-D5 or switch to "Step N of 14".
+    demo_eligible = _is_demo_eligible(state, data_dir)
+    total_display = _INFRA_STEP_COUNT if demo_eligible else len(steps)
+
+    # ── Execute steps ─────────────────────────────────────────────
     steps_log: list[dict] = []
     for step in steps:
         _check_dependencies(step, state)
 
-        should_run, reason = should_run_step(step, state, _LINKEDOUT_VERSION)
+        run_it, reason = should_run_step(step, state, _LINKEDOUT_VERSION)
 
-        if not should_run:
-            print(f"\nStep {step.number} of {total_steps}: {step.display_name}")
+        if not run_it:
+            print(f"\nStep {step.number} of {total_display}: {step.display_name}")
             print(f"  \u2713 Already complete ({reason})")
             steps_log.append({
                 "name": step.display_name,
@@ -617,8 +655,8 @@ def run_setup(
             continue
 
         # Run the step
-        log_step_start(step.number, total_steps, step.display_name)
-        print(f"\nStep {step.number} of {total_steps}: {step.display_name}")
+        log_step_start(step.number, total_display, step.display_name)
+        print(f"\nStep {step.number} of {total_display}: {step.display_name}")
 
         start = time.monotonic()
         try:
@@ -680,7 +718,149 @@ def run_setup(
             "duration": f"{duration:.1f}s",
         })
 
+        # ── Demo decision gate after step 4 (python_env) ─────────
+        if step.name == "python_env" and demo_eligible:
+            from linkedout.setup.demo_offer import offer_demo, run_demo_setup
+
+            if offer_demo():
+                # Run demo steps D1-D5
+                db_url = context.db_url or "postgresql://linkedout:@localhost:5432/linkedout"
+                success = run_demo_setup(data_dir, repo_root, db_url)
+
+                if success:
+                    # Mark demo-skippable steps as demo-skipped
+                    now = datetime.now(timezone.utc).strftime(
+                        "%Y-%m-%dT%H:%M:%SZ"
+                    )
+                    for s in steps:
+                        if s.name in DEMO_SKIPPABLE_STEPS:
+                            state.steps_completed[s.name] = "demo-skipped"
+                    # Mark skills and readiness as completed (D4, D5)
+                    state.steps_completed["skills"] = now
+                    state.steps_completed["readiness"] = now
+                    # auto_repair not run in demo mode
+                    state.steps_completed["auto_repair"] = "demo-skipped"
+                    state.last_run = now
+                    state.setup_version = _LINKEDOUT_VERSION
+                    save_setup_state(state, data_dir)
+                    log.info("Demo setup complete")
+                    return
+                else:
+                    # Demo failed — offer to continue with full setup
+                    print("\n  Demo setup encountered errors.")
+                    print("  Continuing with full setup (steps 5-14)...\n")
+                    total_display = len(steps)
+                    # Fall through to continue the normal step loop
+            else:
+                # Demo declined — switch to 14-step numbering
+                total_display = len(steps)
+
     log.info("Setup complete")
+
+
+# ── Demo helpers ───────────────────────────────────────────────────
+
+
+def _is_demo_mode_active(data_dir: Path) -> bool:
+    """Check if demo_mode is True in config.yaml."""
+    import yaml
+
+    config_path = data_dir / "config" / "config.yaml"
+    if not config_path.exists():
+        return False
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            cfg = yaml.safe_load(f)
+        return bool(cfg.get("demo_mode")) if isinstance(cfg, dict) else False
+    except Exception:
+        return False
+
+
+def _is_demo_eligible(state: SetupState, data_dir: Path) -> bool:
+    """Check if the demo offer should be shown.
+
+    The demo offer is eligible only on fresh installs where:
+    1. No steps beyond step 4 (python_env) are complete.
+    2. ``demo_mode`` is not already set in config.
+    """
+    # If demo_mode is already configured (either True or False), don't re-offer
+    if _is_demo_mode_active(data_dir):
+        return False
+
+    import yaml
+
+    config_path = data_dir / "config" / "config.yaml"
+    if config_path.exists():
+        try:
+            with open(config_path, encoding="utf-8") as f:
+                cfg = yaml.safe_load(f) or {}
+            if "demo_mode" in cfg:
+                return False
+        except Exception:
+            pass
+
+    # Check if any steps beyond step 4 are complete
+    post_infra_steps = {
+        "api_keys", "user_profile", "csv_import", "contacts_import",
+        "seed_data", "embeddings", "affinity", "skills", "readiness",
+        "auto_repair",
+    }
+    for step_name in post_infra_steps:
+        completed = state.steps_completed.get(step_name)
+        if completed:
+            return False
+
+    return True
+
+
+def _clear_demo_state(state: SetupState, data_dir: Path) -> None:
+    """Clear demo-skipped markers and switch config to real mode.
+
+    Called when the user accepts the transition from demo to full setup.
+    """
+    from linkedout.demo import set_demo_mode
+    from linkedout.setup.database import generate_agent_context_env
+
+    # Clear demo-skipped markers so steps 5-11 will re-run
+    for step_name in DEMO_SKIPPABLE_STEPS:
+        if state.steps_completed.get(step_name) == "demo-skipped":
+            del state.steps_completed[step_name]
+
+    # Also clear auto_repair if it was demo-skipped
+    if state.steps_completed.get("auto_repair") == "demo-skipped":
+        del state.steps_completed["auto_repair"]
+
+    # Switch config to real database
+    set_demo_mode(data_dir, enabled=False)
+
+    # Regenerate agent-context.env for the real database
+    real_db_url = _read_db_url(data_dir)
+    if real_db_url:
+        try:
+            generate_agent_context_env(real_db_url, data_dir)
+        except Exception:
+            pass
+
+    save_setup_state(state, data_dir)
+
+
+def _show_demo_rerun_summary(
+    steps: list[SetupStep],
+    state: SetupState,
+) -> None:
+    """Show a fast no-op summary when re-running setup in demo mode."""
+    total = len(steps)
+    for step in steps:
+        completed = state.steps_completed.get(step.name)
+        if completed == "demo-skipped":
+            print(f"\nStep {step.number} of {total}: {step.display_name}")
+            print("  \u2713 Skipped (demo mode)")
+        elif completed:
+            print(f"\nStep {step.number} of {total}: {step.display_name}")
+            print("  \u2713 Already complete")
+        else:
+            print(f"\nStep {step.number} of {total}: {step.display_name}")
+            print("  \u2713 Already complete")
 
 
 # ── System setup wrapper ────────────────────────────────────────────

@@ -273,12 +273,16 @@ def update_dispatch_file(
     return True
 
 
-def setup_skills(repo_root: Path, data_dir: Path) -> OperationReport:
+def setup_skills(
+    repo_root: Path,
+    data_dir: Path,
+    auto_accept: bool = False,
+) -> OperationReport:
     """Full skill installation orchestration for the setup flow.
 
     Steps:
     1. Detect installed AI platforms
-    2. Confirm with user
+    2. Confirm with user (unless ``auto_accept=True``)
     3. Generate skills from templates
     4. Install to each detected platform
     5. Update dispatch files
@@ -286,6 +290,7 @@ def setup_skills(repo_root: Path, data_dir: Path) -> OperationReport:
     Args:
         repo_root: Path to the repository root.
         data_dir: Root data directory (e.g., ``~/linkedout-data``).
+        auto_accept: When ``True`` (demo mode), skip the Y/n prompt.
 
     Returns:
         ``OperationReport`` summarizing what was done.
@@ -294,7 +299,8 @@ def setup_skills(repo_root: Path, data_dir: Path) -> OperationReport:
     data_dir = Path(data_dir).expanduser()
     agent_context = data_dir / "config" / "agent-context.env"
 
-    print("Step 12 of 14: Skill Installation\n")
+    if not auto_accept:
+        print("Step 12 of 14: Skill Installation\n")
 
     # Detect platforms
     platforms = detect_platforms()
@@ -316,20 +322,21 @@ def setup_skills(repo_root: Path, data_dir: Path) -> OperationReport:
         print(f"    \u2713 {p.name}  ({_display_path(p.config_dir)})")
     print()
 
-    # Ask for confirmation
-    choice = input("  Install LinkedOut skills for these platforms? [Y/n] ").strip().lower()
-    if choice in ("n", "no"):
-        print("\n  Skipping skill installation.")
-        duration_ms = (time.monotonic() - start) * 1000
-        return OperationReport(
-            operation="setup-skills",
-            duration_ms=duration_ms,
-            counts=OperationCounts(
-                total=len(platforms),
-                skipped=len(platforms),
-            ),
-            next_steps=["Re-run /linkedout-setup to install skills later"],
-        )
+    # Ask for confirmation (skip in demo/auto_accept mode)
+    if not auto_accept:
+        choice = input("  Install LinkedOut skills for these platforms? [Y/n] ").strip().lower()
+        if choice in ("n", "no"):
+            print("\n  Skipping skill installation.")
+            duration_ms = (time.monotonic() - start) * 1000
+            return OperationReport(
+                operation="setup-skills",
+                duration_ms=duration_ms,
+                counts=OperationCounts(
+                    total=len(platforms),
+                    skipped=len(platforms),
+                ),
+                next_steps=["Re-run /linkedout-setup to install skills later"],
+            )
 
     # Generate skills
     generated = generate_skills(repo_root)
