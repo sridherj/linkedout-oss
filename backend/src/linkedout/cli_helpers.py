@@ -66,6 +66,7 @@ AI-native professional network intelligence
 Commands:
   Import:       import-connections, import-contacts, import-seed
   Seed Data:    download-seed
+  Demo:         download-demo, restore-demo
   Intelligence: compute-affinity, embed
   System:       status, diagnostics, version, config, report-issue
   Server:       start-backend

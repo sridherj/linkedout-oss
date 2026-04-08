@@ -67,6 +67,13 @@ class _LazyLinkedOutCLI(CategoryHelpGroup):
 
         self.add_command(upgrade_command)
 
+        # --- Demo ---
+        from linkedout.commands.download_demo import download_demo_command
+        from linkedout.commands.restore_demo import restore_demo_command
+
+        self.add_command(download_demo_command)
+        self.add_command(restore_demo_command)
+
         # --- Meta ---
         from linkedout.commands.version import version_command
         from linkedout.commands.reset_db import reset_db_command

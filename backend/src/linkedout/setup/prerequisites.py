@@ -303,6 +303,13 @@ def run_all_checks(data_dir: Path | None = None) -> PrerequisiteReport:
             f'PostgreSQL {pg.version} is too old. Version 14+ is required for pgvector.'
         )
 
+    # pg_restore is required for demo database restore
+    if pg.installed and not shutil.which('pg_restore'):
+        blockers.append(
+            'pg_restore not found. It ships with the PostgreSQL client package '
+            '(e.g., postgresql-client on Debian/Ubuntu).'
+        )
+
     # Python blockers
     if not py.installed:
         blockers.append('Python 3.11+ is required but not found.')
