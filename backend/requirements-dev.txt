@@ -1,0 +1,20 @@
+-r requirements.txt
+
+# Testing
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+pytest-env>=1.1.0
+pytest-sugar>=0.9.7
+pytest-xdist>=3.5.0
+
+# Linting & type checking
+ruff
+pyright
+pyrefly
+
+# Dev tools
+fastapi-cli>=0.0.4
+
+# Benchmarking
+scipy>=1.10.0

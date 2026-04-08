@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <!-- Option F: Arrow pointing outward from a node — "reaching out from your network" -->
+  <rect width="128" height="128" rx="28" fill="#8558AC"/>
+
+  <!-- Central person node -->
+  <circle cx="46" cy="56" r="10" fill="white"/>
+  <path d="M32 80a14 14 0 0 1 28 0" fill="white"/>
+
+  <!-- Arrow shooting out — the "outreach" -->
+  <line x1="60" y1="52" x2="92" y2="34" stroke="white" stroke-width="4" stroke-linecap="round"/>
+  <!-- Arrowhead -->
+  <path d="M86 28 L96 32 L88 40" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+  <!-- Small connection dots along the path -->
+  <circle cx="72" cy="45" r="3.5" fill="white" opacity="0.5"/>
+  <circle cx="96" cy="32" r="5" fill="white"/>
+
+  <!-- Subtle secondary connection -->
+  <line x1="56" y1="62" x2="78" y2="78" stroke="white" stroke-width="2.5" stroke-linecap="round" opacity="0.4"/>
+  <circle cx="82" cy="82" r="4" fill="white" opacity="0.5"/>
+</svg>

@@ -1,0 +1,90 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write  # needed for creating GitHub Releases
+
+jobs:
+  # Gate: run Tier 1 + 2 tests first
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Chrome extension
+        working-directory: extension
+        env:
+          VITE_BACKEND_URL: http://localhost:8001
+        run: |
+          npm ci
+          npx wxt build
+          npx wxt zip
+
+      - name: Verify seed data checksums
+        if: hashFiles('seed-data/linkedout-seed-core.sqlite') != ''
+        run: python scripts/verify-seed-checksums.py
+
+      - name: Extract release notes from CHANGELOG
+        id: changelog
+        run: |
+          python -c "
+          import re
+          content = open('CHANGELOG.md').read()
+          # Extract the version from the tag
+          import os
+          tag = os.environ.get('GITHUB_REF_NAME', '0.1.0').lstrip('v')
+          escaped = re.escape(tag)
+          match = re.search(rf'## \[{escaped}\].*?\n(.*?)(?=\n## \[|$)', content, re.DOTALL)
+          if match:
+              print(match.group(1).strip())
+          else:
+              print(f'Release v{tag}')
+          " > release_notes.txt
+
+      - name: Collect release assets
+        id: assets
+        run: |
+          # Collect all available release assets
+          ASSETS=""
+          # Chrome extension zip
+          for f in extension/.output/*.zip; do
+            [ -f "$f" ] && ASSETS="$ASSETS $f"
+          done
+          # Seed data (if present in repo — normally released separately)
+          for f in seed-data/linkedout-seed-core.sqlite seed-data/linkedout-seed-full.sqlite seed-data/seed-manifest.json; do
+            [ -f "$f" ] && ASSETS="$ASSETS $f"
+          done
+          echo "files=$ASSETS" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          ARGS=(
+            "$TAG"
+            --title "${TAG} — LinkedOut OSS"
+            --notes-file release_notes.txt
+          )
+          # Attach any collected assets
+          for f in ${{ steps.assets.outputs.files }}; do
+            ARGS+=("$f")
+          done
+          gh release create "${ARGS[@]}"

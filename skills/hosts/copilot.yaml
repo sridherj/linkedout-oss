@@ -1,0 +1,12 @@
+name: copilot
+display_name: GitHub Copilot
+skill_install_path: ~/.github/skills/linkedout
+local_skill_path: .github/skills/linkedout
+frontmatter:
+  mode: denylist
+  strip_fields: []
+  description_limit: null
+path_rewrites:
+  - from: ".claude/skills/"
+    to: ".github/skills/"
+tool_rewrites: {}

@@ -1,0 +1,49 @@
+name: Extension Build
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: extension/package-lock.json
+
+      - name: Install dependencies
+        run: cd extension && npm ci
+
+      - name: Build extension
+        env:
+          VITE_BACKEND_URL: http://localhost:8001
+        run: cd extension && npx wxt build
+
+      - name: Zip extension
+        env:
+          VITE_BACKEND_URL: http://localhost:8001
+        run: cd extension && npx wxt zip
+
+      - name: Upload release asset
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ZIP=$(ls extension/.output/*.zip | head -1)
+          ASSET_NAME="linkedout-extension-${VERSION}.zip"
+          cp "$ZIP" "$ASSET_NAME"
+          gh release upload "$GITHUB_REF_NAME" "$ASSET_NAME"
+
+      - name: Upload workflow artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: linkedout-extension
+          path: extension/.output/*.zip

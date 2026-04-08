@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+"""Remove LinkedOut skill symlinks from AI host directories.
+
+Finds and removes symlinks that point into this repo from each host's skill
+directory. Never removes non-symlink files.
+
+Usage:
+    python bin/dev-teardown
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
+from skills.lib.config import list_hosts, load_host_config
+
+# Routing file names per host
+ROUTING_FILENAMES = {
+    'claude': 'CLAUDE.md',
+    'codex': 'AGENTS.md',
+    'copilot': 'COPILOT.md',
+}
+
+
+def points_into_repo(link: Path) -> bool:
+    """Check if a symlink's target is within this repo."""
+    try:
+        target = link.resolve()
+        return str(target).startswith(str(REPO_ROOT))
+    except OSError:
+        # Broken symlink — check the raw target string
+        raw_target = str(link.readlink()) if hasattr(link, 'readlink') else str(Path(link).readlink())
+        return str(REPO_ROOT) in raw_target
+
+
+def teardown_host(host_name: str) -> None:
+    """Remove skill symlinks for a single host."""
+    host_config = load_host_config(host_name)
+    install_path = Path(host_config['skill_install_path']).expanduser()
+
+    removed = 0
+
+    # Remove skill symlinks
+    if install_path.is_dir():
+        for item in sorted(install_path.iterdir()):
+            if item.is_symlink() and points_into_repo(item):
+                item.unlink()
+                removed += 1
+
+        # Remove install dir if empty
+        if install_path.is_dir() and not any(install_path.iterdir()):
+            install_path.rmdir()
+
+    # Remove routing symlink
+    routing_filename = ROUTING_FILENAMES.get(host_name)
+    if routing_filename:
+        routing_link = install_path.parent / routing_filename
+        if routing_link.is_symlink() and points_into_repo(routing_link):
+            routing_link.unlink()
+            removed += 1
+
+    if removed:
+        print(f'  {host_config["display_name"]}: unlinked {removed} item(s)')
+    else:
+        print(f'  {host_config["display_name"]}: nothing to unlink')
+
+
+def main() -> int:
+    hosts = list_hosts()
+    if not hosts:
+        print('No host configs found.')
+        return 0
+
+    print('Removing LinkedOut skill symlinks...\n')
+    for host_name in hosts:
+        teardown_host(host_name)
+
+    print('\nDone.')
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

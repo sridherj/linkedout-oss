@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <!-- Option C: Search lens with a person node inside — "find people in your network" -->
+  <rect width="128" height="128" rx="28" fill="#A87AD0"/>
+
+  <!-- Magnifying glass -->
+  <circle cx="56" cy="54" r="24" stroke="white" stroke-width="6"/>
+  <line x1="73" y1="71" x2="98" y2="96" stroke="white" stroke-width="7" stroke-linecap="round"/>
+
+  <!-- Person silhouette inside the lens -->
+  <circle cx="56" cy="46" r="7" fill="white"/>
+  <path d="M44 64a12 12 0 0 1 24 0" fill="white"/>
+
+  <!-- Small connection dots radiating from the lens -->
+  <circle cx="28" cy="38" r="4" fill="white" opacity="0.5"/>
+  <line x1="32" y1="40" x2="38" y2="44" stroke="white" stroke-width="2" stroke-linecap="round" opacity="0.4"/>
+  <circle cx="36" cy="22" r="3" fill="white" opacity="0.4"/>
+  <line x1="38" y1="24" x2="44" y2="34" stroke="white" stroke-width="2" stroke-linecap="round" opacity="0.35"/>
+</svg>

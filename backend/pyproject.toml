@@ -1,0 +1,15 @@
+# Never add dependencies here - they go to requirements.txt
+[project]
+name = "linkedout"
+version = "0.1.0"
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.format]
+quote-style = "single"
+
+[project.scripts]
+linkedout = "linkedout.cli:cli"
+precommit-tests = "dev_tools.precommit_tests:precommit_tests"
+eval-tests = "dev_tools.precommit_tests:eval_tests"

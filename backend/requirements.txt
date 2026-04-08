@@ -1,0 +1,36 @@
+-e .
+alembic>=1.12.0
+bcrypt>=4.0.0
+cleanco
+click
+cryptography>=42.0
+fastapi>=0.104.0
+firebase-admin>=6.0.0
+httpx>=0.25.0
+jsonc-parser
+langchain
+langchain-core
+langchain-openai
+langfuse
+loguru>=0.7.2
+nanoid>=2.0.0
+pgvector
+phonenumbers>=8.13
+psycopg2-binary>=2.9.9
+pydantic>=2.5.0
+pydantic-core>=2.14.0
+pydantic-settings>=2.1.0
+python-dotenv>=1.0.0
+python-multipart>=0.0.6
+PyYAML>=6.0
+rapidfuzz>=3.0
+requests>=2.31.0
+sqlalchemy
+tenacity
+tqdm>=4.66.0
+uvicorn
+
+# Optional: local embedding provider (nomic-embed-text-v1.5)
+# Install if using LINKEDOUT_EMBEDDING_PROVIDER=local
+# sentence-transformers>=3.0.0
+# onnxruntime>=1.18.0

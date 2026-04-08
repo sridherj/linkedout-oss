@@ -1,0 +1,267 @@
+# SPDX-License-Identifier: Apache-2.0
+# Installation Tests (Tier 3) — multi-platform matrix + end-to-end flow
+#
+# 12 matrix jobs: 2 OS x 3 Python x 2 PostgreSQL
+# PostgreSQL is installed natively to support both Linux and macOS runners.
+
+name: Installation Tests (Tier 3)
+
+on:
+  schedule:
+    - cron: '0 4 * * *'   # Nightly at 4 AM UTC
+  workflow_dispatch:
+  push:
+    branches: ['release/*']
+
+# Cancel in-flight runs on the same ref to avoid wasting CI minutes.
+concurrency:
+  group: installation-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  LINKEDOUT_ENVIRONMENT: test
+  # Embedding tests use local nomic — no API keys needed.
+  EMBEDDING_PROVIDER: local
+
+jobs:
+  # ── Matrix: Installation Tests ───────────────────────────────────────────
+  installation-matrix:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest]
+        python-version: ['3.11', '3.12', '3.13']
+        postgres-version: ['16', '17']
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Python ───────────────────────────────────────────────────────
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # ── PostgreSQL (Ubuntu) ──────────────────────────────────────────
+      - name: Install PostgreSQL (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          # Add PostgreSQL APT repo for version selection
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq curl ca-certificates
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+
+          # Install PostgreSQL and pgvector
+          sudo apt-get install -y -qq \
+            postgresql-${{ matrix.postgres-version }} \
+            postgresql-${{ matrix.postgres-version }}-pgvector
+
+          # Start and configure
+          sudo systemctl start postgresql@${{ matrix.postgres-version }}-main
+          sudo systemctl enable postgresql@${{ matrix.postgres-version }}-main
+
+          # Create test user and database
+          sudo -u postgres psql -c "CREATE USER linkedout_test WITH PASSWORD 'linkedout_test' SUPERUSER;"
+          sudo -u postgres psql -c "CREATE DATABASE linkedout_test OWNER linkedout_test;"
+
+          # Install extensions
+          sudo -u postgres psql -d linkedout_test -c "CREATE EXTENSION IF NOT EXISTS vector;"
+          sudo -u postgres psql -d linkedout_test -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+
+      # ── PostgreSQL (macOS) ───────────────────────────────────────────
+      - name: Install PostgreSQL (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install postgresql@${{ matrix.postgres-version }} pgvector
+
+          # Add to PATH and start
+          export PATH="$(brew --prefix postgresql@${{ matrix.postgres-version }})/bin:$PATH"
+          echo "$(brew --prefix postgresql@${{ matrix.postgres-version }})/bin" >> "$GITHUB_PATH"
+
+          initdb -D /tmp/pgdata
+          pg_ctl -D /tmp/pgdata -l /tmp/pg.log start
+
+          # Wait for PostgreSQL to be ready
+          for i in $(seq 1 30); do
+            pg_isready -q && break
+            sleep 1
+          done
+
+          # Create test user and database
+          createuser -s linkedout_test 2>/dev/null || true
+          createdb -O linkedout_test linkedout_test 2>/dev/null || true
+
+          # Install extensions
+          psql -d linkedout_test -c "CREATE EXTENSION IF NOT EXISTS vector;"
+          psql -d linkedout_test -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+
+      # ── Python Dependencies ──────────────────────────────────────────
+      - name: Install Python dependencies
+        run: |
+          pip install uv
+          cd backend
+          uv pip install --system -r requirements-dev.txt
+
+      # ── Run Migrations ───────────────────────────────────────────────
+      - name: Run Alembic migrations
+        env:
+          DATABASE_URL: postgresql://linkedout_test:linkedout_test@localhost:5432/linkedout_test
+        run: cd backend && alembic upgrade head
+
+      # ── Installation Tests ───────────────────────────────────────────
+      - name: Run installation tests
+        env:
+          DATABASE_URL: postgresql://linkedout_test:linkedout_test@localhost:5432/linkedout_test
+        run: pytest tests/installation/ -v --tb=long
+
+      # ── Idempotency + Partial Recovery (Ubuntu only) ─────────────────
+      - name: Run idempotency and recovery tests (Ubuntu only)
+        if: runner.os == 'Linux'
+        env:
+          DATABASE_URL: postgresql://linkedout_test:linkedout_test@localhost:5432/linkedout_test
+        run: |
+          pytest tests/installation/test_idempotency.py -v --tb=long
+          pytest tests/installation/test_partial_recovery.py -v --tb=long
+          pytest tests/installation/test_degraded.py -v --tb=long
+
+      # ── Upload Artifacts on Failure ──────────────────────────────────
+      - name: Upload diagnostic artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installation-diag-${{ matrix.os }}-py${{ matrix.python-version }}-pg${{ matrix.postgres-version }}
+          path: |
+            ~/linkedout-data/logs/
+            ~/linkedout-data/reports/
+          retention-days: 7
+
+  # ── E2E: Full User Journey ───────────────────────────────────────────────
+  e2e:
+    needs: installation-matrix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # ── PostgreSQL 17 ────────────────────────────────────────────────
+      - name: Install PostgreSQL 17
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq curl ca-certificates
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+
+          sudo apt-get install -y -qq postgresql-17 postgresql-17-pgvector
+          sudo systemctl start postgresql@17-main
+
+          sudo -u postgres psql -c "CREATE USER linkedout_test WITH PASSWORD 'linkedout_test' SUPERUSER;"
+          sudo -u postgres psql -c "CREATE DATABASE linkedout_test OWNER linkedout_test;"
+          sudo -u postgres psql -d linkedout_test -c "CREATE EXTENSION IF NOT EXISTS vector;"
+          sudo -u postgres psql -d linkedout_test -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+
+      - name: Install Python dependencies
+        run: |
+          pip install uv
+          cd backend
+          uv pip install --system -r requirements-dev.txt
+
+      - name: Run Alembic migrations
+        env:
+          DATABASE_URL: postgresql://linkedout_test:linkedout_test@localhost:5432/linkedout_test
+        run: cd backend && alembic upgrade head
+
+      - name: Run E2E flow test
+        env:
+          DATABASE_URL: postgresql://linkedout_test:linkedout_test@localhost:5432/linkedout_test
+          LINKEDOUT_ENVIRONMENT: test
+          EMBEDDING_PROVIDER: local
+        run: |
+          chmod +x tests/installation/test_e2e_flow.sh
+          bash tests/installation/test_e2e_flow.sh
+
+      - name: Upload E2E diagnostic artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-diagnostics
+          path: |
+            ~/linkedout-data/logs/
+            ~/linkedout-data/reports/
+          retention-days: 7
+
+  # ── Upgrade Path (release branches + manual only) ────────────────────────
+  upgrade-path:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/heads/release/')
+    needs: installation-matrix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # Full history for tag checkout
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PostgreSQL 17
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq curl ca-certificates
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+
+          sudo apt-get install -y -qq postgresql-17 postgresql-17-pgvector
+          sudo systemctl start postgresql@17-main
+
+          sudo -u postgres psql -c "CREATE USER linkedout_test WITH PASSWORD 'linkedout_test' SUPERUSER;"
+          sudo -u postgres psql -c "CREATE DATABASE linkedout_test OWNER linkedout_test;"
+          sudo -u postgres psql -d linkedout_test -c "CREATE EXTENSION IF NOT EXISTS vector;"
+          sudo -u postgres psql -d linkedout_test -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+
+      - name: Install Python dependencies
+        run: |
+          pip install uv
+          cd backend
+          uv pip install --system -r requirements-dev.txt
+
+      - name: Run upgrade path test
+        env:
+          DATABASE_URL: postgresql://linkedout_test:linkedout_test@localhost:5432/linkedout_test
+          LINKEDOUT_ENVIRONMENT: test
+        run: |
+          chmod +x tests/installation/test_upgrade_path.sh
+          bash tests/installation/test_upgrade_path.sh
+
+      - name: Upload upgrade diagnostic artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: upgrade-path-diagnostics
+          path: |
+            ~/linkedout-data/logs/
+            ~/linkedout-data/reports/
+          retention-days: 7

@@ -1,0 +1,149 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+"""Symlink generated LinkedOut skills into detected AI host directories.
+
+For each installed AI host (Claude Code, Codex, Copilot), creates symlinks
+from the host's skill directory to this repo's generated output so that
+changes are immediately reflected.
+
+Usage:
+    python bin/dev-setup
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
+from skills.lib.config import list_hosts, load_host_config
+
+SKILLS_DIR = REPO_ROOT / 'skills'
+
+# Host detection: directory that indicates the host is installed
+HOST_DETECTION = {
+    'claude': Path.home() / '.claude',
+    'codex': Path.home() / '.agents',
+    'copilot': Path.home() / '.github',
+}
+
+# Routing file names per host
+ROUTING_FILENAMES = {
+    'claude': 'CLAUDE.md',
+    'codex': 'AGENTS.md',
+    'copilot': 'COPILOT.md',
+}
+
+
+def get_output_dir(host_config: dict) -> Path:
+    """Get the generated output directory for a host."""
+    return SKILLS_DIR / host_config.get('output_dir', host_config['name'])
+
+
+def detect_hosts() -> list[str]:
+    """Return list of host names whose detection directory exists."""
+    available = list_hosts()
+    return [h for h in available if HOST_DETECTION.get(h, Path('/nonexistent')).is_dir()]
+
+
+def create_symlink(target: Path, link: Path) -> str:
+    """Create a symlink, returning a status message.
+
+    Returns one of:
+        "linked"    - symlink created
+        "exists"    - symlink already correct
+        "warning"   - non-symlink file exists (skip)
+        "relinked"  - stale symlink replaced
+    """
+    if link.is_symlink():
+        if link.resolve() == target.resolve():
+            return 'exists'
+        # Symlink points elsewhere — replace it
+        link.unlink()
+        link.symlink_to(target)
+        return 'relinked'
+
+    if link.exists():
+        # Non-symlink file/directory exists — never overwrite
+        print(f'  WARNING: {link} exists and is not a symlink — skipping', file=sys.stderr)
+        return 'warning'
+
+    link.parent.mkdir(parents=True, exist_ok=True)
+    link.symlink_to(target)
+    return 'linked'
+
+
+def setup_host(host_name: str) -> None:
+    """Set up skill symlinks for a single host."""
+    host_config = load_host_config(host_name)
+    install_path = Path(host_config['skill_install_path']).expanduser()
+    output_dir = get_output_dir(host_config)
+
+    if not output_dir.is_dir():
+        print(f'  No generated output for {host_config["display_name"]} — run bin/generate-skills first')
+        return
+
+    linked = 0
+    already = 0
+    warnings = 0
+
+    # Symlink each skill directory
+    for skill_dir in sorted(output_dir.iterdir()):
+        if not skill_dir.is_dir():
+            continue
+        link = install_path / skill_dir.name
+        status = create_symlink(skill_dir, link)
+        if status == 'linked' or status == 'relinked':
+            linked += 1
+        elif status == 'exists':
+            already += 1
+        elif status == 'warning':
+            warnings += 1
+
+    # Symlink the routing file
+    routing_filename = ROUTING_FILENAMES.get(host_name)
+    if routing_filename:
+        routing_source = output_dir / routing_filename
+        if routing_source.exists():
+            # Routing file goes one level up from the skill install path
+            routing_link = install_path.parent / routing_filename
+            status = create_symlink(routing_source, routing_link)
+            if status == 'linked' or status == 'relinked':
+                linked += 1
+            elif status == 'exists':
+                already += 1
+            elif status == 'warning':
+                warnings += 1
+
+    parts = []
+    if linked:
+        parts.append(f'{linked} linked')
+    if already:
+        parts.append(f'{already} already linked')
+    if warnings:
+        parts.append(f'{warnings} skipped (warnings)')
+    summary = ', '.join(parts) or 'nothing to link'
+    print(f'  {host_config["display_name"]}: {summary}')
+
+
+def main() -> int:
+    detected = detect_hosts()
+    if not detected:
+        print('No AI hosts detected. Checked for:')
+        for host_name, path in HOST_DETECTION.items():
+            print(f'  {host_name}: {path}')
+        return 0
+
+    print(f'Detected {len(detected)} host(s). Setting up skill symlinks...\n')
+    for host_name in detected:
+        setup_host(host_name)
+
+    print('\nDone. Changes to generated skills in this repo are now reflected in your AI hosts.')
+    print('Edit templates in skills/*/SKILL.md.tmpl, then run bin/generate-skills to regenerate.')
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

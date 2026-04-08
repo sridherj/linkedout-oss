@@ -1,0 +1,8 @@
+{
+  "prompt_key": "project_mgmt/task_triage_agent",
+  "prompt_type": "text",
+  "content_file": "task_triage_agent.md",
+  "version": "1",
+  "labels": ["latest"],
+  "config": {"model": "gpt-4", "temperature": 0.3}
+}

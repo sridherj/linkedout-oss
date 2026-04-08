@@ -1,0 +1,11 @@
+{
+  "prompt_key": "test/chat/classifier",
+  "prompt_type": "chat",
+  "content_file": "classifier.jsonc",
+  "version": "2",
+  "labels": [
+    "staging",
+    "latest"
+  ],
+  "config": {}
+}

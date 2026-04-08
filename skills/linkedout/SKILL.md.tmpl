@@ -1,0 +1,263 @@
+---
+name: linkedout
+description: Query your professional network — find connections, companies, roles, and insights from your LinkedIn data
+tools:
+  - Bash
+  - Read
+  - Grep
+  - Agent
+---
+
+# /linkedout — Network Intelligence
+
+Query your professional network using natural language. Find connections by company, role, location, skills, or semantic similarity. Get funding data, career history, and warm intro paths.
+
+## Preamble
+
+Before answering any query, run these setup steps:
+
+1. **Load credentials and context:**
+
+```bash
+source {{AGENT_CONTEXT_PATH}}
+```
+
+This sets `DATABASE_URL`, `LINKEDOUT_TENANT_ID`, `LINKEDOUT_BU_ID`, and `LINKEDOUT_USER_ID`.
+
+If the file does not exist, tell the user:
+> `agent-context.env` not found. Run `/linkedout-setup` to configure LinkedOut, or create `{{AGENT_CONTEXT_PATH}}` manually.
+
+2. **Check system health:**
+
+```bash
+{{CLI_PREFIX}} status --json
+```
+
+If the status check fails or reports errors, explain what's wrong and suggest:
+> Run `{{CLI_PREFIX}} diagnostics` for a full system health report.
+
+If status shows 0 profiles, suggest running `/linkedout-setup` to import data.
+
+## Schema Reference
+
+{{DB_SCHEMA_SNIPPET}}
+
+## Query Routing
+
+Classify the user's query and route to the appropriate strategy:
+
+### Structured Lookups
+
+For queries about specific companies, locations, roles, or skills, use direct SQL via `psql`.
+
+**Find connections at a company** (resolves aliases):
+```sql
+psql "$DATABASE_URL" -c "
+SELECT cp.id AS crawled_profile_id, c.id AS connection_id,
+       cp.full_name, cp.headline, cp.current_position, cp.current_company_name,
+       cp.location_city, cp.location_country, cp.linkedin_url, cp.public_identifier,
+       cp.has_enriched_data,
+       c.affinity_score, c.dunbar_tier, c.connected_at
+FROM crawled_profile cp
+JOIN connection c ON c.crawled_profile_id = cp.id
+LEFT JOIN company co ON cp.company_id = co.id
+LEFT JOIN company_alias ca ON co.id = ca.company_id
+WHERE (LOWER(cp.current_company_name) ILIKE '%stripe%'
+       OR LOWER(co.canonical_name) ILIKE '%stripe%'
+       OR LOWER(ca.alias_name) ILIKE '%stripe%')
+ORDER BY c.affinity_score DESC NULLS LAST
+LIMIT 25;
+"
+```
+
+**Find people by role** (resolves title aliases):
+```sql
+psql "$DATABASE_URL" -c "
+SELECT cp.id AS crawled_profile_id, c.id AS connection_id,
+       cp.full_name, cp.headline, cp.current_position, cp.current_company_name,
+       cp.location_city, cp.location_country, cp.linkedin_url,
+       cp.has_enriched_data,
+       c.affinity_score, c.dunbar_tier
+FROM crawled_profile cp
+JOIN connection c ON c.crawled_profile_id = cp.id
+LEFT JOIN role_alias ra ON LOWER(cp.current_position) = LOWER(ra.alias_title)
+WHERE (LOWER(cp.current_position) ILIKE '%software engineer%'
+       OR LOWER(ra.canonical_title) ILIKE '%software engineer%')
+ORDER BY c.affinity_score DESC NULLS LAST
+LIMIT 25;
+"
+```
+
+**Find people by location:**
+```sql
+psql "$DATABASE_URL" -c "
+SELECT cp.id AS crawled_profile_id, c.id AS connection_id,
+       cp.full_name, cp.headline, cp.current_position, cp.current_company_name,
+       cp.location_city, cp.location_country, cp.linkedin_url,
+       cp.has_enriched_data,
+       c.affinity_score, c.dunbar_tier
+FROM crawled_profile cp
+JOIN connection c ON c.crawled_profile_id = cp.id
+WHERE (cp.location_city ILIKE '%san francisco%'
+       OR cp.location_raw ILIKE '%san francisco%')
+ORDER BY c.affinity_score DESC NULLS LAST
+LIMIT 25;
+"
+```
+
+**Find people by skill:**
+```sql
+psql "$DATABASE_URL" -c "
+SELECT cp.id AS crawled_profile_id, c.id AS connection_id,
+       cp.full_name, cp.headline, cp.current_position, cp.current_company_name,
+       cp.location_city, cp.linkedin_url,
+       cp.has_enriched_data,
+       c.affinity_score, c.dunbar_tier,
+       ps.skill_name, ps.endorsement_count
+FROM crawled_profile cp
+JOIN connection c ON c.crawled_profile_id = cp.id
+JOIN profile_skill ps ON ps.crawled_profile_id = cp.id
+WHERE ps.skill_name ILIKE '%machine learning%'
+ORDER BY ps.endorsement_count DESC, c.affinity_score DESC NULLS LAST
+LIMIT 25;
+"
+```
+
+**Funding-aware queries** (who do I know at funded startups):
+```sql
+psql "$DATABASE_URL" -c "
+SELECT cp.full_name, cp.current_position, cp.current_company_name,
+       co.canonical_name, st.funding_stage, st.total_raised_usd, st.vertical,
+       fr.round_type, fr.amount_usd, fr.announced_on,
+       c.affinity_score, c.dunbar_tier, cp.linkedin_url
+FROM crawled_profile cp
+JOIN connection c ON c.crawled_profile_id = cp.id
+JOIN company co ON cp.company_id = co.id
+JOIN startup_tracking st ON st.company_id = co.id
+LEFT JOIN funding_round fr ON fr.company_id = co.id
+WHERE st.funding_stage IN ('Series A', 'Series B')
+ORDER BY fr.announced_on DESC NULLS LAST, c.affinity_score DESC NULLS LAST
+LIMIT 25;
+"
+```
+
+**Previously worked at a company** (past experience):
+```sql
+psql "$DATABASE_URL" -c "
+SELECT cp.full_name, cp.current_position, cp.current_company_name,
+       e.position AS past_role, e.company_name AS past_company,
+       e.start_year, e.end_year,
+       c.affinity_score, cp.linkedin_url
+FROM crawled_profile cp
+JOIN connection c ON c.crawled_profile_id = cp.id
+JOIN experience e ON e.crawled_profile_id = cp.id
+LEFT JOIN company co ON e.company_id = co.id
+LEFT JOIN company_alias ca ON co.id = ca.company_id
+WHERE (e.is_current IS NULL OR e.is_current = FALSE)
+  AND (LOWER(e.company_name) ILIKE '%google%'
+       OR LOWER(co.canonical_name) ILIKE '%google%'
+       OR LOWER(ca.alias_name) ILIKE '%google%')
+ORDER BY e.end_year DESC NULLS LAST, c.affinity_score DESC NULLS LAST
+LIMIT 25;
+"
+```
+
+### Semantic Search
+
+For queries like "people similar to...", "who works in AI safety", or "connections interested in climate tech", use vector similarity search:
+
+```bash
+# Generate query embedding
+QUERY_EMBEDDING=$({{CLI_PREFIX}} embed --query "AI safety researcher" --output-format pgvector)
+
+# Search with pgvector cosine distance
+psql "$DATABASE_URL" -c "
+SELECT cp.id AS crawled_profile_id, c.id AS connection_id,
+       cp.full_name, cp.headline, cp.current_position, cp.current_company_name,
+       cp.location_city, cp.location_country, cp.linkedin_url,
+       cp.has_enriched_data,
+       c.affinity_score, c.dunbar_tier,
+       1 - (cp.embedding_nomic <=> CAST('$QUERY_EMBEDDING' AS vector)) AS similarity
+FROM crawled_profile cp
+JOIN connection c ON c.crawled_profile_id = cp.id
+WHERE cp.embedding_nomic IS NOT NULL
+  AND 1 - (cp.embedding_nomic <=> CAST('$QUERY_EMBEDDING' AS vector)) > 0.25
+ORDER BY cp.embedding_nomic <=> CAST('$QUERY_EMBEDDING' AS vector)
+LIMIT 20;
+"
+```
+
+Use `embedding_nomic` (768-dimensional, nomic-embed-text-v1.5) for local embeddings, or `embedding_openai` (1536-dimensional, text-embedding-3-small) if the user's configured provider is OpenAI. Check the configured provider:
+
+```bash
+{{CLI_PREFIX}} config show | grep embedding_provider
+```
+
+### Complex Intelligence
+
+For queries like "who should I reach out to about...", "warm intros to...", or "best connections for...", combine structured and semantic approaches:
+
+1. Run a semantic search to find thematically relevant people
+2. Run structured queries to find people at relevant companies/roles
+3. Cross-reference results and rank by affinity score
+4. Explain your reasoning: why each person is relevant, what the connection path looks like
+
+{{#if HOST_NAME == "claude"}}
+## Parallel Query Execution
+
+For complex queries, use the Agent tool to run independent lookups concurrently. This reduces response time when multiple database operations are needed.
+
+Example — "Who do I know at AI startups in SF?":
+
+Run these three lookups in parallel using the Agent tool:
+1. **Company alias resolution:** Find all companies matching "AI" in startup_tracking vertical
+2. **Location filter:** Find connections in San Francisco
+3. **Semantic search:** Embed "AI startup founder engineer" and search by similarity
+
+Then merge and deduplicate the results, ranking by affinity_score.
+
+Only use parallel execution when the query genuinely requires multiple independent lookups. Simple queries (single company, single role) should use a single SQL query.
+{{/if}}
+
+## Output Formatting
+
+### List Results
+
+Format results as a table:
+
+| Name | Role | Company | Location | Affinity | Connected |
+|------|------|---------|----------|----------|-----------|
+| Jane Smith | VP Engineering | Stripe | SF, US | 85 | 2023-01 |
+| John Doe | Staff Engineer | Stripe | NYC, US | 72 | 2022-06 |
+
+Always show the total result count: "Found **12 connections** at Stripe."
+
+### Single-Person Results
+
+For detailed lookups on one person, show a rich summary:
+
+- **Name:** Jane Smith
+- **Role:** VP Engineering at Stripe
+- **Location:** San Francisco, US
+- **LinkedIn:** linkedin.com/in/janesmith
+- **Affinity:** 85/100 (Inner Circle)
+- **Connected since:** January 2023
+- **Enriched:** Yes
+
+If `has_enriched_data` is TRUE, also query their experience and education history.
+
+### Semantic / Intelligence Results
+
+For semantic search results, include a "Why this person" explanation:
+
+> **Jane Smith** — VP Engineering at Stripe (similarity: 0.87)
+> Relevant because: headline mentions "ML infrastructure", experience at DeepMind and Google Brain, skills include "deep learning" and "distributed systems".
+
+## Follow-ups
+
+After every result set, suggest 2-3 related queries the user might want to run next. Tailor suggestions to the results:
+
+- After company lookup: "Want to see their career histories?" / "Find more people at [company]?" / "See funding data for [company]?"
+- After role search: "Narrow by location?" / "Include past roles too?" / "Find similar roles at funded startups?"
+- After semantic search: "Refine the search?" / "See detailed profiles for the top matches?" / "Find companies where these people work?"
+- After funding query: "Who else is at [company]?" / "See recent funding rounds?" / "Find connections at other [stage] startups?"

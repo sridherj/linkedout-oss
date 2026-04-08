@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <!-- Option B: Constellation — nodes connected in an organic network shape -->
+  <rect width="128" height="128" rx="28" fill="#8558AC"/>
+
+  <!-- Connection lines -->
+  <line x1="40" y1="36" x2="64" y2="58" stroke="white" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>
+  <line x1="64" y1="58" x2="92" y2="42" stroke="white" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>
+  <line x1="64" y1="58" x2="38" y2="82" stroke="white" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>
+  <line x1="64" y1="58" x2="88" y2="86" stroke="white" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>
+  <line x1="38" y1="82" x2="62" y2="98" stroke="white" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>
+  <line x1="88" y1="86" x2="62" y2="98" stroke="white" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>
+
+  <!-- Nodes — center is largest (you), others are your network -->
+  <circle cx="64" cy="58" r="12" fill="white"/>
+  <circle cx="40" cy="36" r="7" fill="white" opacity="0.9"/>
+  <circle cx="92" cy="42" r="6" fill="white" opacity="0.8"/>
+  <circle cx="38" cy="82" r="8" fill="white" opacity="0.9"/>
+  <circle cx="88" cy="86" r="7" fill="white" opacity="0.85"/>
+  <circle cx="62" cy="98" r="6" fill="white" opacity="0.75"/>
+</svg>

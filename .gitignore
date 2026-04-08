@@ -1,0 +1,80 @@
+# ============================================
+# LinkedOut OSS — Root .gitignore
+# ============================================
+# Backend-specific patterns are in backend/.gitignore.
+# This file covers repo-wide and cross-project patterns.
+
+# ---------- Environment & secrets ----------
+.env
+.env.*
+!.env.example
+secrets.yaml
+*.secret
+*.key
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+
+# ---------- Node / TypeScript (extension) ----------
+node_modules/
+.output/
+.wxt/
+
+# ---------- Data files ----------
+*.sqlite
+*.sqlite3
+*.db
+
+# ---------- IDE configs ----------
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ---------- Logs & reports ----------
+*.log
+logs/
+
+# ---------- Testing ----------
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# ---------- Seed data files (published as GitHub Release assets) ----------
+seed-data/*.sqlite
+seed-data/*.db
+seed-data/seed-manifest.json
+
+# ---------- TaskOS specific ----------
+.taskos
+.claude/agents/taskos-*
+.claude/commands/taskos-*
+
+# ---------- Personal Claude Code config (machine-specific hook paths) ----------
+.claude/settings.json
+.claude/hooks/
+
+# ---------- Private second-brain symlinks (machine-specific) ----------
+backend/src/.claude/
+
+# ---------- Claude session telemetry (auto-generated, never commit) ----------
+plan_and_progress/sessions/
+.claude/skills/plan_and_progress/sessions/
+
+# ---------- Internal private project docs (not for OSS) ----------
+backend/docs/
+docs/execution/
+docs/plan/
+

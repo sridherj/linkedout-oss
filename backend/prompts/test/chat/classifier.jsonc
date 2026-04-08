@@ -1,0 +1,10 @@
+[
+  {
+    "role": "system",
+    "content": "You classify text into categories: {{categories}}"
+  },
+  {
+    "role": "user",
+    "content": "Classify: {{text}} based on user sentiment"
+  }
+]

@@ -1,0 +1,27 @@
+{
+  "version": "0.1.0",
+  "description": "Minimal seed data for CI testing — matches sample-connections.csv entries",
+  "companies": [
+    {"name": "Stripe", "domain": "stripe.com", "industry": "Fintech"},
+    {"name": "Anthropic", "domain": "anthropic.com", "industry": "AI"},
+    {"name": "Figma", "domain": "figma.com", "industry": "Design"},
+    {"name": "Vercel", "domain": "vercel.com", "industry": "Developer Tools"},
+    {"name": "Spotify", "domain": "spotify.com", "industry": "Music/Media"},
+    {"name": "Google", "domain": "google.com", "industry": "Technology"},
+    {"name": "Netflix", "domain": "netflix.com", "industry": "Entertainment"},
+    {"name": "Microsoft", "domain": "microsoft.com", "industry": "Technology"},
+    {"name": "Meta", "domain": "meta.com", "industry": "Social Media"},
+    {"name": "Airbnb", "domain": "airbnb.com", "industry": "Travel"}
+  ],
+  "role_aliases": [
+    {"title": "Staff Engineer", "normalized": "Staff Engineer", "level": "staff"},
+    {"title": "Research Scientist", "normalized": "Research Scientist", "level": "senior"},
+    {"title": "Product Designer", "normalized": "Product Designer", "level": "mid"},
+    {"title": "Engineering Manager", "normalized": "Engineering Manager", "level": "manager"},
+    {"title": "Data Engineer", "normalized": "Data Engineer", "level": "mid"},
+    {"title": "Senior SWE", "normalized": "Senior Software Engineer", "level": "senior"},
+    {"title": "ML Engineer", "normalized": "ML Engineer", "level": "mid"},
+    {"title": "Tech Lead", "normalized": "Tech Lead", "level": "senior"}
+  ],
+  "profiles": []
+}

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <!-- Option A: Current — L as network graph -->
+  <rect width="128" height="128" rx="28" fill="#A87AD0"/>
+  <rect x="34" y="24" width="16" height="64" rx="8" fill="white"/>
+  <rect x="34" y="72" width="60" height="16" rx="8" fill="white"/>
+  <circle cx="42" cy="28" r="8" fill="white"/>
+  <circle cx="42" cy="80" r="10" fill="white"/>
+  <circle cx="90" cy="80" r="8" fill="white"/>
+  <line x1="52" y1="72" x2="72" y2="48" stroke="white" stroke-width="3" stroke-linecap="round" opacity="0.7"/>
+  <circle cx="74" cy="46" r="6" fill="white" opacity="0.85"/>
+</svg>

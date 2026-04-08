@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <!-- Option E: Bold "LO" monogram — typographic, uses Fraunces-like serifs -->
+  <rect width="128" height="128" rx="28" fill="#A87AD0"/>
+
+  <!-- L — bold serif -->
+  <path d="M22 30 h14 v58 h30 v14 h-44 z" fill="white"/>
+  <!-- Serif on top of L -->
+  <rect x="18" y="28" width="22" height="6" rx="2" fill="white"/>
+
+  <!-- O — bold with a dot/node inside (the person in the network) -->
+  <path d="M84 52 a24 24 0 1 1 0 1 z M84 64 a12 12 0 1 0 0 1 z" fill="white" fill-rule="evenodd"/>
+  <!-- Small dot inside O -->
+  <circle cx="84" cy="76" r="5" fill="white"/>
+</svg>

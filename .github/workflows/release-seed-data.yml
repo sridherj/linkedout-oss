@@ -1,0 +1,40 @@
+name: Release Seed Data
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Seed data version (semver, e.g., 0.1.0)'
+        required: true
+      notes:
+        description: 'Release notes'
+        required: false
+        default: 'Updated seed company database'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download seed artifacts
+        # Seed files must be pre-built locally and uploaded as workflow artifacts.
+        # This workflow cannot access the production database — generate seed files
+        # locally with: python -m dev_tools.seed_export --output seed-data/
+        # Then upload them as artifacts before triggering this workflow.
+        run: |
+          echo "This workflow expects seed-core.sqlite, seed-full.sqlite, and seed-manifest.json"
+          echo "to be available in the seed-data/ directory."
+          echo "Build these locally with: python -m dev_tools.seed_export --output seed-data/"
+          exit 1  # Placeholder — replace with actual artifact source
+
+      - name: Create Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "seed-v${{ inputs.version }}" \
+            --title "Seed Data v${{ inputs.version }}" \
+            --notes "${{ inputs.notes }}" \
+            seed-data/seed-core.sqlite \
+            seed-data/seed-full.sqlite \
+            seed-data/seed-manifest.json

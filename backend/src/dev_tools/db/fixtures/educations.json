@@ -1,0 +1,182 @@
+[
+  {
+    "id": "edu_fake_0001",
+    "crawled_profile_id": "cp_fake_001",
+    "school_name": "Tech Institute",
+    "degree": "Master of Science",
+    "field_of_study": "Software Engineering",
+    "start_year": 2013,
+    "end_year": 2017
+  },
+  {
+    "id": "edu_fake_0002",
+    "crawled_profile_id": "cp_fake_002",
+    "school_name": "City College",
+    "degree": "Bachelor of Arts",
+    "field_of_study": "Mathematics",
+    "start_year": 2014,
+    "end_year": 2018
+  },
+  {
+    "id": "edu_fake_0003",
+    "crawled_profile_id": "cp_fake_003",
+    "school_name": "Online University",
+    "degree": "Bachelor of Science",
+    "field_of_study": "Information Systems",
+    "start_year": 2015,
+    "end_year": 2019
+  },
+  {
+    "id": "edu_fake_0004",
+    "crawled_profile_id": "cp_fake_004",
+    "school_name": "State University",
+    "degree": "Bachelor of Science",
+    "field_of_study": "Computer Science",
+    "start_year": 2016,
+    "end_year": 2020
+  },
+  {
+    "id": "edu_fake_0005",
+    "crawled_profile_id": "cp_fake_005",
+    "school_name": "Tech Institute",
+    "degree": "Master of Science",
+    "field_of_study": "Software Engineering",
+    "start_year": 2012,
+    "end_year": 2016
+  },
+  {
+    "id": "edu_fake_0006",
+    "crawled_profile_id": "cp_fake_006",
+    "school_name": "City College",
+    "degree": "Bachelor of Arts",
+    "field_of_study": "Mathematics",
+    "start_year": 2013,
+    "end_year": 2017
+  },
+  {
+    "id": "edu_fake_0007",
+    "crawled_profile_id": "cp_fake_007",
+    "school_name": "Online University",
+    "degree": "Bachelor of Science",
+    "field_of_study": "Information Systems",
+    "start_year": 2014,
+    "end_year": 2018
+  },
+  {
+    "id": "edu_fake_0008",
+    "crawled_profile_id": "cp_fake_008",
+    "school_name": "State University",
+    "degree": "Bachelor of Science",
+    "field_of_study": "Computer Science",
+    "start_year": 2015,
+    "end_year": 2019
+  },
+  {
+    "id": "edu_fake_0009",
+    "crawled_profile_id": "cp_fake_009",
+    "school_name": "Tech Institute",
+    "degree": "Master of Science",
+    "field_of_study": "Software Engineering",
+    "start_year": 2016,
+    "end_year": 2020
+  },
+  {
+    "id": "edu_fake_0010",
+    "crawled_profile_id": "cp_fake_010",
+    "school_name": "City College",
+    "degree": "Bachelor of Arts",
+    "field_of_study": "Mathematics",
+    "start_year": 2012,
+    "end_year": 2016
+  },
+  {
+    "id": "edu_fake_0011",
+    "crawled_profile_id": "cp_fake_011",
+    "school_name": "Online University",
+    "degree": "Bachelor of Science",
+    "field_of_study": "Information Systems",
+    "start_year": 2013,
+    "end_year": 2017
+  },
+  {
+    "id": "edu_fake_0012",
+    "crawled_profile_id": "cp_fake_012",
+    "school_name": "State University",
+    "degree": "Bachelor of Science",
+    "field_of_study": "Computer Science",
+    "start_year": 2014,
+    "end_year": 2018
+  },
+  {
+    "id": "edu_fake_0013",
+    "crawled_profile_id": "cp_fake_013",
+    "school_name": "Tech Institute",
+    "degree": "Master of Science",
+    "field_of_study": "Software Engineering",
+    "start_year": 2015,
+    "end_year": 2019
+  },
+  {
+    "id": "edu_fake_0014",
+    "crawled_profile_id": "cp_fake_014",
+    "school_name": "City College",
+    "degree": "Bachelor of Arts",
+    "field_of_study": "Mathematics",
+    "start_year": 2016,
+    "end_year": 2020
+  },
+  {
+    "id": "edu_fake_0015",
+    "crawled_profile_id": "cp_fake_015",
+    "school_name": "Online University",
+    "degree": "Bachelor of Science",
+    "field_of_study": "Information Systems",
+    "start_year": 2012,
+    "end_year": 2016
+  },
+  {
+    "id": "edu_fake_0016",
+    "crawled_profile_id": "cp_fake_016",
+    "school_name": "State University",
+    "degree": "Bachelor of Science",
+    "field_of_study": "Computer Science",
+    "start_year": 2013,
+    "end_year": 2017
+  },
+  {
+    "id": "edu_fake_0017",
+    "crawled_profile_id": "cp_fake_017",
+    "school_name": "Tech Institute",
+    "degree": "Master of Science",
+    "field_of_study": "Software Engineering",
+    "start_year": 2014,
+    "end_year": 2018
+  },
+  {
+    "id": "edu_fake_0018",
+    "crawled_profile_id": "cp_fake_018",
+    "school_name": "City College",
+    "degree": "Bachelor of Arts",
+    "field_of_study": "Mathematics",
+    "start_year": 2015,
+    "end_year": 2019
+  },
+  {
+    "id": "edu_fake_0019",
+    "crawled_profile_id": "cp_fake_019",
+    "school_name": "Online University",
+    "degree": "Bachelor of Science",
+    "field_of_study": "Information Systems",
+    "start_year": 2016,
+    "end_year": 2020
+  },
+  {
+    "id": "edu_fake_0020",
+    "crawled_profile_id": "cp_fake_020",
+    "school_name": "State University",
+    "degree": "Bachelor of Science",
+    "field_of_study": "Computer Science",
+    "start_year": 2012,
+    "end_year": 2016
+  }
+]

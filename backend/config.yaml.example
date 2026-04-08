@@ -1,0 +1,58 @@
+# ┌──────────────────────────────────────────────────────────┐
+# │  LinkedOut OSS — config.yaml Template                    │
+# │  Copy to ~/linkedout-data/config/config.yaml             │
+# │  Uncomment and edit values as needed.                    │
+# │  All values shown are defaults — omit to use defaults.   │
+# └──────────────────────────────────────────────────────────┘
+
+# ── Logging ──────────────────────────────────────────────
+# log_rotation: 50 MB              # Rotate log files at this size
+# log_retention: 30 days           # Keep rotated logs for this long
+
+# ── Pagination ───────────────────────────────────────────
+# default_page_size: 20            # Default page size for list endpoints
+
+# ── LLM ──────────────────────────────────────────────────
+# llm:
+#   model: gpt-5.2-2025-12-11            # Primary LLM model
+#   search_model: gpt-5.4-mini           # Lightweight model for search
+#   timeout_seconds: 120.0               # Request timeout
+#   retry_max_attempts: 3                # Max retries on failure
+#   rate_limit_rpm: 60                   # Requests per minute
+#   prompt_cache_ttl_seconds: 300        # Prompt cache TTL
+#   summarize_beyond_n_turns: 4          # Turns before summarization
+
+# ── Embeddings ───────────────────────────────────────────
+# embedding:
+#   model: text-embedding-3-small        # Embedding model (or nomic-embed-text-v1.5 for local)
+#   dimensions: 1536                     # Vector dimensions (768 for nomic, 1536 for OpenAI)
+#   chunk_size: 5000                     # Records per batch
+#   batch_timeout_seconds: 7200          # Batch processing timeout (2 hours)
+
+# ── External API Defaults ────────────────────────────────
+# external_api:
+#   retry_max_attempts: 3
+#   timeout_seconds: 30.0
+
+# ── Enrichment (Apify Profile Lookup) ────────────────────
+# enrichment:
+#   apify_base_url: https://api.apify.com/v2  # Apify API endpoint
+#   cost_per_profile_usd: 0.004               # Cost tracking per profile
+#   cache_ttl_days: 90                         # Days before re-enriching a profile
+#   sync_timeout_seconds: 60                   # Timeout for sync enrichment
+#   async_start_timeout_seconds: 30            # Timeout starting async enrichment
+#   run_poll_timeout_seconds: 300              # Timeout waiting for Apify run
+#   run_poll_interval_seconds: 5               # Poll interval for Apify run status
+#   fetch_results_timeout_seconds: 30          # Timeout fetching enrichment results
+#   key_validation_timeout_seconds: 15         # Timeout validating Apify API key
+
+# ── Scoring (Affinity Algorithm Tuning) ──────────────────
+# scoring:
+#   weight_career_overlap: 0.40       # Weight for career path overlap
+#   weight_external_contact: 0.25     # Weight for external contact signals (phone, email)
+#   weight_embedding_similarity: 0.15 # Weight for embedding vector similarity
+#   weight_source_count: 0.10         # Weight for number of data sources
+#   weight_recency: 0.10              # Weight for recency of interaction
+#   dunbar_inner_circle: 15           # Top N connections for inner circle tier
+#   dunbar_active: 50                 # Top N for active tier
+#   dunbar_familiar: 150              # Top N for familiar tier

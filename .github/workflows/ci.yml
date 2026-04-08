@@ -1,0 +1,136 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_call:
+
+jobs:
+  # ── Tier 1: Static Validation ───────────────────────────────────────────────
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          pip install uv
+          cd backend
+          uv pip install --system -r requirements-dev.txt
+      - name: Ruff lint
+        run: cd backend && ruff check src/
+      - name: Ruff format check
+        run: cd backend && ruff format --check src/
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          pip install uv
+          cd backend
+          uv pip install --system -r requirements-dev.txt
+      - name: Pyright
+        run: cd backend && pyright src/
+
+  # ── Tier 2: Unit Tests ──────────────────────────────────────────────────────
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          pip install uv
+          cd backend
+          uv pip install --system -r requirements-dev.txt
+      - name: Run unit tests
+        env:
+          LINKEDOUT_ENVIRONMENT: test
+        run: |
+          cd backend
+          pytest tests/ -n auto --dist=loadfile -v --tb=short \
+            -m "not live_llm and not live_langfuse and not live_services and not integration and not eval" \
+            --cov=src --cov-report=term-missing --cov-report=xml:coverage.xml
+      - name: Run skill tests
+        env:
+          LINKEDOUT_ENVIRONMENT: test
+        run: pytest tests/skills/ -v --tb=short
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: backend/coverage.xml
+
+  # ── Tier 3: Integration Tests ───────────────────────────────────────────────
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: linkedout_test
+          POSTGRES_PASSWORD: linkedout_test
+          POSTGRES_DB: linkedout_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          pip install uv
+          cd backend
+          uv pip install --system -r requirements-dev.txt
+      - name: Run Alembic migrations
+        env:
+          DATABASE_URL: postgresql://linkedout_test:linkedout_test@localhost:5432/linkedout_test
+          LINKEDOUT_ENVIRONMENT: integration_test
+        run: cd backend && alembic upgrade head
+      - name: Run integration tests
+        env:
+          DATABASE_URL: postgresql://linkedout_test:linkedout_test@localhost:5432/linkedout_test
+          LINKEDOUT_ENVIRONMENT: integration_test
+        run: |
+          cd backend
+          pytest tests/ -m integration -v --tb=short -n auto --dist=loadfile
+
+  # ── Tier 3+: Installation & E2E Tests ───────────────────────────────────────
+  # Full multi-platform matrix (12 combinations) moved to:
+  #   .github/workflows/installation-test.yml
+  # Triggers: nightly 4 AM UTC, release/* branches, manual dispatch.
+
+  # ── Extension: Build Check ──────────────────────────────────────────────────
+  extension-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: extension/package-lock.json
+      - name: Install dependencies
+        run: cd extension && npm ci
+      - name: Type check and build
+        env:
+          VITE_BACKEND_URL: http://localhost:8001
+        run: cd extension && npx wxt build
