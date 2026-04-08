@@ -75,8 +75,12 @@ backend/src/.claude/
 plan_and_progress/sessions/
 .claude/skills/plan_and_progress/sessions/
 
+# ---------- Demo seed generation (maintainer-only, not shipped) ----------
+scripts/generate-demo-dump.py
+
 # ---------- Internal private project docs (not for OSS) ----------
 backend/docs/
 docs/execution/
 docs/plan/
+docs/writeup/
 

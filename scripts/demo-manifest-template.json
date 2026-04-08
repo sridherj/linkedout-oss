@@ -1,0 +1,11 @@
+{
+  "version": "demo-v1",
+  "files": [
+    {
+      "name": "demo-seed.dump",
+      "tier": "demo",
+      "sha256": "<computed-after-dump>",
+      "size_bytes": 0
+    }
+  ]
+}
