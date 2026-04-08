@@ -50,6 +50,8 @@ cd linkedout-oss
 
 Then invoke the `/linkedout-setup` skill in Claude Code. It handles everything: prerequisites, database creation, LinkedIn data import, seed data, and embedding generation.
 
+**Try with demo data first?** During setup, accept the demo offer to load 2,000 sample profiles with pre-computed affinity scores and embeddings. No LinkedIn export needed — start querying in 2 minutes. See [Getting Started — Quick Demo](docs/getting-started.md#quick-demo-2-minutes) for details.
+
 ## What You Get
 
 - **Natural language network queries** — "Who do I know at Series B AI startups in SF?"
@@ -77,6 +79,11 @@ All commands use the `linkedout` namespace. Flat, verb-first, no subgroups.
 | | `config` | View current configuration |
 | | `report-issue` | File a GitHub issue with redacted diagnostics |
 | **Server** | `start-backend` | Start backend API for Chrome extension |
+| **Demo** | `download-demo` | Download demo database dump (~375 MB) |
+| | `restore-demo` | Restore demo into `linkedout_demo` database |
+| | `reset-demo` | Reset demo database to original state |
+| | `use-real-db` | Switch from demo mode to real database |
+| | `demo-help` | Show demo user profile and sample queries |
 | **Database** | `reset-db` | Reset the database (truncate or full recreate) |
 
 Run `linkedout <command> --help` for details on any command.

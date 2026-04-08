@@ -15,7 +15,53 @@ Optional:
 
 ---
 
-## Clone & Setup
+## Quick Demo (2 minutes)
+
+Want to try LinkedOut before importing your own data? The setup wizard offers a demo mode with 2,000 sample profiles, pre-computed affinity scores, and vector embeddings — everything you need to test search, affinity scoring, and the AI agent.
+
+```bash
+git clone https://github.com/sridherj/linkedout-oss.git
+cd linkedout-oss
+```
+
+Invoke the `/linkedout-setup` skill in your AI assistant. After it checks prerequisites and creates the database, you'll see a prompt:
+
+```
++----------------------------------------------+
+|  Want to try LinkedOut with demo data first?  |
+|  ~375 MB total download                       |
++----------------------------------------------+
+```
+
+Accept the demo offer, and setup downloads and restores the demo database automatically. Once complete, try some sample queries:
+
+> "Who do I know at Stripe?"
+
+> "Find people who work in machine learning"
+
+> "What companies do my connections work at most?"
+
+Run `linkedout demo-help` to see the demo user's profile and more sample queries.
+
+When you're ready to use your real data, run `linkedout use-real-db` and re-run `/linkedout-setup` to import your LinkedIn export.
+
+---
+
+### Demo Commands
+
+| Command | Description |
+|---------|-------------|
+| `linkedout download-demo` | Download the demo database dump from GitHub Releases (~375 MB). Skips download if already cached. |
+| `linkedout restore-demo` | Restore the demo dump into the `linkedout_demo` database. Idempotent — safe to re-run. |
+| `linkedout reset-demo` | Drop and re-restore the demo database from the cached dump. Instant reset without re-downloading. |
+| `linkedout use-real-db` | Switch from demo mode back to your real database. Optionally drops the demo database. |
+| `linkedout demo-help` | Show the demo user's profile and sample queries you can try. |
+
+---
+
+## Full Setup (Your Own Data)
+
+### Clone & Setup
 
 ```bash
 git clone https://github.com/sridherj/linkedout-oss.git
@@ -98,6 +144,8 @@ All LinkedOut data lives in `~/linkedout-data/`. Override this location with the
 ```
 
 **Clean slate:** To start over, delete `~/linkedout-data/` and re-run `/linkedout-setup`.
+
+**Demo mode:** Demo data uses the `linkedout_demo` database. Run `linkedout reset-demo` to restore it to its original state, or `linkedout use-real-db` to switch back to your real database.
 
 ---
 
