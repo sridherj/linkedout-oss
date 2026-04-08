@@ -70,9 +70,15 @@ class _LazyLinkedOutCLI(CategoryHelpGroup):
         # --- Demo ---
         from linkedout.commands.download_demo import download_demo_command
         from linkedout.commands.restore_demo import restore_demo_command
+        from linkedout.commands.reset_demo import reset_demo_command
+        from linkedout.commands.use_real_db import use_real_db_command
+        from linkedout.commands.demo_help import demo_help_command
 
         self.add_command(download_demo_command)
         self.add_command(restore_demo_command)
+        self.add_command(reset_demo_command)
+        self.add_command(use_real_db_command)
+        self.add_command(demo_help_command)
 
         # --- Meta ---
         from linkedout.commands.version import version_command
@@ -93,5 +99,20 @@ class _LazyLinkedOutCLI(CategoryHelpGroup):
 
 
 @click.group(cls=_LazyLinkedOutCLI)
-def cli():
+@click.pass_context
+def cli(ctx):
     """LinkedOut -- your professional network, locally."""
+    ctx.ensure_object(dict)
+
+
+@cli.result_callback()
+@click.pass_context
+def _append_demo_nudge(ctx, *args, **kwargs):
+    """Append a one-line nudge after every command when demo mode is active."""
+    try:
+        from linkedout.demo import is_demo_mode
+
+        if is_demo_mode():
+            click.echo("\nDemo mode \u00b7 linkedout setup to use your own data")
+    except Exception:
+        pass

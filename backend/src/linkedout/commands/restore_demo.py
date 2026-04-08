@@ -117,12 +117,17 @@ def restore_demo_command():
         click.echo(f"  Companies:   {stats['companies']:,}")
         click.echo(f"  Connections: {stats['connections']:,}")
 
-    click.echo(f"\nDemo mode is now active. The demo user is a composite")
-    click.echo(f"founder/CTO profile — a realistic but fictional persona")
-    click.echo(f"built from anonymized data.")
+    click.echo(f"\nDemo mode is now active.")
 
-    click.echo(f"\nTry:")
+    from linkedout.demo.sample_queries import format_demo_profile, format_sample_queries
+
+    click.echo()
+    click.echo(format_demo_profile())
+    click.echo(format_sample_queries())
+
+    click.echo(f"\nNext steps:")
     click.echo(f"  linkedout status          # verify demo mode")
     click.echo(f"  linkedout start-backend   # launch the API server")
+    click.echo(f"  linkedout demo-help       # see these queries again")
 
     logger.info(f"Demo restore completed in {elapsed:.1f}s")

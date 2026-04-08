@@ -168,28 +168,13 @@ def offer_transition() -> bool:
 
 def _print_demo_welcome() -> None:
     """Print the demo welcome message with sample queries."""
-    print("""
-  ================================================
-  Here's who you are in the demo:
+    from linkedout.demo.sample_queries import format_demo_profile, format_sample_queries
 
-  Your demo profile is a Founder/CTO at a Bengaluru-based
-  startup, with 8 years across ML, product, and engineering.
-  Affinity scores are relative to this profile -- connections
-  with overlapping skills and seniority score higher.
-
-  Try these queries with the /linkedout skill:
-
-  1. "Who in my network has ML experience at a Series B startup?"
-     -> Then: "Tell me more about [name]'s background"
-
-  2. "Who are my strongest connections in data science?"
-     -> Then: "Why does [name] score higher than [name]?"
-
-  3. "Compare the top 3 engineers for a founding role"
-     -> Then: "Draft a reachout message for [name]"
-  ================================================
-
-  Demo mode \u00b7 linkedout setup to use your own data""")
+    print()
+    print(format_demo_profile())
+    print(format_sample_queries())
+    print()
+    print("  Demo mode \u00b7 linkedout setup to use your own data")
 
 
 # ── Internal helpers ──────────────────────────────────────────────
