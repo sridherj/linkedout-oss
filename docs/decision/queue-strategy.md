@@ -41,10 +41,10 @@ None of these conditions apply to the OSS single-user use case.
 | `backend/main.py` | Lifespan: opens async/sync connectors, starts worker task, shuts down |
 | `backend/migrations/env.py` | Excludes `procrastinate_*` tables from Alembic autogenerate |
 | `backend/tests/unit/enrichment_pipeline/test_enrich_task.py` | Unit tests for `enrich_profile` task |
-| `backend/docs/plan/voyager-enrich-endpoint.md` | Planning doc reference |
-| `backend/docs/specs/linkedout_enrichment_pipeline.collab.md` | Spec reference |
-| `backend/docs/execution/phase3/sub-phase-2-import-pipeline.ai.md` | Execution doc |
-| `backend/docs/execution/phase3/sub-phase-3-enrichment-pipeline.ai.md` | Execution doc |
+| `docs/plan/voyager-enrich-endpoint.md` | Planning doc reference |
+| `docs/specs/linkedout_enrichment_pipeline.collab.md` | Spec reference |
+| `docs/execution/phase3/sub-phase-2-import-pipeline.ai.md` | Execution doc |
+| `docs/execution/phase3/sub-phase-3-enrichment-pipeline.ai.md` | Execution doc |
 
 ### Production tasks (only 1)
 

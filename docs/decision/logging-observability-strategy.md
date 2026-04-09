@@ -10,7 +10,7 @@
 ## 1. Current State
 
 ### Backend (Python)
-- **Framework:** loguru (adopted 2026-04-02, decision doc: `backend/docs/decision/2026-04-02-loguru-logging.md`)
+- **Framework:** loguru (adopted 2026-04-02, decision doc: `docs/decision/2026-04-02-loguru-logging.md`)
 - **Central module:** `backend/src/shared/utilities/logger.py` — `LoggerSingleton` with dual sinks (console + file)
 - **Console format:** Compact colorized (`HH:mm:ss LEVEL module message`) on stderr
 - **File format:** Verbose plain text (`YYYY-MM-DD HH:mm:ss.SSS | LEVEL | module:func:line | message`) in `backend/logs/app_run_{RUN_ID}.log`

@@ -1,0 +1,1223 @@
+{
+  "spike": "S7",
+  "date": "2026-03-27",
+  "actor_id": "LpVuK3Zozwuipa5bp",
+  "profiles_requested": [
+    "https://www.linkedin.com/in/rlrahulkanojia",
+    "https://www.linkedin.com/in/adityaabelhe",
+    "https://www.linkedin.com/in/jodhjeet-singh-a652b1111"
+  ],
+  "async_flow": {
+    "latency_seconds": 19.439858436584473,
+    "poll_count": 3,
+    "items_returned": 3,
+    "run_id": "h3W5qCWTCTatwCElY"
+  },
+  "sync_flow": {
+    "latency_seconds": 7.771507501602173,
+    "items_returned": 1
+  },
+  "key_rotation_tested": true,
+  "sample_response": [
+    {
+      "id": "ACoAAB8jb_YBRHi3WdkGK079YoeKvBHHgtdAt5E",
+      "publicIdentifier": "rlrahulkanojia",
+      "linkedinUrl": "https://www.linkedin.com/in/rlrahulkanojia",
+      "firstName": "Rahul",
+      "lastName": "K.",
+      "headline": "Senior Machine Learning Engineer | GenAI & MLOps | Scalable AI Platforms",
+      "openToWork": false,
+      "hiring": false,
+      "premium": true,
+      "influencer": false,
+      "memorialized": false,
+      "location": {
+        "linkedinText": "Delhi, India",
+        "countryCode": "IN",
+        "parsed": {
+          "text": "Delhi, India",
+          "countryCode": "IN",
+          "regionCode": null,
+          "country": "India",
+          "countryFull": "India",
+          "state": "Delhi",
+          "city": "Delhi"
+        }
+      },
+      "objectUrn": "522416118",
+      "registeredAt": "2016-08-18T12:25:36.393Z",
+      "topSkills": null,
+      "connectionsCount": 4283,
+      "followerCount": 4633,
+      "verified": true,
+      "about": "I am a Machine Learning Engineer specializing in production-grade ML and Generative AI systems, with experience building, deploying, and scaling AI services on AWS.\n\nCurrently at Wolters Kluwer, I work on ML services that power large-scale document and invoice automation platforms used by accountants across Europe. My work spans the full ML lifecycle\u2014from model experimentation and analysis to cloud-native deployment, CI/CD, and reliable inference APIs.\n\nMy core strengths include:\n\n* Designing and operating ML inference services using FastAPI and AWS (ECR, Lambda, EventBridge)\n* Building MLOps pipelines for model analysis, rollout, and monitoring\n* Working with Generative AI and LLM-based systems for document understanding and automation\n* Developing performant ML solutions for both cloud and edge environments\n\nPreviously, I worked on edge AI and computer vision systems, including CUDA-accelerated pipelines and custom multi-object tracking for real-time deployments.\n\nI enjoy working on problems where AI meets real-world constraints\u2014latency, cost, scalability, and reliability\u2014and I am motivated by shipping models that deliver measurable business impact.",
+      "currentPosition": [
+        {
+          "companyId": "2483",
+          "companyLinkedinUrl": "https://www.linkedin.com/company/2483/",
+          "companyName": "Wolters Kluwer",
+          "dateRange": {
+            "start": {
+              "month": 4,
+              "year": 2023,
+              "day": null
+            },
+            "end": null
+          }
+        }
+      ],
+      "profileTopEducation": [],
+      "profileActions": [],
+      "profilePicture": {
+        "url": "https://media.licdn.com/dms/image/v2/C4D03AQFkLKOR14WAIw/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1654615863614?e=1776297600&v=beta&t=0Avxv1pgxxW6i8KKU2XF4zFmknCtGRjgQGkyEWbP7mM",
+        "sizes": [
+          {
+            "url": "https://media.licdn.com/dms/image/v2/C4D03AQFkLKOR14WAIw/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1654615863614?e=1776297600&v=beta&t=0Avxv1pgxxW6i8KKU2XF4zFmknCtGRjgQGkyEWbP7mM",
+            "width": 800,
+            "height": 800,
+            "expiresAt": 1776297600000
+          },
+          {
+            "url": "https://media.licdn.com/dms/image/v2/C4D03AQFkLKOR14WAIw/profile-displayphoto-shrink_400_400/profile-displayphoto-shrink_400_400/0/1654615863614?e=1776297600&v=beta&t=YuBsYGCjKoAJL2CmPllI8GAHjhYw0Og7yszkruF3fT4",
+            "width": 400,
+            "height": 400,
+            "expiresAt": 1776297600000
+          },
+          {
+            "url": "https://media.licdn.com/dms/image/v2/C4D03AQFkLKOR14WAIw/profile-displayphoto-shrink_200_200/profile-displayphoto-shrink_200_200/0/1654615863614?e=1776297600&v=beta&t=5grAnnn3LwQfYNLRXC0MBaVIe2XlhnbtpsnQJDgcUPs",
+            "width": 200,
+            "height": 200,
+            "expiresAt": 1776297600000
+          },
+          {
+            "url": "https://media.licdn.com/dms/image/v2/C4D03AQFkLKOR14WAIw/profile-displayphoto-shrink_100_100/profile-displayphoto-shrink_100_100/0/1654615863614?e=1776297600&v=beta&t=rRcfirS901EGToFeidemmiFxwCJQp15AuCD4nAhxN3M",
+            "width": 100,
+            "height": 100,
+            "expiresAt": 1776297600000
+          }
+        ]
+      },
+      "coverPicture": {
+        "url": "https://media.licdn.com/dms/image/v2/D5616AQE-jfOfMBwmPQ/profile-displaybackgroundimage-shrink_350_1400/profile-displaybackgroundimage-shrink_350_1400/0/1732685907718?e=1776297600&v=beta&t=8_Yit9I-S5QljUzzpL46MxnAxLOMqOfOBx1nu-ykLj8",
+        "sizes": [
+          {
+            "url": "https://media.licdn.com/dms/image/v2/D5616AQE-jfOfMBwmPQ/profile-displaybackgroundimage-shrink_350_1400/profile-displaybackgroundimage-shrink_350_1400/0/1732685907718?e=1776297600&v=beta&t=8_Yit9I-S5QljUzzpL46MxnAxLOMqOfOBx1nu-ykLj8",
+            "width": 1400,
+            "height": 350,
+            "expiresAt": 1776297600000
+          },
+          {
+            "url": "https://media.licdn.com/dms/image/v2/D5616AQE-jfOfMBwmPQ/profile-displaybackgroundimage-shrink_200_800/profile-displaybackgroundimage-shrink_200_800/0/1732685907718?e=1776297600&v=beta&t=z8z-f_tKOlxtE_cbOZBEkbmzfRiQeRn1SsUFHIqw4Vw",
+            "width": 800,
+            "height": 200,
+            "expiresAt": 1776297600000
+          }
+        ]
+      },
+      "photo": "https://media.licdn.com/dms/image/v2/C4D03AQFkLKOR14WAIw/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1654615863614?e=1776297600&v=beta&t=0Avxv1pgxxW6i8KKU2XF4zFmknCtGRjgQGkyEWbP7mM",
+      "profileLocales": [
+        {
+          "country": "US",
+          "language": "en"
+        }
+      ],
+      "primaryLocale": {
+        "country": "US",
+        "language": "en"
+      },
+      "multiLocaleHeadline": [
+        {
+          "headline": "Senior Machine Learning Engineer | GenAI & MLOps | Scalable AI Platforms",
+          "locale": "en_US"
+        }
+      ],
+      "services": null,
+      "experience": [
+        {
+          "position": "Senior Machine Learning Engineer",
+          "location": "Netherlands",
+          "employmentType": "Full-time",
+          "workplaceType": "Remote",
+          "companyName": "Wolters Kluwer",
+          "companyLinkedinUrl": "https://www.linkedin.com/company/wolters-kluwer/",
+          "companyId": "2483",
+          "companyUniversalName": "wolters-kluwer",
+          "duration": "3 yrs",
+          "description": "Basecone is a platform used by accountants to automate the processing of invoice documents. I am part of the team responsible for developing and maintaining the machine learning services of the platform, which bring automation to the document processing.\n\nMy role in the team involves:\n1. Built and maintained AWS-based ML infrastructure (ECR, Lambda, EventBridge) supporting production inference workloads.\n2. Designed FastAPI-based ML services for real-time document processing\n3. Implemented CI/CD pipelines (GitHub Actions) for automated model deployment and rollback\n4. Developed pipelines for model evaluation, analysis, and controlled rollout\n5. Contributed to scaling ML systems used in invoice automation for accounting workflows",
+          "skills": [
+            "Python",
+            "DevOps",
+            "Machine Learning",
+            "Product Development",
+            "Cloud Computing",
+            "Platform as a Service (PAAS)",
+            "LLaMA",
+            "Retrieval-Augmented Generation (RAG)",
+            "Object-Oriented Programming (OOP)",
+            "Data Science",
+            "AWS CloudFormation",
+            "AWS Command Line Interface (CLI)",
+            "Generative AI",
+            "AWS Lambda",
+            "Enterprise Architecture",
+            "Representational State Transfer (REST)",
+            "Coding Standards",
+            "Product Design",
+            "Technical Design",
+            "Prompt Engineering",
+            "Deployment Planning",
+            "Large Language Models (LLM)",
+            "Data Pipelines",
+            "FastAPI",
+            "Databases",
+            "Amazon Web Services (AWS)",
+            "Continuous Integration and Continuous Delivery (CI/CD)",
+            "Artificial Intelligence (AI)"
+          ],
+          "startDate": {
+            "month": "Apr",
+            "year": 2023,
+            "text": "Apr 2023"
+          },
+          "endDate": {
+            "text": "Present"
+          },
+          "companyLogo": {
+            "url": "https://media.licdn.com/dms/image/v2/D4E0BAQFSTV1SAg7_pw/company-logo_400_400/B4EZzEnL7hHMAk-/0/1772825133059/wolters_kluwer_logo?e=1776297600&v=beta&t=b3FahIqLMMHg_kBqBjTelb67-cg9xT9r2DpIugFexB4",
+            "sizes": [
+              {
+                "url": "https://media.licdn.com/dms/image/v2/D4E0BAQFSTV1SAg7_pw/company-logo_400_400/B4EZzEnL7hHMAk-/0/1772825133059/wolters_kluwer_logo?e=1776297600&v=beta&t=b3FahIqLMMHg_kBqBjTelb67-cg9xT9r2DpIugFexB4",
+                "width": 400,
+                "height": 400,
+                "expiresAt": 1776297600000
+              },
+              {
+                "url": "https://media.licdn.com/dms/image/v2/D4E0BAQFSTV1SAg7_pw/company-logo_200_200/B4EZzEnL7hHMAU-/0/1772825133059/wolters_kluwer_logo?e=1776297600&v=beta&t=GkfIJzc21JT6Sc1RDEfT1LlZfWCRJ2M-czMo7xt4hoE",
+                "width": 200,
+                "height": 200,
+                "expiresAt": 1776297600000
+              },
+              {
+                "url": "https://media.licdn.com/dms/image/v2/D4E0BAQFSTV1SAg7_pw/company-logo_100_100/B4EZzEnL7hHMAc-/0/1772825133059/wolters_kluwer_logo?e=1776297600&v=beta&t=cCjW1pdhhjEnj24J74b08hDaQKV44FIuCQXukvsugoQ",
+                "width": 100,
+                "height": 100,
+                "expiresAt": 1776297600000
+              }
+            ]
+          }
+        },
+        {
+          "position": "AI Engineer 2",
+          "location": "San Diego, California, United States",
+          "employmentType": "Full-time",
+          "workplaceType": "Remote",
+          "companyName": "CamerEye",
+          "companyLinkedinUrl": "https://www.linkedin.com/company/71736740/",
+          "companyId": "71736740",
+          "duration": "2 yrs 2 mos",
+          "description": "1. Responsible for AI firmware development for custom Jetson SOMs.\n2. Generative AI model using Stable Diffusion and Large Language Models (LLMs) to provide pool options based on user prompts.\n3. Researched and developed a CUDA Accelerated GStreamer Pipeline to improve performance by 80%.\n4. Developed a cutting-edge custom multi-object detection and tracking algorithm tailored for edge devices by integrating data inputs from diverse sources.",
+          "skills": [
+            "Problem Solving",
+            "DevOps",
+            "Product Development",
+            "Computer Vision",
+            "Cloud Computing",
+            "LLaMA",
+            "Retrieval-Augmented Generation (RAG)",
+            "Object-Oriented Programming (OOP)",
+            "Image Processing",
+            "Presentation Skills",
+            "Research",
+            "Model Compression",
+            "AWS Lambda",
+            "Model Training",
+            "Written Communication",
+            "Azure CLI",
+            "Business Process Improvement",
+            "Product Design",
+            "Technical Design",
+            "Prompt Engineering",
+            "FastAPI",
+            "User Requirements",
+            "Databases",
+            "Documentation",
+            "Data Engineering",
+            "Amazon Web Services (AWS)",
+            "Continuous Integration and Continuous Delivery (CI/CD)",
+            "CUDA",
+            "Object Detection"
+          ],
+          "startDate": {
+            "month": "Feb",
+            "year": 2021,
+            "text": "Feb 2021"
+          },
+          "endDate": {
+            "month": "Mar",
+            "year": 2023,
+            "text": "Mar 2023"
+          },
+          "companyLogo": {
+            "url": "https://media.licdn.com/dms/image/v2/C4D0BAQFMuQevY-2iUw/company-logo_400_400/company-logo_400_400/0/1630461734516?e=1776297600&v=beta&t=pGCgTR1C0ljtHFiHS6tSrgQasGknwOV97ymn1UdRXMU",
+            "sizes": [
+              {
+                "url": "https://media.licdn.com/dms/image/v2/C4D0BAQFMuQevY-2iUw/company-logo_400_400/company-logo_400_400/0/1630461734516?e=1776297600&v=beta&t=pGCgTR1C0ljtHFiHS6tSrgQasGknwOV97ymn1UdRXMU",
+                "width": 400,
+                "height": 400,
+                "expiresAt": 1776297600000
+              },
+              {
+                "url": "https://media.licdn.com/dms/image/v2/C4D0BAQFMuQevY-2iUw/company-logo_200_200/company-logo_200_200/0/1630461734516?e=1776297600&v=beta&t=ft-R5PLMEow97ZmCw8Yh5oiC9INJiBOrsUVwczph6_M",
+                "width": 200,
+                "height": 200,
+                "expiresAt": 1776297600000
+              },
+              {
+                "url": "https://media.licdn.com/dms/image/v2/C4D0BAQFMuQevY-2iUw/company-logo_100_100/company-logo_100_100/0/1630461734516?e=1776297600&v=beta&t=s-jTdWPFOj8y7f4Ul6Nbq531tNqZyVNTkWsI2cm9G1U",
+                "width": 100,
+                "height": 100,
+                "expiresAt": 1776297600000
+              }
+            ]
+          }
+        }
+      ],
+      "education": [
+        {
+          "schoolName": "University school of information and communication technology",
+          "schoolLinkedinUrl": "https://www.linkedin.com/search/results/all/?keywords=University+school+of+information+and+communication+technology",
+          "schoolId": null,
+          "degree": "Bachelor's degree",
+          "fieldOfStudy": "Computer Software Engineering",
+          "skills": [
+            "Computer Science"
+          ],
+          "startDate": {
+            "year": 2016,
+            "text": "2016"
+          },
+          "endDate": {
+            "year": 2020,
+            "text": "2020"
+          },
+          "period": "2016 - 2020",
+          "schoolLogo": null
+        }
+      ],
+      "certifications": [
+        {
+          "title": "LFD259: Kubernetes for Developers",
+          "issuedAt": "Issued Jan 2025",
+          "link": "https://www.credly.com/badges/12ff6da0-ed91-4c5f-bd66-df5ddb2daec2/linked_in_profile",
+          "issuedBy": "The Linux Foundation",
+          "issuedByLink": "https://www.linkedin.com/company/208777/",
+          "issuedByLogo": {
+            "url": "https://media.licdn.com/dms/image/v2/C560BAQEXYSSWEvEL9g/company-logo_400_400/company-logo_400_400/0/1657565842240/the_linux_foundation_logo?e=1776297600&v=beta&t=gQtEh650nmBpfRn9RRHwE1FsSWbYni-CN0LX5b9Vln8",
+            "sizes": [
+              {
+                "url": "https://media.licdn.com/dms/image/v2/C560BAQEXYSSWEvEL9g/company-logo_400_400/company-logo_400_400/0/1657565842240/the_linux_foundation_logo?e=1776297600&v=beta&t=gQtEh650nmBpfRn9RRHwE1FsSWbYni-CN0LX5b9Vln8",
+                "width": 400,
+                "height": 400,
+                "expiresAt": 1776297600000
+              },
+              {
+                "url": "https://media.licdn.com/dms/image/v2/C560BAQEXYSSWEvEL9g/company-logo_200_200/company-logo_200_200/0/1657565842240/the_linux_foundation_logo?e=1776297600&v=beta&t=ybD42wIP4auX5h6h6sm_CvZofhbgxoKKspcRqTKXx9o",
+                "width": 200,
+                "height": 200,
+                "expiresAt": 1776297600000
+              },
+              {
+                "url": "https://media.licdn.com/dms/image/v2/C560BAQEXYSSWEvEL9g/company-logo_100_100/company-logo_100_100/0/1657565842240/the_linux_foundation_logo?e=1776297600&v=beta&t=CVl0Gnb6v_99Ec4n1KJZlQQ_NJ8xcgdFHafuSJAeQBg",
+                "width": 100,
+                "height": 100,
+                "expiresAt": 1776297600000
+              }
+            ]
+          }
+        },
+        {
+          "title": "Baseline: Data, ML, AI",
+          "issuedAt": "Issued Jul 2019",
+          "link": "https://google.qwiklabs.com/public_profiles/1e669b92-93b5-42dd-8345-938b9070ccf7",
+          "issuedBy": "Google",
+          "issuedByLink": "https://www.linkedin.com/company/1441/",
+          "issuedByLogo": {
+            "url": "https://media.licdn.com/dms/image/v2/D4E0BAQGv3cqOuUMY7g/company-logo_400_400/B4EZmhegXHGcAc-/0/1759350753990/google_logo?e=1776297600&v=beta&t=XQdbw6WYuM5c85fDGMvoCpyd1Ykxtw4F56RnyxMi1VU",
+            "sizes": [
+              {
+                "url": "https://media.licdn.com/dms/image/v2/D4E0BAQGv3cqOuUMY7g/company-logo_400_400/B4EZmhegXHGcAc-/0/1759350753990/google_logo?e=1776297600&v=beta&t=XQdbw6WYuM5c85fDGMvoCpyd1Ykxtw4F56RnyxMi1VU",
+                "width": 400,
+                "height": 400,
+                "expiresAt": 1776297600000
+              },
+              {
+                "url": "https://media.licdn.com/dms/image/v2/D4E0BAQGv3cqOuUMY7g/company-logo_200_200/B4EZmhegXHGcAM-/0/1759350753990/google_logo?e=1776297600&v=beta&t=aQ3oNI_3y-A5OuQtWAGytw9VGR1Nz2gz03Gmjs1b_Tw",
+                "width": 200,
+                "height": 200,
+                "expiresAt": 1776297600000
+              },
+              {
+                "url": "https://media.licdn.com/dms/image/v2/D4E0BAQGv3cqOuUMY7g/company-logo_100_100/B4EZmhegXHGcAU-/0/1759350753990/google_logo?e=1776297600&v=beta&t=kVDVa3DnbUKASJdkPCfTp5Ucx26CVzU2xASTq-DJ6Vg",
+                "width": 100,
+                "height": 100,
+                "expiresAt": 1776297600000
+              }
+            ]
+          }
+        },
+        {
+          "title": "Baseline: Data, ML, AI",
+          "link": "https://google.qwiklabs.com/public_profiles/1e669b92-93b5-42dd-8345-938b9070ccf7",
+          "issuedBy": "Google",
+          "issuedByLink": "https://www.linkedin.com/company/1441/",
+          "issuedByLogo": {
+            "url": "https://media.licdn.com/dms/image/v2/D4E0BAQGv3cqOuUMY7g/company-logo_400_400/B4EZmhegXHGcAc-/0/1759350753990/google_logo?e=1776297600&v=beta&t=XQdbw6WYuM5c85fDGMvoCpyd1Ykxtw4F56RnyxMi1VU",
+            "sizes": [
+              {
+                "url": "https://media.licdn.com/dms/image/v2/D4E0BAQGv3cqOuUMY7g/company-logo_400_400/B4EZmhegXHGcAc-/0/1759350753990/google_logo?e=1776297600&v=beta&t=XQdbw6WYuM5c85fDGMvoCpyd1Ykxtw4F56RnyxMi1VU",
+                "width": 400,
+                "height": 400,
+                "expiresAt": 1776297600000
+              },
+              {
+                "url": "https://media.licdn.com/dms/image/v2/D4E0BAQGv3cqOuUMY7g/company-logo_200_200/B4EZmhegXHGcAM-/0/1759350753990/google_logo?e=1776297600&v=beta&t=aQ3oNI_3y-A5OuQtWAGytw9VGR1Nz2gz03Gmjs1b_Tw",
+                "width": 200,
+                "height": 200,
+                "expiresAt": 1776297600000
+              },
+              {
+                "url": "https://media.licdn.com/dms/image/v2/D4E0BAQGv3cqOuUMY7g/company-logo_100_100/B4EZmhegXHGcAU-/0/1759350753990/google_logo?e=1776297600&v=beta&t=kVDVa3DnbUKASJdkPCfTp5Ucx26CVzU2xASTq-DJ6Vg",
+                "width": 100,
+                "height": 100,
+                "expiresAt": 1776297600000
+              }
+            ]
+          }
+        },
+        {
+          "title": "Data Science on the Google Cloud Platform",
+          "issuedAt": "Issued Jul 2019",
+          "link": "https://google.qwiklabs.com/public_profiles/1e669b92-93b5-42dd-8345-938b9070ccf7",
+          "issuedBy": "Google",
+          "issuedByLink": "https://www.linkedin.com/company/1441/",
+          "issuedByLogo": {
+            "url": "https://media.licdn.com/dms/image/v2/D4E0BAQGv3cqOuUMY7g/company-logo_400_400/B4EZmhegXHGcAc-/0/1759350753990/google_logo?e=1776297600&v=beta&t=XQdbw6WYuM5c85fDGMvoCpyd1Ykxtw4F56RnyxMi1VU",
+            "sizes": [
+              {
+                "url": "https://media.licdn.com/dms/image/v2/D4E0BAQGv3cqOuUMY7g/company-logo_400_400/B4EZmhegXHGcAc-/0/1759350753990/google_logo?e=1776297600&v=beta&t=XQdbw6WYuM5c85fDGMvoCpyd1Ykxtw4F56RnyxMi1VU",
+                "width": 400,
+                "height": 400,
+                "expiresAt": 1776297600000
+              },
+              {
+                "url": "https://media.licdn.com/dms/image/v2/D4E0BAQGv3cqOuUMY7g/company-logo_200_200/B4EZmhegXHGcAM-/0/1759350753990/google_logo?e=1776297600&v=beta&t=aQ3oNI_3y-A5OuQtWAGytw9VGR1Nz2gz03Gmjs1b_Tw",
+                "width": 200,
+                "height": 200,
+                "expiresAt": 1776297600000
+              },
+              {
+                "url": "https://media.licdn.com/dms/image/v2/D4E0BAQGv3cqOuUMY7g/company-logo_100_100/B4EZmhegXHGcAU-/0/1759350753990/google_logo?e=1776297600&v=beta&t=kVDVa3DnbUKASJdkPCfTp5Ucx26CVzU2xASTq-DJ6Vg",
+                "width": 100,
+                "height": 100,
+                "expiresAt": 1776297600000
+              }
+            ]
+          }
+        },
+        {
+          "title": "BigQuery For Data Analysis",
+          "issuedAt": "Issued Aug 2019",
+          "link": null,
+          "issuedBy": "Google",
+          "issuedByLink": "https://www.linkedin.com/company/1441/",
+          "issuedByLogo": {
+            "url": "https://media.licdn.com/dms/image/v2/D4E0BAQGv3cqOuUMY7g/company-logo_400_400/B4EZmhegXHGcAc-/0/1759350753990/google_logo?e=1776297600&v=beta&t=XQdbw6WYuM5c85fDGMvoCpyd1Ykxtw4F56RnyxMi1VU",
+            "sizes": [
+              {
+                "url": "https://media.licdn.com/dms/image/v2/D4E0BAQGv3cqOuUMY7g/company-logo_400_400/B4EZmhegXHGcAc-/0/1759350753990/google_logo?e=1776297600&v=beta&t=XQdbw6WYuM5c85fDGMvoCpyd1Ykxtw4F56RnyxMi1VU",
+                "width": 400,
+                "height": 400,
+                "expiresAt": 1776297600000
+              },
+              {
+                "url": "https://media.licdn.com/dms/image/v2/D4E0BAQGv3cqOuUMY7g/company-logo_200_200/B4EZmhegXHGcAM-/0/1759350753990/google_logo?e=1776297600&v=beta&t=aQ3oNI_3y-A5OuQtWAGytw9VGR1Nz2gz03Gmjs1b_Tw",
+                "width": 200,
+                "height": 200,
+                "expiresAt": 1776297600000
+              },
+              {
+                "url": "https://media.licdn.com/dms/image/v2/D4E0BAQGv3cqOuUMY7g/company-logo_100_100/B4EZmhegXHGcAU-/0/1759350753990/google_logo?e=1776297600&v=beta&t=kVDVa3DnbUKASJdkPCfTp5Ucx26CVzU2xASTq-DJ6Vg",
+                "width": 100,
+                "height": 100,
+                "expiresAt": 1776297600000
+              }
+            ]
+          }
+        },
+        {
+          "title": "    Applied Plotting, Charting & Data Representation in Python",
+          "issuedAt": "Issued Sep 2018",
+          "link": "https://www.coursera.org/account/accomplishments/verify/23AFDY422JP9",
+          "issuedBy": "Coursera",
+          "issuedByLink": "https://www.linkedin.com/company/2453129/",
+          "issuedByLogo": {
+            "url": "https://media.licdn.com/dms/image/v2/C4D0BAQGexnfBxeEG-g/company-logo_400_400/company-logo_400_400/0/1630530042036/coursera_logo?e=1776297600&v=beta&t=FZgGYrWTzN4jXuQX8Pl6MQKxcMV0lhOBkGihG9ry8tk",
+            "sizes": [
+              {
+                "url": "https://media.licdn.com/dms/image/v2/C4D0BAQGexnfBxeEG-g/company-logo_400_400/company-logo_400_400/0/1630530042036/coursera_logo?e=1776297600&v=beta&t=FZgGYrWTzN4jXuQX8Pl6MQKxcMV0lhOBkGihG9ry8tk",
+                "width": 400,
+                "height": 400,
+                "expiresAt": 1776297600000
+              },
+              {
+                "url": "https://media.licdn.com/dms/image/v2/C4D0BAQGexnfBxeEG-g/company-logo_200_200/company-logo_200_200/0/1630530042036/coursera_logo?e=1776297600&v=beta&t=hJctSnTQiX1F9lHf4437JIyavh6kF80YotA-gZ0JeUk",
+                "width": 200,
+                "height": 200,
+                "expiresAt": 1776297600000
+              },
+              {
+                "url": "https://media.licdn.com/dms/image/v2/C4D0BAQGexnfBxeEG-g/company-logo_100_100/company-logo_100_100/0/1630530042036/coursera_logo?e=1776297600&v=beta&t=DaEAeFy7uz6FTzOKTHkDYlEqrev1l24z4xdACmTZayQ",
+                "width": 100,
+                "height": 100,
+                "expiresAt": 1776297600000
+              }
+            ]
+          }
+        },
+        {
+          "title": "Introduction to Data Science in Python",
+          "issuedAt": "Issued Jul 2017",
+          "link": "https://www.coursera.org/account/accomplishments/verify/MVSLC7X4U46Z",
+          "issuedBy": "Coursera",
+          "issuedByLink": "https://www.linkedin.com/company/2453129/",
+          "issuedByLogo": {
+            "url": "https://media.licdn.com/dms/image/v2/C4D0BAQGexnfBxeEG-g/company-logo_400_400/company-logo_400_400/0/1630530042036/coursera_logo?e=1776297600&v=beta&t=FZgGYrWTzN4jXuQX8Pl6MQKxcMV0lhOBkGihG9ry8tk",
+            "sizes": [
+              {
+                "url": "https://media.licdn.com/dms/image/v2/C4D0BAQGexnfBxeEG-g/company-logo_400_400/company-logo_400_400/0/1630530042036/coursera_logo?e=1776297600&v=beta&t=FZgGYrWTzN4jXuQX8Pl6MQKxcMV0lhOBkGihG9ry8tk",
+                "width": 400,
+                "height": 400,
+                "expiresAt": 1776297600000
+              },
+              {
+                "url": "https://media.licdn.com/dms/image/v2/C4D0BAQGexnfBxeEG-g/company-logo_200_200/company-logo_200_200/0/1630530042036/coursera_logo?e=1776297600&v=beta&t=hJctSnTQiX1F9lHf4437JIyavh6kF80YotA-gZ0JeUk",
+                "width": 200,
+                "height": 200,
+                "expiresAt": 1776297600000
+              },
+              {
+                "url": "https://media.licdn.com/dms/image/v2/C4D0BAQGexnfBxeEG-g/company-logo_100_100/company-logo_100_100/0/1630530042036/coursera_logo?e=1776297600&v=beta&t=DaEAeFy7uz6FTzOKTHkDYlEqrev1l24z4xdACmTZayQ",
+                "width": 100,
+                "height": 100,
+                "expiresAt": 1776297600000
+              }
+            ]
+          }
+        }
+      ],
+      "projects": [],
+      "volunteering": [
+        {
+          "role": "Technical Advisor",
+          "description": "Volunteered for the presentation and representation of new technologies introduced by Qualcomm",
+          "duration": "Oct 2017 - Present \u00b7 8 yrs 6 mos",
+          "startDate": {
+            "month": "Oct",
+            "year": 2017,
+            "text": "Oct 2017"
+          },
+          "endDate": {
+            "text": "Present \u00b7 8 yrs 6 mos"
+          },
+          "organizationName": "Qualcomm",
+          "organizationLinkedinUrl": "https://www.linkedin.com/company/2017/",
+          "cause": "Science and Technology"
+        }
+      ],
+      "receivedRecommendations": [
+        {
+          "givenBy": "Sai R.",
+          "givenByHeadline": "AI for a Smarter Physical World",
+          "givenAt": "August 19, 2024, Sai managed Rahul directly",
+          "givenByLink": "https://www.linkedin.com/in/sai-r-730b40104",
+          "description": "Working with Rahul has been a pleasure. His expertise in neural network model development, deployment, and optimization, particularly in vision models, has been instrumental in delivering our product to the market quicker. His strong communication combined with his collaborative spirit, have consistently made him an invaluable asset to our team.",
+          "givenByPicture": {
+            "url": "https://media.licdn.com/dms/image/v2/C4D03AQHqKfHXqI2LZQ/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1593035858552?e=1776297600&v=beta&t=MQuwi_ePEzbGDfsZ3zrQXb038LpdUSjmZ_3H14FkMck",
+            "sizes": [
+              {
+                "url": "https://media.licdn.com/dms/image/v2/C4D03AQHqKfHXqI2LZQ/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1593035858552?e=1776297600&v=beta&t=MQuwi_ePEzbGDfsZ3zrQXb038LpdUSjmZ_3H14FkMck",
+                "width": 800,
+                "height": 800,
+                "expiresAt": 1776297600000
+              },
+              {
+                "url": "https://media.licdn.com/dms/image/v2/C4D03AQHqKfHXqI2LZQ/profile-displayphoto-shrink_400_400/profile-displayphoto-shrink_400_400/0/1593035858552?e=1776297600&v=beta&t=J-YwTDwbhdJFLYKugCcd0VWQDWa8ftk4B7TGBNSndpk",
+                "width": 400,
+                "height": 400,
+                "expiresAt": 1776297600000
+              },
+              {
+                "url": "https://media.licdn.com/dms/image/v2/C4D03AQHqKfHXqI2LZQ/profile-displayphoto-shrink_200_200/profile-displayphoto-shrink_200_200/0/1593035858552?e=1776297600&v=beta&t=LjdSchRuHomyMpeKTkS_n-LC9ikybPPdF2oeu1kxKCg",
+                "width": 200,
+                "height": 200,
+                "expiresAt": 1776297600000
+              },
+              {
+                "url": "https://media.licdn.com/dms/image/v2/C4D03AQHqKfHXqI2LZQ/profile-displayphoto-shrink_100_100/profile-displayphoto-shrink_100_100/0/1593035858552?e=1776297600&v=beta&t=FdlCueKdALOLsC5wcmWi8nvO5D1Jj_j128aBJVv9YC0",
+                "width": 100,
+                "height": 100,
+                "expiresAt": 1776297600000
+              }
+            ]
+          }
+        },
+        {
+          "givenBy": "Samir Chowdhary Thakur Das ( \u0938\u092e\u0940\u0930 \u091a\u094c\u0927\u0930\u0940 \u0920\u093e\u0915\u0941\u0930 \u0926\u093e\u0938 )",
+          "givenByHeadline": "Global DevOps Lead",
+          "givenAt": "August 16, 2019, Samir Chowdhary Thakur Das managed Rahul directly",
+          "givenByLink": "https://www.linkedin.com/in/samir-chowdhary",
+          "description": "Rahul worked with us in the capacity of software developer. He leveraged his skills as consultant to discuss and understand concerns of client. He further helped us with requirement gathering, designing database and was actively involved in web development. His skills are highly impressive and he is a quick learner. He is good team player with blend of niche technical skills, and he never misses out any opportunity to take initiatives. I'll have no hesitation in recommending him for any project.",
+          "givenByPicture": {
+            "url": "https://media.licdn.com/dms/image/v2/D5603AQHE4n_Jo4j3yw/profile-displayphoto-crop_800_800/B56Znjn_Z8I4AI-/0/1760460540443?e=1776297600&v=beta&t=8yeg4aAauibmN3P39pQljoGHntTemxjLHVsfTyW285E",
+            "sizes": [
+              {
+                "url": "https://media.licdn.com/dms/image/v2/D5603AQHE4n_Jo4j3yw/profile-displayphoto-crop_800_800/B56Znjn_Z8I4AI-/0/1760460540443?e=1776297600&v=beta&t=8yeg4aAauibmN3P39pQljoGHntTemxjLHVsfTyW285E",
+                "width": 800,
+                "height": 800,
+                "expiresAt": 1776297600000
+              },
+              {
+                "url": "https://media.licdn.com/dms/image/v2/D5603AQHE4n_Jo4j3yw/profile-displayphoto-scale_400_400/B56Znjn_Z8I4Ag-/0/1760460540783?e=1776297600&v=beta&t=cW8FjFbukWOAHJJ2QfXevP3D2-ccYK77LuklADcwcJU",
+                "width": 400,
+                "height": 400,
+                "expiresAt": 1776297600000
+              },
+              {
+                "url": "https://media.licdn.com/dms/image/v2/D5603AQHE4n_Jo4j3yw/profile-displayphoto-scale_200_200/B56Znjn_Z8I4AY-/0/1760460540784?e=1776297600&v=beta&t=FqrQM-MdAcZzWJjCJn7hU8TUwLpfeDKF8KPXUZh5reM",
+                "width": 200,
+                "height": 200,
+                "expiresAt": 1776297600000
+              },
+              {
+                "url": "https://media.licdn.com/dms/image/v2/D5603AQHE4n_Jo4j3yw/profile-displayphoto-scale_100_100/B56Znjn_Z8I4Ac-/0/1760460540783?e=1776297600&v=beta&t=R4N6Swnm6d66D8E8s2y3H_gA3olfrgQ61vzwUPHN7AU",
+                "width": 100,
+                "height": 100,
+                "expiresAt": 1776297600000
+              }
+            ]
+          }
+        }
+      ],
+      "skills": [
+        {
+          "name": "Databases",
+          "positions": [
+            "2 experiences across Wolters Kluwer and 1 other company"
+          ]
+        },
+        {
+          "name": "FastAPI",
+          "positions": [
+            "2 experiences across Wolters Kluwer and 1 other company"
+          ]
+        },
+        {
+          "name": "AWS Lambda",
+          "positions": [
+            "2 experiences across Wolters Kluwer and 1 other company"
+          ]
+        },
+        {
+          "name": "AWS CloudFormation",
+          "positions": [
+            "Senior Machine Learning Engineer at Wolters Kluwer"
+          ]
+        },
+        {
+          "name": "AWS Command Line Interface (CLI)",
+          "positions": [
+            "Senior Machine Learning Engineer at Wolters Kluwer"
+          ]
+        },
+        {
+          "name": "Representational State Transfer (REST)",
+          "positions": [
+            "Senior Machine Learning Engineer at Wolters Kluwer"
+          ]
+        },
+        {
+          "name": "Edge Computing"
+        },
+        {
+          "name": "Python",
+          "positions": [
+            "Senior Machine Learning Engineer at Wolters Kluwer"
+          ],
+          "assessments": "Passed LinkedIn Skill Assessment"
+        },
+        {
+          "name": "Amazon Web Services (AWS)",
+          "positions": [
+            "2 experiences across Wolters Kluwer and 1 other company"
+          ],
+          "assessments": "Passed LinkedIn Skill Assessment"
+        },
+        {
+          "name": "Keras",
+          "positions": [
+            "Data Science on the Google Cloud Platform"
+          ]
+        },
+        {
+          "name": "Deep Neural Networks (DNN)",
+          "endorsements": "3 endorsements"
+        },
+        {
+          "name": "Recurrent Neural Networks (RNN)",
+          "endorsements": "1 endorsement"
+        },
+        {
+          "name": "C++",
+          "assessments": "Passed LinkedIn Skill Assessment",
+          "endorsements": "2 endorsements"
+        },
+        {
+          "name": "Python (Programming Language)",
+          "assessments": "Passed LinkedIn Skill Assessment",
+          "endorsements": "1 endorsement"
+        },
+        {
+          "name": "PyTorch",
+          "endorsements": "1 endorsement"
+        },
+        {
+          "name": "TensorFlow"
+        },
+        {
+          "name": "Git"
+        },
+        {
+          "name": "Google Cloud Platform (GCP)",
+          "assessments": "Passed LinkedIn Skill Assessment"
+        },
+        {
+          "name": "C (Programming Language)",
+          "endorsements": "1 endorsement"
+        },
+        {
+          "name": "Problem Solving",
+          "positions": [
+            "AI Engineer 2 at CamerEye"
+          ]
+        },
+        {
+          "name": "Communication"
+        },
+        {
+          "name": "Leadership",
+          "endorsements": "4 endorsements"
+        },
+        {
+          "name": "Model Training",
+          "positions": [
+            "AI Engineer 2 at CamerEye"
+          ]
+        },
+        {
+          "name": "LLaMA",
+          "positions": [
+            "2 experiences across Wolters Kluwer and 1 other company"
+          ]
+        },
+        {
+          "name": "Model Compression",
+          "positions": [
+            "AI Engineer 2 at CamerEye"
+          ]
+        },
+        {
+          "name": "Retrieval-Augmented Generation (RAG)",
+          "positions": [
+            "2 experiences across Wolters Kluwer and 1 other company"
+          ]
+        },
+        {
+          "name": "Generative AI",
+          "positions": [
+            "Senior Machine Learning Engineer at Wolters Kluwer"
+          ]
+        },
+        {
+          "name": "User Requirements",
+          "positions": [
+            "AI Engineer 2 at CamerEye"
+          ],
+          "endorsements": "1 endorsement"
+        },
+        {
+          "name": "Product Design",
+          "positions": [
+            "2 experiences across Wolters Kluwer and 1 other company"
+          ],
+          "endorsements": "1 endorsement"
+        },
+        {
+          "name": "Product Development",
+          "positions": [
+            "2 experiences across Wolters Kluwer and 1 other company"
+          ]
+        },
+        {
+          "name": "Enterprise Architecture",
+          "positions": [
+            "Senior Machine Learning Engineer at Wolters Kluwer"
+          ]
+        },
+        {
+          "name": "Deployment Planning",
+          "positions": [
+            "Senior Machine Learning Engineer at Wolters Kluwer"
+          ]
+        },
+        {
+          "name": "Continuous Integration and Continuous Delivery (CI/CD)",
+          "positions": [
+            "2 experiences across Wolters Kluwer and 1 other company"
+          ]
+        },
+        {
+          "name": "Object-Oriented Programming (OOP)",
+          "positions": [
+            "2 experiences across Wolters Kluwer and 1 other company"
+          ],
+          "assessments": "Passed LinkedIn Skill Assessment"
+        },
+        {
+          "name": "Prompt Engineering",
+          "positions": [
+            "2 experiences across Wolters Kluwer and 1 other company"
+          ]
+        },
+        {
+          "name": "DevOps",
+          "positions": [
+            "2 experiences across Wolters Kluwer and 1 other company"
+          ]
+        },
+        {
+          "name": "Large Language Models (LLM)",
+          "positions": [
+            "Senior Machine Learning Engineer at Wolters Kluwer"
+          ]
+        },
+        {
+          "name": "Cloud Computing",
+          "positions": [
+            "2 experiences across Wolters Kluwer and 1 other company"
+          ]
+        },
+        {
+          "name": "Data Pipelines",
+          "positions": [
+            "Senior Machine Learning Engineer at Wolters Kluwer"
+          ]
+        },
+        {
+          "name": "Azure CLI",
+          "positions": [
+            "AI Engineer 2 at CamerEye"
+          ]
+        },
+        {
+          "name": "Platform as a Service (PAAS)",
+          "positions": [
+            "Senior Machine Learning Engineer at Wolters Kluwer"
+          ]
+        },
+        {
+          "name": "Coding Standards",
+          "positions": [
+            "Senior Machine Learning Engineer at Wolters Kluwer"
+          ]
+        },
+        {
+          "name": "Technical Design",
+          "positions": [
+            "2 experiences across Wolters Kluwer and 1 other company"
+          ]
+        },
+        {
+          "name": "Presentation Skills",
+          "positions": [
+            "AI Engineer 2 at CamerEye"
+          ]
+        },
+        {
+          "name": "Documentation",
+          "positions": [
+            "AI Engineer 2 at CamerEye"
+          ]
+        },
+        {
+          "name": "Written Communication",
+          "positions": [
+            "AI Engineer 2 at CamerEye"
+          ]
+        },
+        {
+          "name": "Image Segmentation"
+        },
+        {
+          "name": "Virtual Try-on Systems"
+        },
+        {
+          "name": "Aerial image"
+        },
+        {
+          "name": "  Cpyton "
+        },
+        {
+          "name": "Facial Recognition"
+        },
+        {
+          "name": "Face detection"
+        },
+        {
+          "name": "Software Development"
+        },
+        {
+          "name": "Business Process Improvement",
+          "positions": [
+            "AI Engineer 2 at CamerEye"
+          ]
+        },
+        {
+          "name": "Data Science",
+          "positions": [
+            "Senior Machine Learning Engineer at Wolters Kluwer"
+          ]
+        },
+        {
+          "name": "Computer Science"
+        },
+        {
+          "name": "Image Processing",
+          "positions": [
+            "AI Engineer 2 at CamerEye"
+          ]
+        },
+        {
+          "name": "Data Engineering",
+          "positions": [
+            "AI Engineer 2 at CamerEye"
+          ]
+        },
+        {
+          "name": "Neural Networks",
+          "endorsements": "9 endorsements"
+        },
+        {
+          "name": "Machine Learning",
+          "positions": [
+            "Senior Machine Learning Engineer at Wolters Kluwer"
+          ],
+          "assessments": "Passed LinkedIn Skill Assessment",
+          "endorsements": "3 endorsements"
+        },
+        {
+          "name": "Android Development",
+          "endorsements": "2 endorsements"
+        },
+        {
+          "name": "Artificial Intelligence (AI)",
+          "positions": [
+            "Senior Machine Learning Engineer at Wolters Kluwer"
+          ],
+          "endorsements": "1 endorsement"
+        },
+        {
+          "name": "Computer Vision",
+          "positions": [
+            "AI Engineer 2 at CamerEye"
+          ],
+          "endorsements": "2 endorsements"
+        },
+        {
+          "name": "Research",
+          "positions": [
+            "AI Engineer 2 at CamerEye"
+          ],
+          "endorsements": "1 endorsement"
+        },
+        {
+          "name": "Pattern Recognition"
+        },
+        {
+          "name": "Deep Learning",
+          "endorsements": "2 endorsements"
+        },
+        {
+          "name": "Object Detection",
+          "positions": [
+            "AI Engineer 2 at CamerEye"
+          ],
+          "endorsements": "2 endorsements"
+        },
+        {
+          "name": "Machine Learning Algorithms"
+        },
+        {
+          "name": "OpenCV"
+        },
+        {
+          "name": "Convolutional Neural Networks (CNN)"
+        },
+        {
+          "name": "Programming"
+        },
+        {
+          "name": "CUDA",
+          "positions": [
+            "AI Engineer 2 at CamerEye"
+          ]
+        },
+        {
+          "name": "Natural Language Processing (NLP)"
+        }
+      ],
+      "publications": [],
+      "courses": [],
+      "patents": [],
+      "honorsAndAwards": [],
+      "languages": [],
+      "causes": [],
+      "featured": null,
+      "composeOptionType": "PREMIUM_INMAIL",
+      "moreProfiles": [
+        {
+          "id": "ACoAACM11E0BkUoNw0buQow293k1pubAP25BiS0",
+          "firstName": "Nitin",
+          "lastName": "Mukesh",
+          "publicIdentifier": "nitinmukeshiitb",
+          "linkedinUrl": "https://www.linkedin.com/in/nitinmukeshiitb"
+        },
+        {
+          "id": "ACoAAFOTJzABqQu3L3nP5_eDkeIye9tjjfsT8cg",
+          "firstName": "Syed Danish",
+          "lastName": "Ashraf",
+          "publicIdentifier": "syed-danish-ashraf-ba86b2331",
+          "linkedinUrl": "https://www.linkedin.com/in/syed-danish-ashraf-ba86b2331"
+        },
+        {
+          "id": "ACoAABVj5WwBh86mmyslB3GadozILpwgsvqPhtg",
+          "firstName": "Manish",
+          "lastName": "Shukla",
+          "publicIdentifier": "manish-shukla0007",
+          "linkedinUrl": "https://www.linkedin.com/in/manish-shukla0007"
+        },
+        {
+          "id": "ACoAABdFs7oBQniXahi-ZpdOqKDhuzUh6iKquQU",
+          "firstName": "Subham",
+          "lastName": "Kumar",
+          "publicIdentifier": "subgrad",
+          "linkedinUrl": "https://www.linkedin.com/in/subgrad"
+        },
+        {
+          "id": "ACoAAAEna7kBW8Z7fVkdi3M1q6j4LBLcoNtI1wk",
+          "firstName": "Shandoshkumar",
+          "lastName": "S",
+          "publicIdentifier": "shandosh",
+          "linkedinUrl": "https://www.linkedin.com/in/shandosh"
+        },
+        {
+          "id": "ACoAAC0O-N8B8zkZde5OrC55WHT3rf39lS4PFnI",
+          "firstName": "vyenktesh",
+          "lastName": "pareek",
+          "publicIdentifier": "vyenktesh-pareek",
+          "linkedinUrl": "https://www.linkedin.com/in/vyenktesh-pareek"
+        },
+        {
+          "id": "ACoAACRFwPYBFwWLZ8HbKf0RJ3wOK_A_UWi6ARo",
+          "firstName": "Gaurav",
+          "lastName": "Lochab",
+          "publicIdentifier": "gauravlochab487",
+          "linkedinUrl": "https://www.linkedin.com/in/gauravlochab487"
+        },
+        {
+          "id": "ACoAAA9pXy0Btb1ZRBxdZZHFXdUIeh-Xt3sXscY",
+          "firstName": "Vishal",
+          "lastName": "Singh",
+          "publicIdentifier": "vishal-singh-a6571372",
+          "linkedinUrl": "https://www.linkedin.com/in/vishal-singh-a6571372"
+        },
+        {
+          "id": "ACoAAARhtVUBgwcXfW4H5flQffqWfEiWsuD-oAs",
+          "firstName": "Praveen",
+          "lastName": "Revankar",
+          "publicIdentifier": "praveen-revankar",
+          "linkedinUrl": "https://www.linkedin.com/in/praveen-revankar"
+        },
+        {
+          "id": "ACoAABtUf5EBBLDtQLVBTiwq44cIOouvvRvm5U0",
+          "firstName": "Aditya",
+          "lastName": "Singh",
+          "publicIdentifier": "aspiring1",
+          "linkedinUrl": "https://www.linkedin.com/in/aspiring1"
+        },
+        {
+          "id": "ACoAABYFx7sBVvpVDdP482D684j77ZH-_R8Ck2w",
+          "firstName": "Vaibhav",
+          "lastName": "Nandwani",
+          "publicIdentifier": "vaibhav541",
+          "linkedinUrl": "https://www.linkedin.com/in/vaibhav541"
+        },
+        {
+          "id": "ACoAABPjxwUBR9Wh4A5LF2wNzsZ49vXrPFM4oWo",
+          "firstName": "HIMANSHU",
+          "lastName": "SINGH",
+          "publicIdentifier": "himanshu-singh-45990693",
+          "linkedinUrl": "https://www.linkedin.com/in/himanshu-singh-45990693"
+        },
+        {
+          "id": "ACoAAD9qEUYB22xL8_VF-EbocCTKYnMXP-_SGfA",
+          "firstName": "Zaheer",
+          "lastName": "K Z",
+          "publicIdentifier": "zaheer-k-z",
+          "linkedinUrl": "https://www.linkedin.com/in/zaheer-k-z"
+        },
+        {
+          "id": "ACoAACnHzCgBFggS8Bt3a4haHl476wllD5MDvj8",
+          "firstName": "Prayag",
+          "lastName": "Brahmbhatt",
+          "publicIdentifier": "prayag-kb",
+          "linkedinUrl": "https://www.linkedin.com/in/prayag-kb"
+        },
+        {
+          "id": "ACoAABuw-6gBd7SQKHt3iMoS91ZSfFQoVxjaE9c",
+          "firstName": "Shalini",
+          "lastName": "Kumari",
+          "publicIdentifier": "shalini-kumari-2b470810b",
+          "linkedinUrl": "https://www.linkedin.com/in/shalini-kumari-2b470810b"
+        },
+        {
+          "id": "ACoAACkjpw0BVSCdkMDXVBsv8YrigT9USy0e3Kk",
+          "firstName": "Shivam",
+          "lastName": "Garg",
+          "publicIdentifier": "shivam-garg-811192173",
+          "linkedinUrl": "https://www.linkedin.com/in/shivam-garg-811192173"
+        },
+        {
+          "id": "ACoAAAmhqPsBlXRM8sn3KbllfLCYj368Qu0RcdU",
+          "firstName": "Jakaulla",
+          "lastName": "Hanagi",
+          "publicIdentifier": "jakaulla-hanagi-53714846",
+          "linkedinUrl": "https://www.linkedin.com/in/jakaulla-hanagi-53714846"
+        },
+        {
+          "id": "ACoAACoQQWkB1x--YhEofIdO9PmPXRLO8fgZcAQ",
+          "firstName": "Keshav",
+          "lastName": "Mishra",
+          "publicIdentifier": "keshav98",
+          "linkedinUrl": "https://www.linkedin.com/in/keshav98"
+        },
+        {
+          "id": "ACoAABNOEJoBOODE9_LnTsFlj-Bnu0rDrt4LV28",
+          "firstName": "Sandeep",
+          "lastName": "Joshi",
+          "publicIdentifier": "sandeepajoshi",
+          "linkedinUrl": "https://www.linkedin.com/in/sandeepajoshi"
+        },
+        {
+          "id": "ACoAACXBojYBLL-JqLlScvS_CIBkRx3clc3sBoE",
+          "firstName": "Aman",
+          "lastName": "Singh",
+          "publicIdentifier": "aman-singh-132182158",
+          "linkedinUrl": "https://www.linkedin.com/in/aman-singh-132182158"
+        },
+        {
+          "id": "ACoAACxccWgBjh64rH0wlQHOIXL9hTQ8Z54ynX4",
+          "firstName": " CA Shreya",
+          "lastName": "Tiwari",
+          "position": "Chartered Accountant | FP&A | Wolters Kluwer | Ex - Accenture ",
+          "publicIdentifier": "ca-shreya-tiwari-7482bb189",
+          "linkedinUrl": "https://www.linkedin.com/in/ca-shreya-tiwari-7482bb189"
+        },
+        {
+          "id": "ACoAAEAhiOUBYr4ijSj19WabMWJ-_kymEA4VMhI",
+          "firstName": "Archit",
+          "lastName": "Gajbhiye",
+          "position": "Pursuing Computer Engineering at Vishwakarma Institute of Information Technology",
+          "publicIdentifier": "architgajbhiye",
+          "linkedinUrl": "https://www.linkedin.com/in/architgajbhiye"
+        },
+        {
+          "id": "ACoAADcIMacBtWEk8GOukzG_LZsFYU2XYRikfO4",
+          "firstName": "Chaitali",
+          "lastName": "Kolhe",
+          "position": "Full Stack Developer | AI / ML Enthusiast",
+          "publicIdentifier": "chaitali-kolhe-973257219",
+          "linkedinUrl": "https://www.linkedin.com/in/chaitali-kolhe-973257219"
+        },
+        {
+          "id": "ACoAAD_XfNgBFUCGtWNABgdzIlWYLGirz0I0cbg",
+          "firstName": "Aniket",
+          "lastName": "Dhage",
+          "position": "SDE Intern@Wolters Kluwer | VIIT CSE-AI\u201926",
+          "publicIdentifier": "aniket-dhage-aa085525a",
+          "linkedinUrl": "https://www.linkedin.com/in/aniket-dhage-aa085525a"
+        },
+        {
+          "id": "ACoAAClfd9cB1BmzNG-1YHvfDMJtFbaS3hBixFw",
+          "firstName": "Sharumathi",
+          "lastName": "Nadar",
+          "position": "Science Writing & Editing | Content management | Building Expertise in Publishing, Communication & Workflow Management |",
+          "publicIdentifier": "sharumathi-nadar-29b563174",
+          "linkedinUrl": "https://www.linkedin.com/in/sharumathi-nadar-29b563174"
+        },
+        {
+          "id": "ACoAACfd9WMB1iU7yPTt5gW6vruNWdPjSX06_Bs",
+          "firstName": "Harsh Kumar",
+          "lastName": "Gupta",
+          "position": "Data Engineer II @ Wolters Kluwer  | ETL | Consultant | Freelancer | Entrepreneurs\ud83d\udc68\u200d\ud83d\udcbc | Investor\ud83d\udd75\ufe0f\u200d\u2642\ufe0f | Empowering Businesses with Data-Driven Insights\ud83d\udcca: Data Analysis, Visualization, and Engineering\ud83d\ude80",
+          "publicIdentifier": "harshjspl30",
+          "linkedinUrl": "https://www.linkedin.com/in/harshjspl30"
+        },
+        {
+          "id": "ACoAAD-xIw8BKmNWezJgp_k3IfGzu6QrwBlu0Ng",
+          "firstName": "Atharva",
+          "lastName": "Wadhe",
+          "position": "SDE Intern at Wolters Kluwer | VIIT \u201926 CSE | Curious mind with a passion to explore.",
+          "publicIdentifier": "atharva-wadhe-4bba43259",
+          "linkedinUrl": "https://www.linkedin.com/in/atharva-wadhe-4bba43259"
+        },
+        {
+          "id": "ACoAAC0G-VQBbImJ1HbmsoyOWOpVthRqYNCne08",
+          "firstName": "Tanishq",
+          "lastName": "Mishra",
+          "position": "IT Security Analyst @ Wolters Kluwer | Cloud Security | Azure Security technologies | AppSec | AI based security",
+          "publicIdentifier": "tanishq-mishra-1b0bab190",
+          "linkedinUrl": "https://www.linkedin.com/in/tanishq-mishra-1b0bab190"
+        },
+        {
+          "id": "ACoAADN-x6kBUyWpgomMN72imIyZ0w2tMV3zULs",
+          "firstName": "Dev",
+          "lastName": "Sharma",
+          "position": "Data Science Intern @ Wolters Kluwer | Final Year CSE Student at IIIT Pune | Passionate about ML, Data Analytics & Innovation",
+          "publicIdentifier": "devv9dsharma",
+          "linkedinUrl": "https://www.linkedin.com/in/devv9dsharma"
+        },
+        {
+          "id": "ACoAADU4GNkBljdYdZif37sbeu1ksupexL8cEJs",
+          "firstName": "Sonali",
+          "lastName": "Jena",
+          "position": "Associate - Operations @ Wolters Kluwer | PGDM \u201924 - Business Analytics & HR",
+          "publicIdentifier": "sonali-jena-5b502a20b",
+          "linkedinUrl": "https://www.linkedin.com/in/sonali-jena-5b502a20b"
+        }
+      ],
+      "originalQuery": {
+        "url": "https://www.linkedin.com/in/rlrahulkanojia"
+      }
+    }
+  ]
+}
