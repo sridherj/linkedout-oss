@@ -78,6 +78,7 @@ jobs:
         env:
           DATABASE_URL: postgresql://linkedout_test:linkedout_test@localhost:5432/linkedout_test
           LINKEDOUT_ENVIRONMENT: integration_test
+          LINKEDOUT_EMBEDDING__PROVIDER: local
         run: |
           cd backend
           pytest tests/ -m integration -v --tb=short -n auto --dist=loadfile

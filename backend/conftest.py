@@ -126,7 +126,7 @@ def compile_pgarray_as_sqlitejson(type_, compiler, **kw):
 # connect with the correct credentials.
 os.environ['LINKEDOUT_ENVIRONMENT'] = 'test'
 os.environ.setdefault('DATABASE_URL', 'postgresql://linkedout:test@localhost:5432/linkedout_test')
-os.environ['LINKEDOUT_EMBEDDING_PROVIDER'] = 'local'
+os.environ['LINKEDOUT_EMBEDDING__PROVIDER'] = 'local'
 
 from common.entities.base_entity import Base
 from shared.infra.db.db_session_manager import db_session_manager
