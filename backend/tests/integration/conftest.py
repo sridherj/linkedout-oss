@@ -43,9 +43,10 @@ env_path = Path(__file__).parent.parent.parent
 load_dotenv(env_path / '.env', override=False)
 load_dotenv(env_path / '.env.local', override=True)
 
-# Set environment for integration tests
-os.environ['LINKEDOUT_ENVIRONMENT'] = 'integration_test'
-os.environ.setdefault('LINKEDOUT_EMBEDDING__PROVIDER', 'local')
+# NOTE: Do NOT set environment variables at module level here.
+# pytest imports ALL conftest.py files during collection (even for unit tests),
+# so module-level os.environ mutations would pollute the unit test environment.
+# Instead, integration-specific env vars are set inside the session fixtures below.
 
 from common.entities.base_entity import Base
 from shared.config.config import backend_config
@@ -113,6 +114,11 @@ def integration_db_engine() -> Generator[Engine, None, None]:
     Yields:
         Engine: SQLAlchemy engine connected to the test schema.
     """
+    # Set integration-specific env vars here (not at module level) to avoid
+    # polluting unit tests — pytest imports all conftest.py during collection.
+    os.environ['LINKEDOUT_ENVIRONMENT'] = 'integration_test'
+    os.environ.setdefault('LINKEDOUT_EMBEDDING__PROVIDER', 'local')
+
     db_url = _get_integration_db_url()
     logger.info(f'Setting up integration test database: {db_url}')
 
@@ -276,6 +282,23 @@ def test_client(
 
     with TestClient(app) as client:
         yield client
+
+
+# =============================================================================
+# SESSION HEALTH
+# =============================================================================
+
+
+@pytest.fixture(autouse=True)
+def _auto_rollback_integration_session(integration_db_session: Session):
+    """Roll back the shared session after every test.
+
+    The integration_db_session is session-scoped (shared across all tests on a
+    worker). If any test causes a DB error without rolling back, subsequent tests
+    see ``InFailedSqlTransaction``. This fixture ensures a clean slate.
+    """
+    yield
+    integration_db_session.rollback()
 
 
 # =============================================================================

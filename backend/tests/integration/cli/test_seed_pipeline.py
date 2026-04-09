@@ -51,9 +51,13 @@ def _count_rows(session, table_name: str) -> int:
 
 
 def _clear_seed_tables(session):
-    """Delete all seed data tables in reverse FK order."""
-    for table in reversed(IMPORT_ORDER):
-        session.execute(text(f'DELETE FROM {table}'))
+    """Delete all seed data tables in reverse FK order.
+
+    Uses TRUNCATE CASCADE to handle FK references from non-seed tables
+    (e.g. experience -> company) that aren't in IMPORT_ORDER.
+    """
+    tables = ', '.join(reversed(IMPORT_ORDER))
+    session.execute(text(f'TRUNCATE {tables} CASCADE'))
     session.commit()
 
 

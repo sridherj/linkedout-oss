@@ -350,13 +350,32 @@ def intelligence_test_data(integration_db_session: Session, seeded_data):
 # ---------------------------------------------------------------------------
 
 
+_RLS_APP_ROLE = 'linkedout_app_role'
+
+
 @pytest.fixture(scope='module')
 def rls_policies_applied(integration_db_session, integration_db_engine, intelligence_test_data):
-    """Apply RLS policies to the test schema, mirroring migration d1e2f3a4b5c6."""
+    """Apply RLS policies to the test schema, mirroring migration d1e2f3a4b5c6.
+
+    Also creates a non-superuser role so RLS policies are actually enforced.
+    PostgreSQL superusers bypass RLS even with FORCE ROW LEVEL SECURITY.
+    """
     _SESSION_VAR = "app.current_user_id"
     _PROFILE_TABLES = ['crawled_profile', 'experience', 'education', 'profile_skill']
 
     session = integration_db_session
+
+    # Create a non-superuser role for RLS testing.
+    # Superusers bypass RLS even with FORCE, so we need a regular role.
+    session.execute(text(
+        f"DO $$ BEGIN "
+        f"  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{_RLS_APP_ROLE}') THEN "
+        f"    CREATE ROLE {_RLS_APP_ROLE} NOLOGIN; "
+        f"  END IF; "
+        f"END $$"
+    ))
+    session.execute(text(f"GRANT USAGE ON SCHEMA {_TEST_SCHEMA} TO {_RLS_APP_ROLE}"))
+    session.execute(text(f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {_TEST_SCHEMA} TO {_RLS_APP_ROLE}"))
 
     # Composite index for policy subquery performance
     session.execute(text(
@@ -382,7 +401,7 @@ def rls_policies_applied(integration_db_session, integration_db_engine, intellig
             f"USING (EXISTS ("
             f"  SELECT 1 FROM {_TEST_SCHEMA}.connection "
             f"  WHERE {_TEST_SCHEMA}.connection.crawled_profile_id = {_TEST_SCHEMA}.{table}.{fk_col} "
-            f"  AND {_TEST_SCHEMA}.connection.app_user_id = NULLIF(current_setting('{_SESSION_VAR}', TRUE), '')"
+            f"  AND {_TEST_SCHEMA}.connection.app_user_id = NULLIF(current_setting('{_SESSION_VAR}', TRUE), '')::uuid"
             f"))"
         ))
 
