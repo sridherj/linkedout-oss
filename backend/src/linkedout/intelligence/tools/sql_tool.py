@@ -85,7 +85,7 @@ def execute_sql(query: str, session: Session) -> dict:
     Safety guardrails:
     - SELECT-only (rejects mutations)
     - Auto-injects LIMIT if missing
-    - 5-second statement timeout
+    - 10-second statement timeout
     """
     if not _is_select_only(query):
         return {"error": "Only SELECT queries are allowed.", "columns": [], "rows": [], "row_count": 0}

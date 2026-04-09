@@ -28,6 +28,9 @@ import linkedout.connection.entities  # noqa
 import linkedout.import_job.entities  # noqa
 import linkedout.contact_source.entities  # noqa
 import linkedout.enrichment_event.entities  # noqa
+import linkedout.funding.entities  # noqa
+import linkedout.search_session.entities  # noqa
+import linkedout.search_tag.entities  # noqa
 
 # Organization domain - enrichment config
 import organization.enrichment_config.entities  # noqa
