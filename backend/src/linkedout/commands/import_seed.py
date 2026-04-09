@@ -1,8 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """``linkedout import-seed`` — import seed dataset from SQLite into PostgreSQL.
 
-Reads a downloaded seed SQLite file and upserts all 10 tables into the local
-PostgreSQL database. Idempotent: running twice with the same data is safe.
+Reads a downloaded seed SQLite file and upserts the 6 company/reference tables
+into the local PostgreSQL database. Idempotent: running twice with the same
+data is safe.
+
+Profile data (crawled_profile, experience, education, profile_skill) is not
+part of seed data — it ships via the demo pipeline.
 """
 import json
 import sqlite3
@@ -13,6 +17,7 @@ from pathlib import Path
 import click
 from sqlalchemy import text
 
+from dev_tools.db.fixed_data import SYSTEM_USER_ID
 from linkedout.cli_helpers import cli_logged
 from shared.config import get_config
 from shared.infra.db.db_session_manager import db_session_manager, DbSessionType
@@ -22,7 +27,8 @@ from shared.utilities.operation_report import OperationCounts, OperationReport
 
 logger = get_logger(__name__, component='cli', operation='import_seed')
 
-# Tables in FK-safe order (must match seed_export.py SEED_TABLES)
+# Tables in FK-safe order (must match seed_export.py SEED_TABLES).
+# Only company/reference tables — profile data ships via the demo pipeline.
 IMPORT_ORDER = [
     'company',
     'company_alias',
@@ -30,10 +36,6 @@ IMPORT_ORDER = [
     'funding_round',
     'startup_tracking',
     'growth_signal',
-    'crawled_profile',
-    'experience',
-    'education',
-    'profile_skill',
 ]
 
 # Columns that are PostgreSQL arrays (stored as JSON strings in SQLite).
@@ -46,8 +48,6 @@ ARRAY_COLUMNS = {
 # Columns that are booleans (stored as INTEGER 0/1 in SQLite)
 BOOL_COLUMNS = {
     'startup_tracking': {'watching'},
-    'crawled_profile': {'open_to_work', 'premium', 'has_enriched_data'},
-    'experience': {'is_current'},
 }
 
 BATCH_SIZE = 1000
@@ -300,7 +300,7 @@ def import_seed_command(seed_file: str | None, dry_run: bool):
             rows = read_seed_table(sqlite_path, table_name)
             converted = [_convert_row(row, table_name) for row in rows]
 
-            with db_session_manager.get_session(DbSessionType.READ) as session:
+            with db_session_manager.get_session(DbSessionType.READ, app_user_id=SYSTEM_USER_ID) as session:
                 existing_ids = {
                     r[0]
                     for r in session.execute(
@@ -319,7 +319,7 @@ def import_seed_command(seed_file: str | None, dry_run: bool):
             }
             click.echo(f'  {table_name}: {len(converted):,} rows ({would_insert:,} new)')
     else:
-        with db_session_manager.get_session(DbSessionType.WRITE) as session:
+        with db_session_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
             for table_name in IMPORT_ORDER:
                 rows = read_seed_table(sqlite_path, table_name)
                 columns = get_sqlite_columns(sqlite_path, table_name)
@@ -350,8 +350,7 @@ def import_seed_command(seed_file: str | None, dry_run: bool):
             skipped=total_skipped,
         ),
         next_steps=(
-            ['Run `linkedout embed` to generate profile embeddings',
-             'Run `linkedout status` to verify database state']
+            ['Run `linkedout status` to verify database state']
             if not dry_run else []
         ),
     )
@@ -386,7 +385,6 @@ def import_seed_command(seed_file: str | None, dry_run: bool):
         click.echo('\nDRY RUN \u2014 no data written. Remove --dry-run to import.')
     else:
         click.echo('\nNext steps:')
-        click.echo('  \u2192 Run `linkedout embed` to generate profile embeddings')
         click.echo('  \u2192 Run `linkedout status` to verify database state')
 
     try:

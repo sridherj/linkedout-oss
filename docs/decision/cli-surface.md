@@ -77,7 +77,7 @@ No subgroups (no `linkedout db reset`). Flat command list like gstack. Commands 
 | Command | Purpose | Invoked By |
 |---------|---------|------------|
 | `linkedout download-seed` | Download seed data (core ~50MB or full ~500MB) from GitHub Releases. Core = ~5K companies; Full = ~50-100K companies. Both tiers include full profile, role alias, funding, and experience data. Checksum verification, progress bar. `--full` for the 500MB set. | `/linkedout-setup` skill |
-| `linkedout import-seed` | Import downloaded SQLite seed data into local PostgreSQL. Covers 10 tables: company, company_alias, role_alias, funding_round, startup_tracking, growth_signal, crawled_profile, experience, education, profile_skill. Idempotent. | `/linkedout-setup` skill |
+| `linkedout import-seed` | Import downloaded SQLite seed data into local PostgreSQL. Covers 6 company/reference tables: company, company_alias, role_alias, funding_round, startup_tracking, growth_signal. Idempotent. Profile data ships via demo pipeline. | `/linkedout-setup` skill |
 | `linkedout diagnostics` | Comprehensive system health report: OS, Python, PostgreSQL version, disk space, config summary (secrets redacted), DB stats (table counts, embedding coverage), recent errors. Outputs JSON to `~/linkedout-data/reports/`. Shareable for bug reports. `--repair` flag to auto-fix common issues. | `/linkedout-setup-report` skill, user debugging |
 | `linkedout status` | Quick one-line health check + stats. Shows: DB connected (Y/N), profiles loaded, companies available, embedding coverage %, affinity computed (Y/N), extension connected (Y/N). | `/linkedout` skill preamble |
 | `linkedout version` | Print version, install path, Python version, DB connection status. Displays ASCII logo from `docs/brand/logo-ascii.txt`. | `/linkedout-upgrade` skill |
@@ -223,7 +223,7 @@ Output: Download progress bar, checksum verification result.
 
 #### `linkedout import-seed`
 
-Import downloaded seed data into local PostgreSQL. Loads 10 tables: company, company_alias, role_alias, funding_round, startup_tracking, growth_signal, crawled_profile, experience, education, profile_skill.
+Import downloaded seed data into local PostgreSQL. Loads 6 company/reference tables: company, company_alias, role_alias, funding_round, startup_tracking, growth_signal. Profile data ships via the demo pipeline.
 
 **When to use:** After `download-seed`. The setup skill chains them: `linkedout download-seed && linkedout import-seed`.
 

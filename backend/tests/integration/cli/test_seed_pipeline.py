@@ -86,20 +86,19 @@ class TestFullImport:
 
     def test_fk_relationships_intact(self, integration_db_session):
         """FK relationships are intact after import."""
-        # experience records point to valid crawled_profile IDs
-        orphan_exp = integration_db_session.execute(text(
-            'SELECT COUNT(*) FROM experience e '
-            'WHERE NOT EXISTS (SELECT 1 FROM crawled_profile cp WHERE cp.id = e.crawled_profile_id)'
+        # company_alias records point to valid company IDs
+        orphan_alias = integration_db_session.execute(text(
+            'SELECT COUNT(*) FROM company_alias ca '
+            'WHERE NOT EXISTS (SELECT 1 FROM company c WHERE c.id = ca.company_id)'
         )).scalar()
-        assert orphan_exp == 0, f'{orphan_exp} experience records with invalid crawled_profile_id'
+        assert orphan_alias == 0, f'{orphan_alias} company_alias records with invalid company_id'
 
-        # experience records point to valid company IDs
-        orphan_co = integration_db_session.execute(text(
-            'SELECT COUNT(*) FROM experience e '
-            'WHERE e.company_id IS NOT NULL '
-            'AND NOT EXISTS (SELECT 1 FROM company c WHERE c.id = e.company_id)'
+        # funding_round records point to valid company IDs
+        orphan_fr = integration_db_session.execute(text(
+            'SELECT COUNT(*) FROM funding_round fr '
+            'WHERE NOT EXISTS (SELECT 1 FROM company c WHERE c.id = fr.company_id)'
         )).scalar()
-        assert orphan_co == 0, f'{orphan_co} experience records with invalid company_id'
+        assert orphan_fr == 0, f'{orphan_fr} funding_round records with invalid company_id'
 
     def test_output_follows_operation_result_pattern(self, runner, fixture_path, integration_db_session):
         """CLI output follows the Operation Result Pattern."""
@@ -231,7 +230,7 @@ class TestDryRun:
         assert result.exit_code == 0
         # Should mention table names and row counts
         assert 'company' in result.output
-        assert 'experience' in result.output
+        assert 'role_alias' in result.output
 
 
 # ── Report generation ───────────────────────────────────────────────────────

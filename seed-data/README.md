@@ -9,12 +9,11 @@ without running Apify enrichment. Seed data is published as GitHub Release asset
 ```bash
 linkedout download-seed          # downloads seed SQLite + manifest
 linkedout import-seed            # imports into PostgreSQL
-linkedout embed                  # generate embeddings locally
 ```
 
 ## What's Included
 
-Seed data covers 10 tables of public, non-tenant-scoped reference data:
+Seed data covers 6 tables of public, non-tenant-scoped company reference data:
 
 | Table | Description |
 |-------|-------------|
@@ -24,21 +23,17 @@ Seed data covers 10 tables of public, non-tenant-scoped reference data:
 | `funding_round` | Public funding data |
 | `startup_tracking` | Startup metrics |
 | `growth_signal` | Growth indicators |
-| `crawled_profile` | Profile snapshots |
-| `experience` | Work history |
-| `education` | Education history |
-| `profile_skill` | Skills and endorsements |
 
 **Not included:**
-- Embeddings — run `linkedout embed` after import to generate these locally
+- Profile data (`crawled_profile`, `experience`, `education`, `profile_skill`) — ships via the demo pipeline
 - Tenant-scoped data (`connection`, `contact_source`, `enrichment_event`, etc.)
 
 ## Tiers
 
 | Tier | Size | Companies | Description |
 |------|------|-----------|-------------|
-| **Core** | ~50 MB | ~5,000 | Companies where real connections work, full profile/role/funding data |
-| **Full** | ~500 MB | ~50-100K | Top global companies by employee count, funding, web traffic |
+| **Core** | ~50 MB | ~47K | Companies from LinkedOut network (where connections work) |
+| **Full** | ~500 MB | ~244K | Network companies + ~197K US/India companies from PDL (201+ employees) |
 
 ## Manifest Schema
 
@@ -57,16 +52,12 @@ this manifest before import.
       "size_bytes": 52428800,
       "sha256": "abc123...",
       "table_counts": {
-        "company": 5000,
-        "company_alias": 8500,
-        "role_alias": 1200,
-        "funding_round": 3400,
-        "startup_tracking": 2100,
-        "growth_signal": 6700,
-        "crawled_profile": 15000,
-        "experience": 45000,
-        "education": 18000,
-        "profile_skill": 32000
+        "company": 47000,
+        "company_alias": 0,
+        "role_alias": 62000,
+        "funding_round": 300,
+        "startup_tracking": 400,
+        "growth_signal": 0
       }
     },
     {
@@ -75,16 +66,12 @@ this manifest before import.
       "size_bytes": 524288000,
       "sha256": "def456...",
       "table_counts": {
-        "company": 100000,
-        "company_alias": 170000,
-        "role_alias": 5000,
-        "funding_round": 68000,
-        "startup_tracking": 42000,
-        "growth_signal": 134000,
-        "crawled_profile": 300000,
-        "experience": 900000,
-        "education": 360000,
-        "profile_skill": 640000
+        "company": 244000,
+        "company_alias": 0,
+        "role_alias": 62000,
+        "funding_round": 300,
+        "startup_tracking": 400,
+        "growth_signal": 0
       }
     }
   ]
@@ -200,18 +187,5 @@ this manifest before import.
 
 ## PII Policy
 
-Seed data is curated from public professional data with the following policy:
-
-**Stripped (not included):**
-- Email addresses
-- Phone numbers
-- Internal notes
-
-**Retained (public data):**
-- Names
-- LinkedIn profile URLs
-- Headlines and summaries
-- Photo URLs
-
-**Not shipped:**
-- Embeddings — users generate these locally with their chosen provider
+Seed data contains only company reference data — no personal profile information.
+Company names, websites, industries, and funding data are all public.

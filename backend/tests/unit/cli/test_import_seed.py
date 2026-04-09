@@ -62,7 +62,6 @@ class TestSQLiteReading:
         metadata = read_seed_metadata(fixture_path)
         counts = json.loads(metadata['table_counts'])
         assert counts['company'] == 10
-        assert counts['experience'] == 40
 
     def test_get_sqlite_tables(self, fixture_path):
         """List tables in SQLite -> all 10 seed tables present."""
@@ -164,32 +163,15 @@ class TestFKOrdering:
         """funding_round (FK -> company) comes after company."""
         assert IMPORT_ORDER.index('funding_round') > IMPORT_ORDER.index('company')
 
-    def test_experience_after_crawled_profile(self):
-        """experience (FK -> crawled_profile) comes after crawled_profile."""
-        assert IMPORT_ORDER.index('experience') > IMPORT_ORDER.index('crawled_profile')
-
-    def test_education_after_crawled_profile(self):
-        """education (FK -> crawled_profile) comes after crawled_profile."""
-        assert IMPORT_ORDER.index('education') > IMPORT_ORDER.index('crawled_profile')
-
-    def test_profile_skill_after_crawled_profile(self):
-        """profile_skill (FK -> crawled_profile) comes after crawled_profile."""
-        assert IMPORT_ORDER.index('profile_skill') > IMPORT_ORDER.index('crawled_profile')
-
-    def test_experience_after_company(self):
-        """experience (FK -> company) comes after company."""
-        assert IMPORT_ORDER.index('experience') > IMPORT_ORDER.index('company')
-
-    def test_all_10_tables_present(self):
-        """IMPORT_ORDER contains exactly 10 tables."""
-        assert len(IMPORT_ORDER) == 10
+    def test_all_6_tables_present(self):
+        """IMPORT_ORDER contains exactly 6 company/reference tables."""
+        assert len(IMPORT_ORDER) == 6
 
     def test_expected_order(self):
         """Verify the hardcoded order matches expected FK dependencies."""
         expected = [
             'company', 'company_alias', 'role_alias',
             'funding_round', 'startup_tracking', 'growth_signal',
-            'crawled_profile', 'experience', 'education', 'profile_skill',
         ]
         assert IMPORT_ORDER == expected
 
@@ -225,9 +207,9 @@ class TestTypeConversion:
 
     def test_bool_column_none_preserved(self):
         """None in bool column -> stays None."""
-        row = {'id': 'exp_1', 'is_current': None}
-        result = _convert_row(row, 'experience')
-        assert result['is_current'] is None
+        row = {'id': 'st_1', 'watching': None}
+        result = _convert_row(row, 'startup_tracking')
+        assert result['watching'] is None
 
     def test_no_conversion_for_regular_table(self):
         """Table without array/bool mappings -> row unchanged."""

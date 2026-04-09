@@ -2,8 +2,11 @@
 """Export seed data from PostgreSQL to SQLite files.
 
 Maintainer-only script that connects to the production LinkedOut PostgreSQL
-database and exports 10 seed tables into tiered SQLite files with a
-machine-readable manifest.
+database and exports 6 company/reference seed tables into tiered SQLite files
+with a machine-readable manifest.
+
+Profile data (crawled_profile, experience, education, profile_skill) is NOT
+included — it ships separately via the demo pipeline (generate-demo-seed.py).
 
 Usage:
     cd src && python -m dev_tools.seed_export --output seed-data/
@@ -18,12 +21,15 @@ from pathlib import Path
 import click
 from sqlalchemy import inspect, text
 
+from dev_tools.db.fixed_data import SYSTEM_USER_ID
 from shared.infra.db.db_session_manager import db_session_manager, DbSessionType
 from shared.utils.checksum import compute_sha256
 
 VERSION = "0.1.0"
 
-# Tables in FK-safe order (matches import order from shared context)
+# Tables in FK-safe order — company/reference data only.
+# Profile data (crawled_profile, experience, education, profile_skill) ships
+# via the demo pipeline, not the seed export.
 SEED_TABLES = [
     "company",
     "company_alias",
@@ -31,29 +37,13 @@ SEED_TABLES = [
     "funding_round",
     "startup_tracking",
     "growth_signal",
-    "crawled_profile",
-    "experience",
-    "education",
-    "profile_skill",
 ]
 
-# PII columns to NULL during export (crawled_profile only per spec).
-# Entity has no email/phone columns; these are the actual PII-bearing fields:
-#   notes        — BaseEntity internal notes
-#   raw_profile  — raw JSON payload that may contain PII
-#   source_app_user_id — FK to internal app_user (not in seed tables)
-PII_NULL_COLUMNS = {
-    "crawled_profile": {"notes", "raw_profile", "source_app_user_id"},
-}
+# No PII columns in company/reference tables.
+PII_NULL_COLUMNS: dict[str, set[str]] = {}
 
-# Columns to exclude entirely (pgvector types have no SQLite equivalent;
-# embeddings are explicitly excluded from seed data per decision doc).
-EXCLUDE_COLUMNS = {
-    "crawled_profile": {
-        "embedding_openai", "embedding_nomic", "embedding_model",
-        "embedding_dim", "embedding_updated_at", "search_vector",
-    },
-}
+# No columns to exclude from company/reference tables.
+EXCLUDE_COLUMNS: dict[str, set[str]] = {}
 
 # ── Tier company filter subqueries ────────────────────────────────────────────
 # Core: companies where at least one crawled_profile has experience there
@@ -77,19 +67,14 @@ TIER_COMPANY_FILTER = {
     "full": FULL_COMPANY_FILTER,
 }
 
-# How each table relates to the tier filter.
-# (filter_column, filter_source) — None means export all rows.
-TABLE_FILTER = {
-    "company":          ("id",                   "company"),
-    "company_alias":    ("company_id",           "company"),
-    "role_alias":       (None,                   None),      # no FK — export all
-    "funding_round":    ("company_id",           "company"),
-    "startup_tracking": ("company_id",           "company"),
-    "growth_signal":    ("company_id",           "company"),
-    "crawled_profile":  ("id",                   "profile"),
-    "experience":       ("crawled_profile_id",   "profile"),
-    "education":        ("crawled_profile_id",   "profile"),
-    "profile_skill":    ("crawled_profile_id",   "profile"),
+# Which column to filter by tier's company set. None = export all rows.
+TABLE_FILTER_COLUMN = {
+    "company":          "id",
+    "company_alias":    "company_id",
+    "role_alias":       None,           # no FK — export all
+    "funding_round":    "company_id",
+    "startup_tracking": "company_id",
+    "growth_signal":    "company_id",
 }
 
 
@@ -133,14 +118,6 @@ def _is_temporal(col: dict) -> bool:
 
 # ── Query builders ────────────────────────────────────────────────────────────
 
-def _profile_filter_sql(company_filter: str) -> str:
-    """Subquery: profile IDs with experience at qualifying companies."""
-    return (
-        "SELECT DISTINCT e.crawled_profile_id FROM experience e "
-        f"WHERE e.company_id IN ({company_filter})"
-    )
-
-
 def _build_select(table_name: str, columns: list[dict]) -> str:
     """Build SELECT clause, NULLing PII columns."""
     pii = PII_NULL_COLUMNS.get(table_name, set())
@@ -156,13 +133,10 @@ def _build_export_query(table_name: str, columns: list[dict], tier: str) -> str:
     select_clause = _build_select(table_name, columns)
     query = f"SELECT {select_clause} FROM {table_name}"
 
-    fk_col, filter_type = TABLE_FILTER[table_name]
+    fk_col = TABLE_FILTER_COLUMN[table_name]
     if fk_col is not None:
         company_filter = TIER_COMPANY_FILTER[tier]
-        if filter_type == "company":
-            query += f" WHERE {fk_col} IN ({company_filter})"
-        else:  # profile
-            query += f" WHERE {fk_col} IN ({_profile_filter_sql(company_filter)})"
+        query += f" WHERE {fk_col} IN ({company_filter})"
 
     query += " ORDER BY id"
     return query
@@ -360,7 +334,7 @@ def main(output: str, tiers: str, dry_run: bool):
     start = time.time()
     exported: list[dict] = []
 
-    with db_session_manager.get_session(DbSessionType.READ) as session:
+    with db_session_manager.get_session(DbSessionType.READ, app_user_id=SYSTEM_USER_ID) as session:
         inspector = inspect(session.get_bind())
         for tier in tier_list:
             result = _export_tier(session, inspector, tier, output_dir, dry_run)
