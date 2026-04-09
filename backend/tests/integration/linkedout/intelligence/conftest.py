@@ -58,6 +58,7 @@ def vector_column_ready(integration_db_engine, integration_db_session, pgvector_
         integration_db_session.commit()
         return True
     except Exception:
+        integration_db_session.rollback()
         return False
 
 

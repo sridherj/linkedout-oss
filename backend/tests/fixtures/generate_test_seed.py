@@ -15,7 +15,7 @@ from pathlib import Path
 
 
 def _create_tables(cursor: sqlite3.Cursor) -> None:
-    """Create all 10 seed tables + _metadata in the SQLite file."""
+    """Create all seed + profile tables + _metadata in the SQLite file."""
 
     cursor.execute("""
         CREATE TABLE company (
@@ -44,7 +44,7 @@ def _create_tables(cursor: sqlite3.Cursor) -> None:
             deleted_at TEXT,
             created_by TEXT,
             updated_by TEXT,
-            active INTEGER NOT NULL DEFAULT 1,
+            is_active INTEGER NOT NULL DEFAULT 1,
             version INTEGER NOT NULL DEFAULT 1
         )
     """)
@@ -60,7 +60,7 @@ def _create_tables(cursor: sqlite3.Cursor) -> None:
             deleted_at TEXT,
             created_by TEXT,
             updated_by TEXT,
-            active INTEGER NOT NULL DEFAULT 1,
+            is_active INTEGER NOT NULL DEFAULT 1,
             version INTEGER NOT NULL DEFAULT 1
         )
     """)
@@ -77,7 +77,7 @@ def _create_tables(cursor: sqlite3.Cursor) -> None:
             deleted_at TEXT,
             created_by TEXT,
             updated_by TEXT,
-            active INTEGER NOT NULL DEFAULT 1,
+            is_active INTEGER NOT NULL DEFAULT 1,
             version INTEGER NOT NULL DEFAULT 1
         )
     """)
@@ -98,7 +98,7 @@ def _create_tables(cursor: sqlite3.Cursor) -> None:
             deleted_at TEXT,
             created_by TEXT,
             updated_by TEXT,
-            active INTEGER NOT NULL DEFAULT 1,
+            is_active INTEGER NOT NULL DEFAULT 1,
             version INTEGER NOT NULL DEFAULT 1
         )
     """)
@@ -123,7 +123,7 @@ def _create_tables(cursor: sqlite3.Cursor) -> None:
             deleted_at TEXT,
             created_by TEXT,
             updated_by TEXT,
-            active INTEGER NOT NULL DEFAULT 1,
+            is_active INTEGER NOT NULL DEFAULT 1,
             version INTEGER NOT NULL DEFAULT 1
         )
     """)
@@ -143,7 +143,7 @@ def _create_tables(cursor: sqlite3.Cursor) -> None:
             deleted_at TEXT,
             created_by TEXT,
             updated_by TEXT,
-            active INTEGER NOT NULL DEFAULT 1,
+            is_active INTEGER NOT NULL DEFAULT 1,
             version INTEGER NOT NULL DEFAULT 1
         )
     """)
@@ -184,7 +184,7 @@ def _create_tables(cursor: sqlite3.Cursor) -> None:
             deleted_at TEXT,
             created_by TEXT,
             updated_by TEXT,
-            active INTEGER NOT NULL DEFAULT 1,
+            is_active INTEGER NOT NULL DEFAULT 1,
             version INTEGER NOT NULL DEFAULT 1
         )
     """)
@@ -217,7 +217,7 @@ def _create_tables(cursor: sqlite3.Cursor) -> None:
             deleted_at TEXT,
             created_by TEXT,
             updated_by TEXT,
-            active INTEGER NOT NULL DEFAULT 1,
+            is_active INTEGER NOT NULL DEFAULT 1,
             version INTEGER NOT NULL DEFAULT 1
         )
     """)
@@ -239,7 +239,7 @@ def _create_tables(cursor: sqlite3.Cursor) -> None:
             deleted_at TEXT,
             created_by TEXT,
             updated_by TEXT,
-            active INTEGER NOT NULL DEFAULT 1,
+            is_active INTEGER NOT NULL DEFAULT 1,
             version INTEGER NOT NULL DEFAULT 1
         )
     """)
@@ -255,7 +255,7 @@ def _create_tables(cursor: sqlite3.Cursor) -> None:
             deleted_at TEXT,
             created_by TEXT,
             updated_by TEXT,
-            active INTEGER NOT NULL DEFAULT 1,
+            is_active INTEGER NOT NULL DEFAULT 1,
             version INTEGER NOT NULL DEFAULT 1
         )
     """)
@@ -276,7 +276,7 @@ def _populate(cursor: sqlite3.Cursor) -> dict[str, int]:
     """Insert synthetic rows into all tables. Returns table_counts."""
     ts = _now_iso()
     base = dict(created_at=ts, updated_at=ts, deleted_at=None,
-                created_by=None, updated_by=None, active=1, version=1)
+                created_by=None, updated_by=None, is_active=1, version=1)
 
     # --- Companies (10) ---
     companies = []

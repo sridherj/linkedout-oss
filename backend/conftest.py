@@ -70,6 +70,8 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+
+from dotenv import load_dotenv
 from typing import Generator, Dict, Any, Tuple
 
 # Add src directory to Python path
@@ -119,12 +121,8 @@ def compile_pgarray_as_sqlitejson(type_, compiler, **kw):
 
 
 
-# Set test environment before importing config.
-# Use a valid postgresql URL for config validation — unit tests create their own
-# SQLite in-memory engines via _create_test_engine() and never use this URL.
-os.environ['LINKEDOUT_ENVIRONMENT'] = 'test'
-os.environ['DATABASE_URL'] = 'postgresql://linkedout:test@localhost:5432/linkedout_test'
-os.environ['LINKEDOUT_EMBEDDING_PROVIDER'] = 'local'
+# Load test defaults from .env.test (override=False so CI env vars and .env.local win).
+load_dotenv(Path(__file__).parent / '.env.test', override=False)
 
 from common.entities.base_entity import Base
 from shared.infra.db.db_session_manager import db_session_manager

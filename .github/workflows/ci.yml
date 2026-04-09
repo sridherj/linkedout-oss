@@ -11,6 +11,7 @@ jobs:
   # ── Unit Tests ─────────────────────────────────────────────────────────────
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -27,6 +28,7 @@ jobs:
         run: |
           cd backend
           pytest tests/ -n auto --dist=loadfile -v --tb=short \
+            --ignore=tests/smoke/ \
             -m "not live_llm and not live_langfuse and not live_services and not integration and not eval" \
             --cov=src --cov-report=term-missing --cov-report=xml:coverage.xml
       - name: Run skill tests
@@ -43,6 +45,7 @@ jobs:
   # ── Tier 3: Integration Tests ───────────────────────────────────────────────
   integration:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -72,10 +75,16 @@ jobs:
           DATABASE_URL: postgresql://linkedout_test:linkedout_test@localhost:5432/linkedout_test
           LINKEDOUT_ENVIRONMENT: integration_test
         run: cd backend && alembic upgrade head
+      - name: Remove superuser (so RLS policies apply)
+        env:
+          DATABASE_URL: postgresql://linkedout_test:linkedout_test@localhost:5432/linkedout_test
+        run: psql $DATABASE_URL -c "ALTER ROLE linkedout_test NOSUPERUSER;"
       - name: Run integration tests
         env:
           DATABASE_URL: postgresql://linkedout_test:linkedout_test@localhost:5432/linkedout_test
           LINKEDOUT_ENVIRONMENT: integration_test
+          LINKEDOUT_EMBEDDING__PROVIDER: local
+          TENANT_SECRET_ENCRYPTION_KEY: 91A0yDI0x4USk1fknO6bMUAy5HXwtLWIfGxiRl1atz0=
         run: |
           cd backend
           pytest tests/ -m integration -v --tb=short -n auto --dist=loadfile
@@ -88,6 +97,7 @@ jobs:
   # ── Extension: Build Check ──────────────────────────────────────────────────
   extension-lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -38,13 +38,12 @@ from dotenv import load_dotenv
 src_path = Path(__file__).parent.parent.parent / 'src'
 sys.path.insert(0, str(src_path))
 
-# Load environment files (.env.local takes precedence)
+# Load environment files. .env.local takes precedence, then .env.integration defaults.
+# override=False ensures CI env vars are never clobbered.
 env_path = Path(__file__).parent.parent.parent
-load_dotenv(env_path / '.env', override=False)
 load_dotenv(env_path / '.env.local', override=True)
-
-# Set environment for integration tests
-os.environ['LINKEDOUT_ENVIRONMENT'] = 'integration_test'
+load_dotenv(env_path / '.env.integration', override=False)
+load_dotenv(env_path / '.env', override=False)
 
 from common.entities.base_entity import Base
 from shared.config.config import backend_config
@@ -275,6 +274,33 @@ def test_client(
 
     with TestClient(app) as client:
         yield client
+
+
+# =============================================================================
+# SESSION GUARD — prevent cascading InFailedSqlTransaction errors
+# =============================================================================
+
+
+@pytest.fixture(autouse=True)
+def _guard_integration_session(integration_db_session):
+    """Roll back dirty sessions before and after each test.
+
+    The integration_db_session is session-scoped (shared across all tests on a
+    pytest-xdist worker). If any test causes a DB error without rolling back,
+    the session enters "aborted transaction" state and ALL subsequent tests on
+    that worker fail with InFailedSqlTransaction. This fixture prevents that.
+    """
+    # Pre-test: if a prior test left the session dirty, clean it up
+    if not integration_db_session.is_active:
+        integration_db_session.rollback()
+
+    yield
+
+    # Post-test: roll back any uncommitted changes
+    if integration_db_session.is_active and integration_db_session.dirty:
+        integration_db_session.rollback()
+    elif not integration_db_session.is_active:
+        integration_db_session.rollback()
 
 
 # =============================================================================

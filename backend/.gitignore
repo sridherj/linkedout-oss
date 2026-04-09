@@ -95,6 +95,9 @@ celerybeat-schedule
 .env.local
 .env.dev
 .env.prod
+# Allow test env defaults (not secrets — committed intentionally)
+!.env.test
+!.env.integration
 .venv
 env/
 venv/

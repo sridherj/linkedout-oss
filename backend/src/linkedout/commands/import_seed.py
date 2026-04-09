@@ -45,9 +45,16 @@ ARRAY_COLUMNS = {
     'funding_round': {'lead_investors', 'all_investors'},
 }
 
-# Columns that are booleans (stored as INTEGER 0/1 in SQLite)
+# Columns that are booleans (stored as INTEGER 0/1 in SQLite).
+# is_active comes from BaseEntity and is present in all seed tables.
+_COMMON_BOOL = {'is_active'}
 BOOL_COLUMNS = {
-    'startup_tracking': {'watching'},
+    'company': _COMMON_BOOL,
+    'company_alias': _COMMON_BOOL,
+    'role_alias': _COMMON_BOOL,
+    'funding_round': _COMMON_BOOL,
+    'startup_tracking': _COMMON_BOOL | {'watching'},
+    'growth_signal': _COMMON_BOOL,
 }
 
 BATCH_SIZE = 1000
