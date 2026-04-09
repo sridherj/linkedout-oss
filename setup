@@ -299,7 +299,7 @@ check_prerequisites() {
         [[ "$cmd" == curl* ]] && continue
         apt_pkgs_one="$apt_pkgs_one ${cmd#sudo apt-get install -y }"
       done
-      [ -n "$apt_pkgs_one" ] && one_shot="${one_shot}sudo apt-get update && sudo apt-get install -y$apt_pkgs_one && sudo service postgresql start && "
+      [ -n "$apt_pkgs_one" ] && one_shot="${one_shot}sudo apt-get update && sudo apt-get install -y$apt_pkgs_one && sudo service postgresql start 2>/dev/null; "
     elif [ "$os" = "macos" ]; then
       local brew_pkgs_one=""
       for cmd in "${install_cmds[@]}"; do
