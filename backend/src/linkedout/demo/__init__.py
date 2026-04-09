@@ -59,7 +59,7 @@ def set_demo_mode(data_dir: Path, enabled: bool) -> None:
     config["demo_mode"] = enabled
 
     # Update database_url to point at the correct database
-    current_url = config.get("database_url", "postgresql://linkedout:@localhost:5432/linkedout")
+    current_url = config.get("database_url", "postgresql://linkedout:linkedout@localhost:5432/linkedout")
     if enabled:
         config["database_url"] = get_demo_db_url(current_url)
     else:

@@ -13,7 +13,7 @@ Generate a comprehensive usage report for your LinkedOut network. Shows query pa
 Before generating the report, load credentials and locate the data directory:
 
 ```bash
-source ~/linkedout-data/config/agent-context.env
+cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env
 ```
 
 If the file does not exist, tell the user:

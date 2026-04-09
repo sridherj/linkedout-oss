@@ -16,7 +16,7 @@ Assess LinkedOut system health by running diagnostics, computing a health score,
 ## Preamble
 
 ```bash
-source ~/linkedout-data/config/agent-context.env
+cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env
 ```
 
 If the file does not exist, tell the user:

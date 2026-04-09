@@ -23,6 +23,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Add backend/src to Python path for entity imports
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+
 
 # ── Constants ────────────────────────────────────────────────────────
 
@@ -34,9 +37,18 @@ NUM_EDUCATIONS = 20
 NUM_SKILLS = 30
 EMBEDDING_DIM = 768  # nomic-embed-text dimension
 
+# Demo org data for connection FK requirements
+DEMO_TENANT_ID = "tenant_demo_001"
+DEMO_BU_ID = "bu_demo_001"
+DEMO_APP_USER_ID = "usr_demo_001"
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+
+
+def _today_iso() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
 def _random_embedding(dim: int = EMBEDDING_DIM) -> str:
@@ -62,13 +74,13 @@ def _psql(db_url: str, sql: str, label: str = "") -> None:
 
 
 def generate(
-    base_db_url: str = "postgresql://linkedout:@localhost:5432/linkedout",
+    base_db_url: str = "postgresql://linkedout:linkedout@localhost:5432/linkedout",
     output_path: Path | None = None,
 ) -> Path:
     """Generate the synthetic demo dump fixture.
 
     1. Creates a temporary database with pgvector enabled.
-    2. Creates the schema (crawled_profile, company, experience, etc.).
+    2. Creates the schema from entity metadata (no hand-written DDL).
     3. Inserts synthetic data with pre-computed embeddings.
     4. Runs ``pg_dump`` to produce a ``.dump`` file.
     5. Drops the temporary database.
@@ -119,108 +131,54 @@ def generate(
 
 
 def _create_schema(db_url: str) -> None:
-    """Create demo tables in the fixture database."""
-    schema_sql = """
-    CREATE TABLE IF NOT EXISTS company (
-        id TEXT PRIMARY KEY,
-        canonical_name TEXT NOT NULL,
-        normalized_name TEXT NOT NULL,
-        linkedin_url TEXT,
-        domain TEXT,
-        industry TEXT,
-        founded_year INTEGER,
-        hq_city TEXT,
-        hq_country TEXT,
-        employee_count_range TEXT,
-        size_tier TEXT,
-        network_connection_count INTEGER DEFAULT 0,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW(),
-        active BOOLEAN DEFAULT TRUE
-    );
+    """Create demo tables from entity metadata — no hand-written DDL."""
+    from sqlalchemy import create_engine
 
-    CREATE TABLE IF NOT EXISTS crawled_profile (
-        id TEXT PRIMARY KEY,
-        linkedin_url TEXT NOT NULL UNIQUE,
-        public_identifier TEXT,
-        first_name TEXT,
-        last_name TEXT,
-        full_name TEXT,
-        headline TEXT,
-        about TEXT,
-        location_city TEXT,
-        location_country TEXT,
-        connections_count INTEGER,
-        current_company_name TEXT,
-        current_position TEXT,
-        company_id TEXT REFERENCES company(id),
-        seniority_level TEXT,
-        function_area TEXT,
-        data_source TEXT NOT NULL DEFAULT 'demo',
-        has_enriched_data BOOLEAN DEFAULT FALSE,
-        profile_embedding vector(768),
-        affinity_score REAL,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW(),
-        active BOOLEAN DEFAULT TRUE
-    );
+    from common.entities.base_entity import Base
+    # Import entities to register their table metadata with Base.metadata
+    from linkedout.company.entities.company_entity import CompanyEntity  # noqa: F401
+    from linkedout.connection.entities.connection_entity import ConnectionEntity  # noqa: F401
+    from linkedout.crawled_profile.entities.crawled_profile_entity import CrawledProfileEntity  # noqa: F401
+    from linkedout.education.entities.education_entity import EducationEntity  # noqa: F401
+    from linkedout.experience.entities.experience_entity import ExperienceEntity  # noqa: F401
+    from linkedout.profile_skill.entities.profile_skill_entity import ProfileSkillEntity  # noqa: F401
+    from organization.entities.app_user_entity import AppUserEntity  # noqa: F401
+    from organization.entities.bu_entity import BuEntity  # noqa: F401
+    from organization.entities.tenant_entity import TenantEntity  # noqa: F401
 
-    CREATE TABLE IF NOT EXISTS experience (
-        id TEXT PRIMARY KEY,
-        crawled_profile_id TEXT NOT NULL REFERENCES crawled_profile(id),
-        position TEXT,
-        company_name TEXT,
-        company_id TEXT REFERENCES company(id),
-        start_year INTEGER,
-        end_year INTEGER,
-        is_current BOOLEAN DEFAULT FALSE,
-        seniority_level TEXT,
-        function_area TEXT,
-        description TEXT,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW(),
-        active BOOLEAN DEFAULT TRUE
-    );
+    demo_tables = [
+        TenantEntity.__table__,
+        BuEntity.__table__,
+        AppUserEntity.__table__,
+        CompanyEntity.__table__,
+        CrawledProfileEntity.__table__,
+        ExperienceEntity.__table__,
+        EducationEntity.__table__,
+        ProfileSkillEntity.__table__,
+        ConnectionEntity.__table__,
+    ]
 
-    CREATE TABLE IF NOT EXISTS education (
-        id TEXT PRIMARY KEY,
-        crawled_profile_id TEXT NOT NULL REFERENCES crawled_profile(id),
-        school_name TEXT,
-        degree TEXT,
-        field_of_study TEXT,
-        start_year INTEGER,
-        end_year INTEGER,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW(),
-        active BOOLEAN DEFAULT TRUE
-    );
-
-    CREATE TABLE IF NOT EXISTS profile_skill (
-        id TEXT PRIMARY KEY,
-        crawled_profile_id TEXT NOT NULL REFERENCES crawled_profile(id),
-        skill_name TEXT NOT NULL,
-        endorsement_count INTEGER DEFAULT 0,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW(),
-        active BOOLEAN DEFAULT TRUE
-    );
-
-    CREATE TABLE IF NOT EXISTS connection (
-        id TEXT PRIMARY KEY,
-        profile_id TEXT NOT NULL REFERENCES crawled_profile(id),
-        connected_profile_id TEXT REFERENCES crawled_profile(id),
-        connected_at TIMESTAMPTZ,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW(),
-        active BOOLEAN DEFAULT TRUE
-    );
-    """
-    _psql(db_url, schema_sql, "schema")
+    engine = create_engine(db_url)
+    Base.metadata.create_all(engine, tables=demo_tables)
+    engine.dispose()
+    print(f"Created {len(demo_tables)} tables from entity metadata")
 
 
 def _insert_data(db_url: str) -> None:
     """Insert synthetic rows with pre-computed embeddings."""
     ts = _now_iso()
+    today = _today_iso()
+
+    # ── Org data (required for connection FKs) ──────────────────
+    org_sql = (
+        f"INSERT INTO tenant (id, name, created_at, updated_at, is_active, version) "
+        f"VALUES ('{DEMO_TENANT_ID}', 'Demo Tenant', '{ts}', '{ts}', TRUE, 1);\n"
+        f"INSERT INTO bu (id, tenant_id, name, created_at, updated_at, is_active, version) "
+        f"VALUES ('{DEMO_BU_ID}', '{DEMO_TENANT_ID}', 'Demo BU', '{ts}', '{ts}', TRUE, 1);\n"
+        f"INSERT INTO app_user (id, email, name, created_at, updated_at, is_active, version) "
+        f"VALUES ('{DEMO_APP_USER_ID}', 'demo@example.com', 'Demo User', '{ts}', '{ts}', TRUE, 1);"
+    )
+    _psql(db_url, org_sql, "org data")
 
     # ── Companies ────────────────────────────────────────────────
     companies_sql_parts = []
@@ -248,7 +206,7 @@ def _insert_data(db_url: str) -> None:
         "INSERT INTO company (id, canonical_name, normalized_name, linkedin_url, "
         "domain, industry, founded_year, hq_city, hq_country, "
         "employee_count_range, size_tier, network_connection_count, "
-        "created_at, updated_at, active) VALUES\n"
+        "created_at, updated_at, is_active) VALUES\n"
         + ",\n".join(companies_sql_parts) + ";"
     )
     _psql(db_url, companies_sql, "companies")
@@ -272,8 +230,6 @@ def _insert_data(db_url: str) -> None:
         title, seniority, area = roles[i - 1]
         co_idx = (i % NUM_COMPANIES) + 1
         embedding = _random_embedding()
-        # Founder profile gets highest affinity; others decrease
-        affinity = round(1.0 - (i - 1) * 0.08, 2) if i <= 10 else 0.2
         profile_sql_parts.append(
             f"('cp_demo_{i:03d}', 'https://linkedin.com/in/demo-person-{i}', "
             f"'demo-person-{i}', 'Demo{i}', 'Person{i}', 'Demo{i} Person{i}', "
@@ -283,7 +239,7 @@ def _insert_data(db_url: str) -> None:
             f"'Demo Company {co_idx}', '{title}', 'co_demo_{co_idx:03d}', "
             f"'{seniority}', '{area}', 'demo', "
             f"{'TRUE' if i <= 5 else 'FALSE'}, "
-            f"'{embedding}', {affinity}, '{ts}', '{ts}', TRUE)"
+            f"'{embedding}', '{ts}', '{ts}', TRUE)"
         )
 
     profiles_sql = (
@@ -292,8 +248,8 @@ def _insert_data(db_url: str) -> None:
         "location_city, location_country, connections_count, "
         "current_company_name, current_position, company_id, "
         "seniority_level, function_area, data_source, "
-        "has_enriched_data, profile_embedding, affinity_score, "
-        "created_at, updated_at, active) VALUES\n"
+        "has_enriched_data, embedding_nomic, "
+        "created_at, updated_at, is_active) VALUES\n"
         + ",\n".join(profile_sql_parts) + ";"
     )
     _psql(db_url, profiles_sql, "profiles")
@@ -326,7 +282,7 @@ def _insert_data(db_url: str) -> None:
         "INSERT INTO experience (id, crawled_profile_id, position, "
         "company_name, company_id, start_year, end_year, is_current, "
         "seniority_level, function_area, description, "
-        "created_at, updated_at, active) VALUES\n"
+        "created_at, updated_at, is_active) VALUES\n"
         + ",\n".join(exp_sql_parts) + ";"
     )
     _psql(db_url, exp_sql, "experiences")
@@ -349,7 +305,7 @@ def _insert_data(db_url: str) -> None:
     edu_sql = (
         "INSERT INTO education (id, crawled_profile_id, school_name, "
         "degree, field_of_study, start_year, end_year, "
-        "created_at, updated_at, active) VALUES\n"
+        "created_at, updated_at, is_active) VALUES\n"
         + ",\n".join(edu_sql_parts) + ";"
     )
     _psql(db_url, edu_sql, "education")
@@ -372,42 +328,49 @@ def _insert_data(db_url: str) -> None:
 
     skill_sql = (
         "INSERT INTO profile_skill (id, crawled_profile_id, skill_name, "
-        "endorsement_count, created_at, updated_at, active) VALUES\n"
+        "endorsement_count, created_at, updated_at, is_active) VALUES\n"
         + ",\n".join(skill_sql_parts) + ";"
     )
     _psql(db_url, skill_sql, "skills")
 
     # ── Connections ──────────────────────────────────────────────
+    # Demo app user connected to all profiles.
+    # Affinity sub-score columns are NOT NULL with Python-side defaults only,
+    # so we must provide explicit values in raw SQL.
     conn_sql_parts = []
     conn_id = 0
-    # Connect profile 1 (system user) to all others
-    for i in range(2, NUM_PROFILES + 1):
+    for i in range(1, NUM_PROFILES + 1):
         conn_id += 1
+        affinity = round(1.0 - (i - 1) * 0.08, 2) if i <= 10 else 0.2
         conn_sql_parts.append(
-            f"('conn_demo_{conn_id:03d}', 'cp_demo_001', 'cp_demo_{i:03d}', "
-            f"'{ts}', '{ts}', '{ts}', TRUE)"
+            f"('conn_demo_{conn_id:03d}', "
+            f"'{DEMO_TENANT_ID}', '{DEMO_BU_ID}', '{DEMO_APP_USER_ID}', "
+            f"'cp_demo_{i:03d}', '{today}', "
+            f"ARRAY['demo'], {affinity}, "
+            f"0, 0, 0, 0, 0, 0, 0, "
+            f"'{ts}', '{ts}', TRUE)"
         )
-    # Add some cross-connections
-    for i in range(2, min(6, NUM_PROFILES + 1)):
-        for j in range(i + 1, min(8, NUM_PROFILES + 1)):
-            conn_id += 1
-            conn_sql_parts.append(
-                f"('conn_demo_{conn_id:03d}', 'cp_demo_{i:03d}', 'cp_demo_{j:03d}', "
-                f"'{ts}', '{ts}', '{ts}', TRUE)"
-            )
 
     conn_sql = (
-        "INSERT INTO connection (id, profile_id, connected_profile_id, "
-        "connected_at, created_at, updated_at, active) VALUES\n"
+        "INSERT INTO connection (id, tenant_id, bu_id, app_user_id, "
+        "crawled_profile_id, connected_at, sources, affinity_score, "
+        "affinity_source_count, affinity_recency, affinity_career_overlap, "
+        "affinity_mutual_connections, affinity_external_contact, "
+        "affinity_embedding_similarity, affinity_version, "
+        "created_at, updated_at, is_active) VALUES\n"
         + ",\n".join(conn_sql_parts) + ";"
     )
     _psql(db_url, conn_sql, "connections")
 
     total = (
-        NUM_COMPANIES + NUM_PROFILES + NUM_EXPERIENCES
+        3  # org records (tenant + bu + app_user)
+        + NUM_COMPANIES + NUM_PROFILES + NUM_EXPERIENCES
         + NUM_EDUCATIONS + NUM_SKILLS + conn_id
     )
-    print(f"Inserted {total} rows across 6 tables")
+    print(f"Inserted {total} rows across 9 tables")
+    print(f"  tenant: 1")
+    print(f"  bu: 1")
+    print(f"  app_user: 1")
     print(f"  companies: {NUM_COMPANIES}")
     print(f"  profiles: {NUM_PROFILES}")
     print(f"  experiences: {NUM_EXPERIENCES}")
@@ -417,6 +380,6 @@ def _insert_data(db_url: str) -> None:
 
 
 if __name__ == "__main__":
-    db_url = sys.argv[1] if len(sys.argv) > 1 else "postgresql://linkedout:@localhost:5432/linkedout"
+    db_url = sys.argv[1] if len(sys.argv) > 1 else "postgresql://linkedout:linkedout@localhost:5432/linkedout"
     out = Path(sys.argv[2]) if len(sys.argv) > 2 else None
     generate(base_db_url=db_url, output_path=out)

@@ -11,7 +11,9 @@ Usage:
     linkedout-sandbox --no-claude  # build without Claude credentials
 """
 import os
+import platform
 import subprocess
+from datetime import datetime
 from pathlib import Path
 
 import click
@@ -71,8 +73,20 @@ def sandbox(no_build: bool, no_claude: bool):
             click.echo('Docker build failed.', err=True)
             raise SystemExit(result.returncode)
 
-    # Run
-    run_cmd = ['docker', 'run', '-it', '--rm', IMAGE_NAME]
+    # Run — wrap with script to capture the full session log
+    log_dir = Path('/tmp/linkedout-oss')
+    log_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+    logfile = log_dir / f'session-{timestamp}.log'
+
+    docker_cmd = f'docker run -it --rm {IMAGE_NAME}'
 
     click.echo('Launching sandbox...')
-    os.execvp('docker', run_cmd)
+    click.echo(f'Session log: {logfile}')
+    click.echo('')
+
+    # macOS and Linux have different script(1) syntax
+    if platform.system() == 'Darwin':
+        os.execvp('script', ['script', '-a', '-q', str(logfile), 'bash', '-c', docker_cmd])
+    else:
+        os.execvp('script', ['script', '-a', '-q', str(logfile), '-c', docker_cmd])

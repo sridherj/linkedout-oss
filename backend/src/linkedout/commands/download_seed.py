@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """``linkedout download-seed`` — download seed company data from GitHub Releases.
 
-Downloads tiered SQLite seed files with progress bar, SHA256 checksum
+Downloads tiered seed dump files with progress bar, SHA256 checksum
 verification, and skip-if-exists logic. Follows the Operation Result Pattern.
 """
 import json

@@ -37,14 +37,14 @@ def valid_manifest():
         'created_at': '2026-01-01T00:00:00Z',
         'files': [
             {
-                'name': 'seed-core.sqlite',
+                'name': 'seed-core.dump',
                 'tier': 'core',
                 'size_bytes': 50_000_000,
                 'sha256': 'abc123' * 10 + 'ab',
                 'table_counts': {'company': 5000},
             },
             {
-                'name': 'seed-full.sqlite',
+                'name': 'seed-full.dump',
                 'tier': 'full',
                 'size_bytes': 500_000_000,
                 'sha256': 'def456' * 10 + 'de',
@@ -87,7 +87,7 @@ class TestManifestParsing:
         resp = MagicMock()
         resp.status_code = 200
         resp.json.return_value = {
-            'files': [{'name': 'seed-core.sqlite', 'tier': 'core'}],
+            'files': [{'name': 'seed-core.dump', 'tier': 'core'}],
         }
 
         with patch('linkedout.commands.download_seed.requests.get', return_value=resp):
@@ -207,7 +207,7 @@ class TestSkipIfExists:
         seed_dir.mkdir()
 
         if file_exists:
-            dest = seed_dir / 'seed-core.sqlite'
+            dest = seed_dir / 'seed-core.dump'
             dest.write_bytes(b'existing data')
 
         args = ['--output', str(seed_dir)]
@@ -233,7 +233,7 @@ class TestSkipIfExists:
             mock_report.return_value = mock_report_instance
 
             # Create the dest file for post-download stat()
-            dest = seed_dir / 'seed-core.sqlite'
+            dest = seed_dir / 'seed-core.dump'
             if not dest.exists():
                 dest.write_bytes(b'downloaded data')
 
@@ -286,18 +286,18 @@ class TestTierSelection:
         """Default -> selects 'core' file from manifest."""
         result = _select_tier_file(valid_manifest, full=False)
         assert result['tier'] == 'core'
-        assert result['name'] == 'seed-core.sqlite'
+        assert result['name'] == 'seed-core.dump'
 
     def test_full_flag_selects_full(self, valid_manifest):
         """--full -> selects 'full' file from manifest."""
         result = _select_tier_file(valid_manifest, full=True)
         assert result['tier'] == 'full'
-        assert result['name'] == 'seed-full.sqlite'
+        assert result['name'] == 'seed-full.dump'
 
     def test_missing_tier_raises(self):
         """Requested tier not in manifest -> raises clear error."""
         manifest = {
-            'files': [{'name': 'seed-core.sqlite', 'tier': 'core', 'sha256': 'x', 'size_bytes': 0}],
+            'files': [{'name': 'seed-core.dump', 'tier': 'core', 'sha256': 'x', 'size_bytes': 0}],
         }
         with pytest.raises(Exception, match="No 'full' tier found"):
             _select_tier_file(manifest, full=True)

@@ -16,8 +16,7 @@ Upgrade LinkedOut to the latest version: pull the latest code, run database migr
 Load credentials and check the current version:
 
 ```bash
-source ~/linkedout-data/config/agent-context.env
-linkedout version
+cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env && linkedout version
 ```
 
 If `agent-context.env` does not exist, tell the user:
@@ -34,32 +33,32 @@ cd $(git rev-parse --show-toplevel) && git pull origin main
 2. **Update dependencies:**
 
 ```bash
-pip install -e "./backend[dev]"
+cd $(git rev-parse --show-toplevel)/backend && source .venv/bin/activate && uv pip install -r requirements.txt
 ```
 
 3. **Run database migrations:**
 
 ```bash
-linkedout migrate
+cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env && linkedout migrate
 ```
 
 4. **Verify system health:**
 
 ```bash
-linkedout status
-linkedout diagnostics
+cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env && linkedout status
+cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env && linkedout diagnostics
 ```
 
 If diagnostics reports issues, follow its recommendations or run:
 
 ```bash
-linkedout diagnostics --repair
+cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env && linkedout diagnostics --repair
 ```
 
 ## Version Check
 
 ```bash
-linkedout version
+cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env && linkedout version
 ```
 
 Check the `CHANGELOG.md` at the repo root for what changed in each release.

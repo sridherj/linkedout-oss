@@ -141,7 +141,7 @@ class LinkedOutSettings(BaseSettings):
 
     # ── Core ────────────────────────────────────────────────
     database_url: str = Field(
-        default='postgresql://linkedout:@localhost:5432/linkedout',
+        default='postgresql://linkedout:linkedout@localhost:5432/linkedout',
         validation_alias=AliasChoices('DATABASE_URL', 'database_url'),
     )
     data_dir: str = Field(default='~/linkedout-data')

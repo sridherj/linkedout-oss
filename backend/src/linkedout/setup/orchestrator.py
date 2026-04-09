@@ -724,7 +724,7 @@ def run_setup(
 
             if offer_demo():
                 # Run demo steps D1-D5
-                db_url = context.db_url or "postgresql://linkedout:@localhost:5432/linkedout"
+                db_url = context.db_url or "postgresql://linkedout:linkedout@localhost:5432/linkedout"
                 success = run_demo_setup(data_dir, repo_root, db_url)
 
                 if success:

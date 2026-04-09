@@ -16,10 +16,10 @@ This skill is **idempotent** — re-running it on an already-configured system s
 
 ## Preamble
 
-Load credentials:
+Load credentials and activate the virtual environment:
 
 ```bash
-source ~/linkedout-data/config/agent-context.env
+cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env
 ```
 
 If `agent-context.env` does not exist, tell the user:
@@ -77,7 +77,7 @@ test -f ~/linkedout-data/config/config.yaml && echo "Config found" || echo "Conf
 ### Check 1c: Database connected
 
 ```bash
-linkedout status --json
+cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env && linkedout status --json
 ```
 
 Check the `db_connected` field in the JSON output.
@@ -112,7 +112,7 @@ Determine the current version, download the extension zip from GitHub Releases, 
 ### Detect version
 
 ```bash
-linkedout version
+cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env && linkedout version
 ```
 
 Parse the version string (e.g., `0.1.0`).
@@ -271,7 +271,7 @@ Starting the backend server...
 
 Run:
 ```bash
-linkedout start-backend --background
+cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env && linkedout start-backend --background
 ```
 
 ### Check health
@@ -317,7 +317,7 @@ curl -s http://localhost:8001/health
 
   Common causes:
     - Database not running: run `linkedout diagnostics` to check
-    - Missing dependencies: run `pip install -e .` in the backend/ directory
+    - Missing dependencies: run `source .venv/bin/activate && uv pip install -r requirements.txt` in the backend/ directory
     - Port blocked by firewall: try a different port with `linkedout start-backend --port 8002`
       (then update the backend URL in the extension options page)
 

@@ -160,6 +160,15 @@ check_prerequisites() {
     fi
   fi
 
+  # ── uv (fast Python package manager) ─────────────────────────
+  if command -v uv &>/dev/null; then
+    echo -e "  ${GREEN}✓${NC} uv $(uv --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+  else
+    echo -e "  ${RED}✗${NC} uv not found"
+    missing+=("uv")
+    install_cmds+=("curl -LsSf https://astral.sh/uv/install.sh | sh")
+  fi
+
   # ── PostgreSQL ───────────────────────────────────────────────
   if command -v psql &>/dev/null; then
     local pg_version
@@ -171,7 +180,7 @@ check_prerequisites() {
       echo -e "  ${RED}✗${NC} PostgreSQL $pg_version (need 14+)"
       missing+=("PostgreSQL 14+")
       if [ "$os" = "macos" ]; then
-        install_cmds+=("brew install postgresql@16")
+        install_cmds+=("brew install postgresql@18")
       else
         install_cmds+=("sudo apt-get install -y postgresql postgresql-contrib")
       fi
@@ -180,7 +189,7 @@ check_prerequisites() {
     echo -e "  ${RED}✗${NC} PostgreSQL not found"
     missing+=("PostgreSQL")
     if [ "$os" = "macos" ]; then
-      install_cmds+=("brew install postgresql@16")
+      install_cmds+=("brew install postgresql@18")
     else
       install_cmds+=("sudo apt-get install -y postgresql postgresql-contrib")
     fi
@@ -216,7 +225,11 @@ check_prerequisites() {
         install_cmds+=("brew install pgvector")
       else
         # Detect PG major version for the right package name
-        install_cmds+=("sudo apt-get install -y postgresql-16-pgvector")
+        local pg_maj=""
+        if command -v psql &>/dev/null; then
+          pg_maj="$(psql --version 2>&1 | grep -oE '[0-9]+' | head -1)"
+        fi
+        install_cmds+=("sudo apt-get install -y postgresql-${pg_maj:-16}-pgvector")
       fi
     fi
   fi
@@ -228,32 +241,47 @@ check_prerequisites() {
     echo ""
     echo -e "${BOLD}Install with:${NC}"
     echo ""
-    if [ "$os" = "linux" ]; then
-      # Combine all apt packages into a single command with update
-      local apt_pkgs=""
-      for cmd in "${install_cmds[@]}"; do
-        # Extract package names from "sudo apt-get install -y pkg1 pkg2"
-        apt_pkgs="$apt_pkgs ${cmd#sudo apt-get install -y }"
-      done
-      echo "  sudo apt-get update && sudo apt-get install -y$apt_pkgs"
-    elif [ "$os" = "macos" ]; then
-      # Check for Homebrew first
-      if ! command -v brew &>/dev/null; then
-        echo "  # Install Homebrew first: https://brew.sh"
-        echo "  /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
-        echo ""
+    # Print standalone installers (curl-based) first
+    local has_pkg_cmds=false
+    for cmd in "${install_cmds[@]}"; do
+      if [[ "$cmd" == curl* ]]; then
+        echo "  $cmd"
+      else
+        has_pkg_cmds=true
       fi
-      # Combine all brew packages into a single command
-      local brew_pkgs=""
-      for cmd in "${install_cmds[@]}"; do
-        brew_pkgs="$brew_pkgs ${cmd#brew install }"
-      done
-      echo "  brew install$brew_pkgs"
-      # Remind to start PostgreSQL if it's being installed
-      if [[ "$brew_pkgs" == *"postgresql"* ]]; then
-        echo ""
-        echo "  # Start PostgreSQL after install:"
-        echo "  brew services start postgresql@16"
+    done
+
+    # Print package manager commands
+    if $has_pkg_cmds; then
+      if [ "$os" = "linux" ]; then
+        # Combine all apt packages into a single command with update
+        local apt_pkgs=""
+        for cmd in "${install_cmds[@]}"; do
+          [[ "$cmd" == curl* ]] && continue
+          # Extract package names from "sudo apt-get install -y pkg1 pkg2"
+          apt_pkgs="$apt_pkgs ${cmd#sudo apt-get install -y }"
+        done
+        [ -n "$apt_pkgs" ] && echo "  sudo apt-get update && sudo apt-get install -y$apt_pkgs"
+      elif [ "$os" = "macos" ]; then
+        # Check for Homebrew first
+        if ! command -v brew &>/dev/null; then
+          echo "  # Install Homebrew first: https://brew.sh"
+          echo "  /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+          echo ""
+        fi
+        # Combine all brew packages into a single command
+        local brew_pkgs=""
+        for cmd in "${install_cmds[@]}"; do
+          [[ "$cmd" == curl* ]] && continue
+          brew_pkgs="$brew_pkgs ${cmd#brew install }"
+        done
+        [ -n "$brew_pkgs" ] && echo "  brew install$brew_pkgs"
+        # Remind to start PostgreSQL if it's being installed
+        if [[ "$brew_pkgs" == *"postgresql"* ]]; then
+          echo ""
+          echo "  # Start PostgreSQL after install:"
+          echo "  brew services start postgresql@18"
+        fi
       fi
     fi
     echo ""

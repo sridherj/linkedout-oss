@@ -26,46 +26,48 @@ Set up LinkedOut from scratch: install dependencies, create the database, config
 1. **Install Python dependencies:**
 
 ```bash
-cd $(git rev-parse --show-toplevel) && pip install -e "./backend[dev]"
+cd $(git rev-parse --show-toplevel)/backend && uv venv .venv && source .venv/bin/activate && uv pip install -r requirements.txt
 ```
 
-2. **Create the database:**
+2. **Start PostgreSQL and create the database:**
 
 ```bash
-createdb linkedout
-psql linkedout -c "CREATE EXTENSION IF NOT EXISTS vector;"
+sudo service postgresql start
+sudo -u postgres psql -c "CREATE ROLE linkedout WITH LOGIN CREATEDB PASSWORD 'linkedout';"
+sudo -u postgres createdb -O linkedout linkedout
+sudo -u postgres psql -d linkedout -c "CREATE EXTENSION IF NOT EXISTS vector;"
 ```
 
-3. **Run migrations:**
-
-```bash
-cd backend && alembic upgrade head
-```
-
-4. **Configure environment:**
+3. **Configure environment:**
 
 Create `~/linkedout-data/config/agent-context.env` with your database connection:
 
 ```bash
 mkdir -p ~/linkedout-data/config/
 cat > ~/linkedout-data/config/agent-context.env << 'EOF'
-DATABASE_URL=postgresql://linkedout:@localhost:5432/linkedout
+DATABASE_URL=postgresql://linkedout:linkedout@localhost:5432/linkedout
 LINKEDOUT_TENANT_ID=default
 LINKEDOUT_BU_ID=default
 LINKEDOUT_USER_ID=system
 EOF
 ```
 
+4. **Run migrations:**
+
+```bash
+cd $(git rev-parse --show-toplevel)/backend && source .venv/bin/activate && source ~/linkedout-data/config/agent-context.env && alembic upgrade head
+```
+
 5. **Import your LinkedIn connections:**
 
 ```bash
-linkedout import-connections ~/Downloads/Connections.csv
+cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env && linkedout import-connections ~/Downloads/Connections.csv
 ```
 
 6. **Generate embeddings:**
 
 ```bash
-linkedout embed
+cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env && linkedout embed
 ```
 
 See `CONTRIBUTING.md` for detailed manual setup instructions.
@@ -73,8 +75,8 @@ See `CONTRIBUTING.md` for detailed manual setup instructions.
 ## Verify Setup
 
 ```bash
-linkedout status
-linkedout diagnostics
+cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env && linkedout status
+cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env && linkedout diagnostics
 ```
 
 ## Data Paths

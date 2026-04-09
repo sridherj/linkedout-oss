@@ -74,7 +74,7 @@ class TestImportSeed:
 class TestVerifySeedChecksum:
     def test_returns_true_for_matching_checksum(self, tmp_path):
         # Write a seed file
-        seed_file = tmp_path / "seed.sqlite"
+        seed_file = tmp_path / "seed.dump"
         seed_file.write_bytes(b"test seed data")
 
         # Compute its real SHA256
@@ -83,16 +83,16 @@ class TestVerifySeedChecksum:
 
         # Write CHECKSUM file (GNU coreutils format)
         checksum_file = tmp_path / "CHECKSUM"
-        checksum_file.write_text(f"{expected}  seed.sqlite\n")
+        checksum_file.write_text(f"{expected}  seed.dump\n")
 
         assert verify_seed_checksum(tmp_path) is True
 
     def test_returns_false_for_mismatched_checksum(self, tmp_path):
-        seed_file = tmp_path / "seed.sqlite"
+        seed_file = tmp_path / "seed.dump"
         seed_file.write_bytes(b"test seed data")
 
         checksum_file = tmp_path / "CHECKSUM"
-        checksum_file.write_text("0000000000000000000000000000000000000000000000000000000000000000  seed.sqlite\n")
+        checksum_file.write_text("0000000000000000000000000000000000000000000000000000000000000000  seed.dump\n")
 
         assert verify_seed_checksum(tmp_path) is False
 
@@ -101,6 +101,6 @@ class TestVerifySeedChecksum:
 
     def test_returns_false_when_seed_file_missing(self, tmp_path):
         checksum_file = tmp_path / "CHECKSUM"
-        checksum_file.write_text("abcd1234  missing.sqlite\n")
+        checksum_file.write_text("abcd1234  missing.dump\n")
 
         assert verify_seed_checksum(tmp_path) is False

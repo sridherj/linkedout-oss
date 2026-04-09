@@ -14,10 +14,10 @@ Browse your past LinkedOut network queries. View sessions grouped by conversatio
 
 ## Preamble
 
-1. **Load context:**
+1. **Load context and activate virtual environment:**
 
 ```bash
-source ~/linkedout-data/config/agent-context.env
+cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env
 ```
 
 If the file does not exist, tell the user:

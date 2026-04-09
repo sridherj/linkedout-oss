@@ -334,7 +334,7 @@ def setup_database(data_dir: Path) -> OperationReport:
             log.error('Failed to set database password: {}', e)
             failed += 1
             # Fall back to no-password URL for local peer auth
-            database_url = 'postgresql://linkedout:@localhost:5432/linkedout'
+            database_url = 'postgresql://linkedout:linkedout@localhost:5432/linkedout'
             next_steps.append('Set the database password manually if needed')
 
     # Step 3: Write config.yaml (always, to update if needed)

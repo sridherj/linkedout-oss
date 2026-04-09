@@ -15,7 +15,7 @@ Assess LinkedOut system health by running diagnostics, computing a health score,
 ## Preamble
 
 ```bash
-source {{AGENT_CONTEXT_PATH}}
+cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source {{AGENT_CONTEXT_PATH}}
 ```
 
 If the file does not exist, tell the user:

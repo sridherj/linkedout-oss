@@ -61,7 +61,7 @@ def reset_demo_command(yes: bool):
     import yaml
 
     config_path = data_dir / "config" / "config.yaml"
-    db_url = "postgresql://linkedout:@localhost:5432/linkedout"
+    db_url = "postgresql://linkedout:linkedout@localhost:5432/linkedout"
     if config_path.exists():
         try:
             with open(config_path, encoding="utf-8") as f:

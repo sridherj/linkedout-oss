@@ -4,13 +4,14 @@
 Tests require a PostgreSQL database. They are skipped automatically if
 ``DATABASE_URL`` is not configured or points to SQLite.
 
-Uses the test fixture at ``backend/tests/fixtures/test-seed-core.sqlite``.
+Uses the test fixture at ``backend/tests/fixtures/test-seed-core.dump``
+and expected counts from ``backend/tests/fixtures/seed-manifest.json``.
 """
 from __future__ import annotations
 
 import json
-import sqlite3
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
@@ -19,12 +20,13 @@ from sqlalchemy import text
 from linkedout.commands.import_seed import (
     IMPORT_ORDER,
     import_seed_command,
-    read_seed_metadata,
 )
 
 pytestmark = pytest.mark.integration
 
-FIXTURE_PATH = Path(__file__).parent.parent.parent / 'fixtures' / 'test-seed-core.sqlite'
+FIXTURE_DIR = Path(__file__).parent.parent.parent / 'fixtures'
+FIXTURE_PATH = FIXTURE_DIR / 'test-seed-core.dump'
+MANIFEST_PATH = FIXTURE_DIR / 'seed-manifest.json'
 
 
 @pytest.fixture(scope='module')
@@ -39,10 +41,11 @@ def runner():
 
 
 @pytest.fixture(scope='module')
-def expected_counts(fixture_path):
-    """Get expected row counts from fixture metadata."""
-    metadata = read_seed_metadata(fixture_path)
-    return json.loads(metadata['table_counts'])
+def expected_counts():
+    """Get expected row counts from seed-manifest.json."""
+    assert MANIFEST_PATH.exists(), f'Manifest not found: {MANIFEST_PATH}'
+    manifest = json.loads(MANIFEST_PATH.read_text())
+    return manifest['table_counts']
 
 
 def _count_rows(session, table_name: str) -> int:
@@ -77,7 +80,7 @@ class TestFullImport:
         assert result.exit_code == 0, f'Import failed:\n{result.output}'
         assert 'Results:' in result.output
 
-        # Verify row counts per table match fixture metadata
+        # Verify row counts per table match manifest
         for table, expected in expected_counts.items():
             actual = _count_rows(integration_db_session, table)
             assert actual == expected, (
@@ -154,9 +157,9 @@ class TestIdempotency:
 class TestUpdateDetection:
 
     def test_modified_row_detected(
-        self, runner, fixture_path, integration_db_session, tmp_path,
+        self, runner, fixture_path, integration_db_session,
     ):
-        """Modify a company name in SQLite -> re-import -> one 'updated'."""
+        """Modify a company name in PG -> re-import dump -> one 'updated'."""
         _clear_seed_tables(integration_db_session)
 
         # First import
@@ -166,32 +169,25 @@ class TestUpdateDetection:
         )
         assert result1.exit_code == 0
 
-        # Copy fixture and modify one company name
-        modified = tmp_path / 'modified-seed.sqlite'
-        import shutil
-        shutil.copy2(fixture_path, modified)
-
-        conn = sqlite3.connect(str(modified))
-        conn.execute(
-            "UPDATE company SET canonical_name = 'MODIFIED Company 1' WHERE id = 'co_test_001'"
+        # Modify a company name directly in PostgreSQL
+        integration_db_session.execute(
+            text("UPDATE company SET canonical_name = 'MODIFIED' WHERE id = 'co_test_001'")
         )
-        conn.commit()
-        conn.close()
+        integration_db_session.commit()
 
-        # Re-import with modified data
+        # Re-import the original dump — should detect the row as changed
         result2 = runner.invoke(
             import_seed_command,
-            ['--seed-file', str(modified)],
+            ['--seed-file', str(fixture_path)],
         )
         assert result2.exit_code == 0
-        # Should show at least one updated row
         assert '1 updated' in result2.output or 'updated' in result2.output
 
-        # Verify the update took effect
+        # Verify the original name was restored from the dump
         row = integration_db_session.execute(
             text("SELECT canonical_name FROM company WHERE id = 'co_test_001'")
         ).fetchone()
-        assert row[0] == 'MODIFIED Company 1'
+        assert row[0] != 'MODIFIED'
 
 
 # ── Dry-run mode ────────────────────────────────────────────────────────────
@@ -267,3 +263,20 @@ class TestReportGeneration:
                 assert 'totals' in report
                 assert 'duration_ms' in report
                 break
+
+
+# ── pg_restore availability ─────────────────────────────────────────────────
+
+
+class TestPgRestoreAvailability:
+
+    def test_import_with_pg_restore_unavailable(self, runner, fixture_path):
+        """pg_restore not on PATH -> clear error about installing postgresql-client."""
+        with patch('linkedout.commands.import_seed.shutil.which', return_value=None):
+            result = runner.invoke(
+                import_seed_command,
+                ['--seed-file', str(fixture_path)],
+            )
+        assert result.exit_code != 0
+        assert 'pg_restore' in result.output
+        assert 'postgresql-client' in result.output

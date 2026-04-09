@@ -51,7 +51,7 @@ def _read_database_url(data_dir: Path) -> str:
         except (OSError, yaml.YAMLError):
             pass
 
-    return "postgresql://linkedout:@localhost:5432/linkedout"
+    return "postgresql://linkedout:linkedout@localhost:5432/linkedout"
 
 
 @click.command("restore-demo")

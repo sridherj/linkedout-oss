@@ -13,10 +13,10 @@ Query your professional network using natural language. Find connections by comp
 
 Before answering any query, run these setup steps:
 
-1. **Load credentials and context:**
+1. **Load credentials, context, and activate the virtual environment:**
 
 ```bash
-source ~/linkedout-data/config/agent-context.env
+cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env
 ```
 
 This sets `DATABASE_URL`, `LINKEDOUT_TENANT_ID`, `LINKEDOUT_BU_ID`, and `LINKEDOUT_USER_ID`.
