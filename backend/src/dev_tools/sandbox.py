@@ -61,6 +61,9 @@ def sandbox(no_build: bool, no_claude: bool):
                 'Claude Code will require login inside the container.',
             )
 
+        # Cache-bust so git clone always pulls fresh code
+        build_cmd += ['--build-arg', f'CACHE_BUST={datetime.now().isoformat()}']
+
         # Build context with just the setup script (keeps context small)
         import shutil
         import tempfile
