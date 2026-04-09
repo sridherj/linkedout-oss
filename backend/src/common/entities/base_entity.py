@@ -84,8 +84,8 @@ class BaseEntity(Base):
     archived_at = Column(DateTime(timezone=True), nullable=True)
     created_by = Column(String, nullable=True)
     updated_by = Column(String, nullable=True)
-    is_active = Column(Boolean, default=True, nullable=False)
-    version = Column(Integer, default=1, nullable=False)
+    is_active = Column(Boolean, default=True, server_default='true', nullable=False)
+    version = Column(Integer, default=1, server_default='1', nullable=False)
     source = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
 

@@ -87,8 +87,10 @@ def _create_test_profiles(session, count=5):
         session.execute(text(
             "INSERT INTO crawled_profile (id, linkedin_url, data_source, full_name, headline, about, "
             "current_company_name, current_position, has_enriched_data, "
+            "is_active, version, "
             "created_at, updated_at) "
             "VALUES (:id, :linkedin_url, :data_source, :name, :headline, :about, :company, :position, TRUE, "
+            "TRUE, 1, "
             "NOW(), NOW()) "
             "ON CONFLICT (id) DO NOTHING"
         ), {
