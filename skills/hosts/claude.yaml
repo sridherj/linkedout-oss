@@ -1,8 +1,8 @@
 name: claude
 display_name: Claude Code
 output_dir: claude-code
-skill_install_path: ~/.claude/skills/linkedout
-local_skill_path: .claude/skills/linkedout
+skill_install_path: ~/.claude/skills
+local_skill_path: .claude/skills
 frontmatter:
   mode: denylist
   strip_fields: []

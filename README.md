@@ -46,9 +46,10 @@ The primary interface is the `/linkedout` skill — natural language in, structu
 ```bash
 git clone https://github.com/sridherj/linkedout-oss.git
 cd linkedout-oss
+./setup
 ```
 
-Then invoke the `/linkedout-setup` skill in Claude Code. It handles everything: prerequisites, database creation, LinkedIn data import, seed data, and embedding generation.
+Then open Claude Code and invoke `/linkedout-setup`. It handles everything: prerequisites, database creation, LinkedIn data import, seed data, and embedding generation.
 
 **Try with demo data first?** During setup, accept the demo offer to load 2,000 sample profiles with pre-computed affinity scores and embeddings. No LinkedIn export needed — start querying in 2 minutes. See [Getting Started — Quick Demo](docs/getting-started.md#quick-demo-2-minutes) for details.
 

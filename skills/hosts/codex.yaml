@@ -1,7 +1,7 @@
 name: codex
 display_name: Codex
-skill_install_path: ~/.agents/skills/linkedout
-local_skill_path: .agents/skills/linkedout
+skill_install_path: ~/.agents/skills
+local_skill_path: .agents/skills
 frontmatter:
   mode: allowlist
   keep_fields:

@@ -1,0 +1,158 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# LinkedOut — Bootstrap skill installation for AI coding assistants.
+#
+# Symlinks generated skills into your AI host's skill directory so that
+# /linkedout-setup and other LinkedOut skills are immediately available.
+#
+# Usage:
+#   ./setup           # detect hosts, install skills
+#   ./setup --check   # verify skills are installed (exit 0/1)
+#
+# After running this script, open Claude Code in this repo and invoke
+# /linkedout-setup to complete database and data setup.
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")" && pwd -P)"
+SKILLS_OUTPUT="$REPO_ROOT/skills/claude-code"
+
+# ── Host configs ──────────────────────────────────────────────────
+# host_name:detect_dir:install_path:routing_filename
+HOSTS=(
+  "Claude Code:$HOME/.claude:$HOME/.claude/skills:CLAUDE.md"
+  "Codex:$HOME/.agents:$HOME/.agents/skills:AGENTS.md"
+  "Copilot:$HOME/.github:$HOME/.github/skills:COPILOT.md"
+)
+
+# ── Colours (CI-safe) ────────────────────────────────────────────
+if [ -t 1 ]; then
+  GREEN='\033[0;32m'; YELLOW='\033[0;33m'; RED='\033[0;31m'; NC='\033[0m'
+else
+  GREEN=''; YELLOW=''; RED=''; NC=''
+fi
+
+# ── Helpers ───────────────────────────────────────────────────────
+create_symlink() {
+  local target="$1" link="$2"
+
+  if [ -L "$link" ]; then
+    local existing
+    existing="$(readlink -f "$link" 2>/dev/null || true)"
+    local resolved_target
+    resolved_target="$(readlink -f "$target" 2>/dev/null || true)"
+    if [ "$existing" = "$resolved_target" ]; then
+      return 1  # already correct
+    fi
+    rm "$link"
+  elif [ -e "$link" ]; then
+    echo -e "  ${YELLOW}SKIP${NC} $link (exists, not a symlink)" >&2
+    return 2
+  fi
+
+  mkdir -p "$(dirname "$link")"
+  ln -s "$target" "$link"
+  return 0
+}
+
+install_for_host() {
+  local host_name="$1" detect_dir="$2" install_path="$3" routing_file="$4"
+  local linked=0 already=0
+
+  if [ ! -d "$detect_dir" ]; then
+    return 0
+  fi
+
+  echo -e "  ${GREEN}Found${NC} $host_name ($detect_dir)"
+
+  # Symlink each skill directory
+  for skill_dir in "$SKILLS_OUTPUT"/*/; do
+    [ -d "$skill_dir" ] || continue
+    local skill_name
+    skill_name="$(basename "$skill_dir")"
+    if create_symlink "$skill_dir" "$install_path/$skill_name"; then
+      linked=$((linked + 1))
+    else
+      already=$((already + 1))
+    fi
+  done
+
+  # Symlink the routing file (one level up from install_path)
+  local routing_source="$SKILLS_OUTPUT/$routing_file"
+  if [ -f "$routing_source" ]; then
+    local routing_link
+    routing_link="$(dirname "$install_path")/$routing_file"
+    if create_symlink "$routing_source" "$routing_link"; then
+      linked=$((linked + 1))
+    else
+      already=$((already + 1))
+    fi
+  fi
+
+  local parts=""
+  [ $linked -gt 0 ] && parts="$linked linked"
+  [ $already -gt 0 ] && parts="${parts:+$parts, }$already already linked"
+  echo "    ${parts:-nothing to link}"
+}
+
+# ── Check mode ────────────────────────────────────────────────────
+if [ "${1:-}" = "--check" ]; then
+  ok=true
+  for host_entry in "${HOSTS[@]}"; do
+    IFS=: read -r name detect install routing <<< "$host_entry"
+    [ -d "$detect" ] || continue
+    for skill_dir in "$SKILLS_OUTPUT"/*/; do
+      [ -d "$skill_dir" ] || continue
+      skill="$(basename "$skill_dir")"
+      if [ ! -L "$install/$skill" ]; then
+        echo "Missing: $install/$skill"
+        ok=false
+      fi
+    done
+  done
+  $ok && echo "All skills installed." && exit 0
+  echo "Run ./setup to install." && exit 1
+fi
+
+# ── Main ──────────────────────────────────────────────────────────
+if [ ! -d "$SKILLS_OUTPUT" ]; then
+  echo -e "${RED}Error:${NC} $SKILLS_OUTPUT not found."
+  echo "Run bin/generate-skills first, or check your clone."
+  exit 1
+fi
+
+echo ""
+echo "LinkedOut — Skill Installation"
+echo ""
+
+detected=0
+for host_entry in "${HOSTS[@]}"; do
+  IFS=: read -r name detect install routing <<< "$host_entry"
+  if [ -d "$detect" ]; then
+    detected=$((detected + 1))
+    install_for_host "$name" "$detect" "$install" "$routing"
+  fi
+done
+
+if [ $detected -eq 0 ]; then
+  echo "  No AI coding assistants detected."
+  echo "  Install Claude Code, Codex, or Copilot, then re-run ./setup."
+  echo ""
+  echo "  Checked for:"
+  for host_entry in "${HOSTS[@]}"; do
+    IFS=: read -r name detect _ _ <<< "$host_entry"
+    echo "    $name — $detect"
+  done
+  exit 0
+fi
+
+echo ""
+echo "Done. Next steps:"
+echo ""
+echo "  1. Open Claude Code in this repo:  claude"
+echo "  2. Invoke:  /linkedout-setup"
+echo "  3. Setup handles PostgreSQL, dependencies, and data import."
+echo ""
+echo "After git pull, skills auto-update via symlinks."
+echo "Re-run ./setup only if new skills are added."
+echo ""

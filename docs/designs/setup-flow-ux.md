@@ -454,13 +454,13 @@ If user says yes, for each platform:
 ```
   Installing skills for Claude Code...
     Generated 4 skill files from templates
-    Installed to ~/.claude/skills/linkedout/
+    Installed to ~/.claude/skills/
     Updated ~/.claude/CLAUDE.md with routing rules
   ✓ Claude Code skills installed
 
   Installing skills for Codex...
     Generated 4 skill files from templates
-    Installed to ~/.agents/skills/linkedout/
+    Installed to ~/.agents/skills/
     Updated ~/.agents/AGENTS.md with routing rules
   ✓ Codex skills installed
 ```
@@ -752,8 +752,8 @@ Step 11 of 14: Affinity Computation
 ```
 Step 12 of 14: Skill Installation
 
-  ✓ Claude Code — 4 skills installed to ~/.claude/skills/linkedout/
-  ✓ Codex — 4 skills installed to ~/.agents/skills/linkedout/
+  ✓ Claude Code — 4 skills installed to ~/.claude/skills/
+  ✓ Codex — 4 skills installed to ~/.agents/skills/
 
   Skills installed for 2 platforms.
 ```

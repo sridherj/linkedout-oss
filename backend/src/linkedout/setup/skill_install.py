@@ -27,19 +27,19 @@ from shared.utilities.operation_report import OperationCounts, OperationReport
 _PLATFORM_CONFIGS = {
     "Claude Code": {
         "detect_dir": ".claude",
-        "skill_install_dir": ".claude/skills/linkedout",
+        "skill_install_dir": ".claude/skills",
         "dispatch_file": ".claude/CLAUDE.md",
         "generated_dir": "skills/claude-code",
     },
     "Codex": {
         "detect_dir": ".agents",
-        "skill_install_dir": ".agents/skills/linkedout",
+        "skill_install_dir": ".agents/skills",
         "dispatch_file": ".agents/AGENTS.md",
         "generated_dir": "skills/codex",
     },
     "Copilot": {
         "detect_dir": ".github",
-        "skill_install_dir": ".github/skills/linkedout",
+        "skill_install_dir": ".github/skills",
         "dispatch_file": ".copilot/COPILOT.md",
         "generated_dir": "skills/copilot",
     },
@@ -177,31 +177,43 @@ def install_skills_for_platform(
     target = platform.skill_install_dir
     target.mkdir(parents=True, exist_ok=True)
 
-    # Count files to copy
+    # Count files to copy (skip if symlinks already point to the source)
     files_copied = 0
+    files_skipped = 0
     for src_file in source.rglob("*"):
         if src_file.is_file():
             rel = src_file.relative_to(source)
             dst = target / rel
+            # If dst resolves to the same file (e.g. via directory symlink from ./setup),
+            # skip the copy — the symlink already provides the content.
+            if dst.exists() and dst.resolve() == src_file.resolve():
+                files_skipped += 1
+                continue
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(str(src_file), str(dst))
             files_copied += 1
 
-    if files_copied > 0:
+    if files_skipped > 0 and files_copied == 0:
+        log.info(
+            "Skills already symlinked for {} at {} ({} files)",
+            platform.name,
+            target,
+            files_skipped,
+        )
+        print(f"    Already installed via symlinks at {_display_path(target)}")
+    elif files_copied > 0:
         log.info(
             "Installed {} files for {} to {}",
             files_copied,
             platform.name,
             target,
         )
-        print(
-            f"    Installed to {_display_path(target)}"
-        )
+        print(f"    Installed to {_display_path(target)}")
     else:
         log.warning("No skill files found in {}", source)
         print(f"    No skill files found in generated output for {platform.name}")
 
-    return files_copied > 0
+    return files_copied > 0 or files_skipped > 0
 
 
 def update_dispatch_file(

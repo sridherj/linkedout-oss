@@ -12,8 +12,8 @@ class TestLoadHostConfig:
         config = load_host_config('claude')
         assert config['name'] == 'claude'
         assert config['display_name'] == 'Claude Code'
-        assert config['skill_install_path'] == '~/.claude/skills/linkedout'
-        assert config['local_skill_path'] == '.claude/skills/linkedout'
+        assert config['skill_install_path'] == '~/.claude/skills'
+        assert config['local_skill_path'] == '.claude/skills'
         assert 'frontmatter' in config
         assert 'path_rewrites' in config
         assert 'tool_rewrites' in config

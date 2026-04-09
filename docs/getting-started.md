@@ -22,9 +22,10 @@ Want to try LinkedOut before importing your own data? The setup wizard offers a 
 ```bash
 git clone https://github.com/sridherj/linkedout-oss.git
 cd linkedout-oss
+./setup
 ```
 
-Invoke the `/linkedout-setup` skill in your AI assistant. After it checks prerequisites and creates the database, you'll see a prompt:
+Then open your AI assistant and invoke `/linkedout-setup`. After it checks prerequisites and creates the database, you'll see a prompt:
 
 ```
 +----------------------------------------------+
@@ -66,9 +67,10 @@ When you're ready to use your real data, run `linkedout use-real-db` and re-run 
 ```bash
 git clone https://github.com/sridherj/linkedout-oss.git
 cd linkedout-oss
+./setup
 ```
 
-Then invoke the `/linkedout-setup` skill in your AI assistant. It handles the entire setup:
+Then open your AI assistant and invoke `/linkedout-setup`. It handles the entire setup:
 
 1. **Checks prerequisites** — verifies Python, PostgreSQL, and pgvector versions
 2. **Creates the database** — sets up a `linkedout` PostgreSQL database with pgvector enabled

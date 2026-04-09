@@ -1,7 +1,7 @@
 name: copilot
 display_name: GitHub Copilot
-skill_install_path: ~/.github/skills/linkedout
-local_skill_path: .github/skills/linkedout
+skill_install_path: ~/.github/skills
+local_skill_path: .github/skills
 frontmatter:
   mode: denylist
   strip_fields: []

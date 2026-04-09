@@ -5,41 +5,41 @@ LinkedOut provides AI-powered access to your professional network data.
 
 > **Beta:** GitHub Copilot support is experimental. Skill format may change as the platform evolves.
 
-Skills are located in `.github/skills/linkedout/`. Each skill has a `SKILL.md` with full instructions.
+Skills are located in `.github/skills/`. Each skill has a `SKILL.md` with full instructions.
 
 ## Available Skills
 
 ### /linkedout — Network Query
 Invoke when the user asks about their professional network, connections, companies, roles, or LinkedIn data.
 **Trigger patterns:** "who do I know at...", "find people who...", "my network", "connections at...", "LinkedIn", "people at [company]", "engineers in [location]", "warm intros to..."
-**Skill path:** `.github/skills/linkedout/linkedout/SKILL.md`
+**Skill path:** `.github/skills/linkedout/SKILL.md`
 
 ### /linkedout-setup — First-Time Setup
 Invoke when the user asks to set up or install LinkedOut.
 **Trigger patterns:** "set up LinkedOut", "install LinkedOut", "configure LinkedOut", "get started with LinkedOut"
-**Skill path:** `.github/skills/linkedout/linkedout-setup/SKILL.md`
+**Skill path:** `.github/skills/linkedout-setup/SKILL.md`
 
 ### /linkedout-upgrade — Upgrade
 Invoke when the user asks to upgrade or update LinkedOut.
 **Trigger patterns:** "upgrade LinkedOut", "update LinkedOut", "new version of LinkedOut"
-**Skill path:** `.github/skills/linkedout/linkedout-upgrade/SKILL.md`
+**Skill path:** `.github/skills/linkedout-upgrade/SKILL.md`
 
 ### /linkedout-history — Query History
 Invoke when the user asks about past queries or search history.
 **Trigger patterns:** "LinkedOut history", "past searches", "previous queries", "what did I search"
-**Skill path:** `.github/skills/linkedout/linkedout-history/SKILL.md`
+**Skill path:** `.github/skills/linkedout-history/SKILL.md`
 
 ### /linkedout-report — Usage Report
 Invoke when the user asks for network stats or usage reports.
 **Trigger patterns:** "LinkedOut report", "network stats", "how many connections", "LinkedOut usage"
-**Skill path:** `.github/skills/linkedout/linkedout-report/SKILL.md`
+**Skill path:** `.github/skills/linkedout-report/SKILL.md`
 
 ### /linkedout-extension-setup — Chrome Extension Setup
 Invoke when the user asks to set up, install, or configure the LinkedOut Chrome extension.
 **Trigger patterns:** "set up the extension", "install the extension", "Chrome extension", "sideload extension", "extension setup", "start crawling LinkedIn"
-**Skill path:** `.github/skills/linkedout/linkedout-extension-setup/SKILL.md`
+**Skill path:** `.github/skills/linkedout-extension-setup/SKILL.md`
 
 ### /linkedout-setup-report — System Health
 Invoke when the user asks for system diagnostics or a health check.
 **Trigger patterns:** "LinkedOut diagnostics", "system health", "LinkedOut status", "troubleshoot LinkedOut"
-**Skill path:** `.github/skills/linkedout/linkedout-setup-report/SKILL.md`
+**Skill path:** `.github/skills/linkedout-setup-report/SKILL.md`
