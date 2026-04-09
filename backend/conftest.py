@@ -122,10 +122,9 @@ def compile_pgarray_as_sqlitejson(type_, compiler, **kw):
 # Set test environment before importing config.
 # Use a valid postgresql URL for config validation — unit tests create their own
 # SQLite in-memory engines via _create_test_engine() and never use this URL.
-# Preserve DATABASE_URL if already set (e.g. by CI) so integration tests
-# connect with the correct credentials.
 os.environ['LINKEDOUT_ENVIRONMENT'] = 'test'
-os.environ.setdefault('DATABASE_URL', 'postgresql://linkedout:test@localhost:5432/linkedout_test')
+os.environ['DATABASE_URL'] = 'postgresql://linkedout:test@localhost:5432/linkedout_test'
+os.environ['LINKEDOUT_EMBEDDING_PROVIDER'] = 'local'
 
 from common.entities.base_entity import Base
 from shared.infra.db.db_session_manager import db_session_manager
@@ -185,9 +184,6 @@ def pytest_configure(config):
     """Register custom markers."""
     config.addinivalue_line(
         'markers', 'seed_config(config): specify custom SeedDb.SeedConfig for isolated DB fixtures'
-    )
-    config.addinivalue_line(
-        'markers', 'smoke: smoke tests requiring PostgreSQL + demo dump (deselected in unit runs)'
     )
 
 

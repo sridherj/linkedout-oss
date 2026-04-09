@@ -85,15 +85,14 @@ def _create_test_profiles(session, count=5):
     for i in range(count):
         pid = f"cp_test_{i:04d}"
         session.execute(text(
-            "INSERT INTO crawled_profile (id, linkedin_url, full_name, headline, about, "
+            "INSERT INTO crawled_profile (id, full_name, headline, about, "
             "current_company_name, current_position, has_enriched_data, "
             "created_at, updated_at) "
-            "VALUES (:id, :linkedin_url, :name, :headline, :about, :company, :position, TRUE, "
+            "VALUES (:id, :name, :headline, :about, :company, :position, TRUE, "
             "NOW(), NOW()) "
             "ON CONFLICT (id) DO NOTHING"
         ), {
             'id': pid,
-            'linkedin_url': f'https://linkedin.com/in/test-user-{i}',
             'name': f'Test User {i}',
             'headline': f'Engineer at Company {i}',
             'about': f'A professional with experience in field {i}',
