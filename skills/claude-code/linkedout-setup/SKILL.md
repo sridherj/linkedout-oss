@@ -49,16 +49,32 @@ EOF
 cd $(git rev-parse --show-toplevel)/backend && source .venv/bin/activate && source ~/linkedout-data/config/agent-context.env && alembic upgrade head
 ```
 
-4. **Import your LinkedIn connections:**
+4. **Choose a data source:**
+
+Ask the user: **"Do you have a LinkedIn data export (Connections.csv), or would you like to use the demo dataset?"**
+
+### Option A: Import your LinkedIn connections
 
 ```bash
 cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env && linkedout import-connections ~/Downloads/Connections.csv
 ```
 
-5. **Generate embeddings:**
+Then generate embeddings:
 
 ```bash
 cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env && linkedout embed
+```
+
+### Option B: Use the demo dataset
+
+Download and restore the pre-built demo database (~500 synthetic profiles):
+
+```bash
+cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env && linkedout download-demo
+```
+
+```bash
+cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env && linkedout restore-demo
 ```
 
 See `CONTRIBUTING.md` for detailed manual setup instructions.
