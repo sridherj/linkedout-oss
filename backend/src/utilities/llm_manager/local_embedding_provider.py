@@ -133,6 +133,7 @@ class LocalEmbeddingProvider(EmbeddingProvider):
                 backend="onnx",
                 model_kwargs={"file_name": "onnx/model_quantized.onnx"},
                 cache_folder=cache_dir,
+                trust_remote_code=True,
             )
         except Exception as exc:
             raise RuntimeError(

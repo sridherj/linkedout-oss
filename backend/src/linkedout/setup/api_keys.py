@@ -73,6 +73,9 @@ Voyager API provides (full work history, education details,
 skills). The Chrome extension crawls profiles directly via
 LinkedIn's API \u2014 Apify is used only for deeper enrichment.
 
+Cost: ~$4 per 1,000 profiles. Apify gives $5 free credit
+per account per month \u2014 enough for ~1,250 profiles.
+
 Skip this if you are not planning to use the Chrome extension.
 You can always add this key later in ~/linkedout-data/config/secrets.yaml.
 

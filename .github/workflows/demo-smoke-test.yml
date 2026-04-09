@@ -11,6 +11,7 @@ on:
       - 'backend/src/linkedout/commands/use_real_db.py'
       - 'backend/src/linkedout/commands/download_demo.py'
       - 'backend/tests/fixtures/generate_test_demo_dump.py'
+      - 'backend/tests/smoke/**'
       - '.github/workflows/demo-smoke-test.yml'
   workflow_dispatch:
 
@@ -21,7 +22,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     services:
       # Service containers only supported on ubuntu
@@ -86,7 +87,31 @@ jobs:
                  tests/unit/cli/test_sample_queries.py \
                  -v --tb=short
 
-      # ── Generate synthetic demo dump ──────────────────────────────
+      # ── Download real demo dump from GitHub Release ───────────────
+      - name: Download demo dump
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download demo-v1 --pattern "demo-seed.dump" --dir . || {
+            echo "::warning::Demo dump not available from release demo-v1 — skipping search smoke test"
+            echo "DEMO_DUMP_AVAILABLE=false" >> "$GITHUB_ENV"
+          }
+          if [ -f demo-seed.dump ]; then
+            echo "DEMO_DUMP_AVAILABLE=true" >> "$GITHUB_ENV"
+            ls -lh demo-seed.dump
+          fi
+
+      # ── Search smoke test (real dump, real queries) ───────────────
+      - name: Search smoke test
+        if: env.DEMO_DUMP_AVAILABLE == 'true'
+        env:
+          DATABASE_URL: postgresql://linkedout_test:linkedout_test@localhost:5432/linkedout_test
+          DEMO_DUMP_PATH: demo-seed.dump
+        run: |
+          cd backend
+          python tests/smoke/test_demo_search_smoke.py
+
+      # ── Generate synthetic demo dump (fallback) ───────────────────
       - name: Generate test demo dump
         env:
           DATABASE_URL: postgresql://linkedout_test:linkedout_test@localhost:5432/linkedout_test
