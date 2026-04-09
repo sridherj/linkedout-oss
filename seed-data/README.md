@@ -2,12 +2,12 @@
 
 LinkedOut ships a pre-populated company database so new installs have useful data
 without running Apify enrichment. Seed data is published as GitHub Release assets
-(SQLite files) and imported into your local PostgreSQL database.
+(pg_dump files) and imported into your local PostgreSQL database.
 
 ## Quick Start
 
 ```bash
-linkedout download-seed          # downloads seed SQLite + manifest
+linkedout download-seed          # downloads seed dump + manifest
 linkedout import-seed            # imports into PostgreSQL
 ```
 
@@ -37,7 +37,7 @@ Seed data covers 6 tables of public, non-tenant-scoped company reference data:
 
 ## Manifest Schema
 
-The `seed-manifest.json` file is generated alongside the SQLite files and describes
+The `seed-manifest.json` file is generated alongside the dump files and describes
 the contents of each seed file. The download command validates seed files against
 this manifest before import.
 
@@ -45,9 +45,10 @@ this manifest before import.
 {
   "version": "0.1.0",
   "created_at": "2026-04-07T12:00:00Z",
+  "format": "pgdump",
   "files": [
     {
-      "name": "seed-core.sqlite",
+      "name": "seed-core.dump",
       "tier": "core",
       "size_bytes": 52428800,
       "sha256": "abc123...",
@@ -61,7 +62,7 @@ this manifest before import.
       }
     },
     {
-      "name": "seed-full.sqlite",
+      "name": "seed-full.dump",
       "tier": "full",
       "size_bytes": 524288000,
       "sha256": "def456...",
@@ -84,8 +85,9 @@ this manifest before import.
 |-------|------|-------------|
 | `version` | `string` | Manifest schema version (semver) |
 | `created_at` | `string` | ISO 8601 timestamp when seed files were generated |
+| `format` | `string` | Seed file format (`"pgdump"`) |
 | `files` | `array` | List of seed file entries |
-| `files[].name` | `string` | Filename of the SQLite file |
+| `files[].name` | `string` | Filename of the dump file |
 | `files[].tier` | `string` | `"core"` or `"full"` |
 | `files[].size_bytes` | `integer` | File size in bytes |
 | `files[].sha256` | `string` | SHA-256 hex digest for integrity verification |
@@ -100,16 +102,19 @@ this manifest before import.
 
 ### Steps
 
-1. Run the curation script:
+1. Run the export script:
 
    ```bash
    python -m dev_tools.seed_export --output seed-data/
    ```
 
    This produces:
-   - `seed-core.sqlite` — core tier seed data
-   - `seed-full.sqlite` — full tier seed data
+   - `seed-core.dump` — core tier seed data (pg_dump format)
+   - `seed-full.dump` — full tier seed data (pg_dump format)
    - `seed-manifest.json` — manifest describing both files
+
+   Export uses a `_seed_staging` schema: filtered data is written to the staging
+   schema per tier, then `pg_dump` produces the `.dump` files.
 
 2. Create a GitHub Release and upload all three files as release assets
    (see [Publishing a Seed Data Release](#publishing-a-seed-data-release) below).
@@ -137,21 +142,21 @@ this manifest before import.
    ```
 
    This produces:
-   - `seed-data/seed-core.sqlite`
-   - `seed-data/seed-full.sqlite`
+   - `seed-data/seed-core.dump`
+   - `seed-data/seed-full.dump`
    - `seed-data/seed-manifest.json`
 
 2. **Verify output:**
 
    ```bash
    # Check file sizes
-   ls -lh seed-data/seed-*.sqlite
+   ls -lh seed-data/seed-*.dump
 
    # Verify manifest
    cat seed-data/seed-manifest.json | python -m json.tool
 
-   # Spot-check data
-   sqlite3 seed-data/seed-core.sqlite "SELECT count(*) FROM company"
+   # Spot-check data (restore to staging and query)
+   pg_restore --list seed-data/seed-core.dump | head -20
    ```
 
 3. **Create GitHub Release:**
@@ -167,8 +172,8 @@ this manifest before import.
    **Full tier:** $(jq -r '.files[] | select(.tier=="full") | "\(.table_counts.company) companies, \(.size_bytes / 1048576 | floor)MB"' seed-data/seed-manifest.json)
 
    Install: \`linkedout download-seed && linkedout import-seed\`" \
-     seed-data/seed-core.sqlite \
-     seed-data/seed-full.sqlite \
+     seed-data/seed-core.dump \
+     seed-data/seed-full.dump \
      seed-data/seed-manifest.json
    ```
 

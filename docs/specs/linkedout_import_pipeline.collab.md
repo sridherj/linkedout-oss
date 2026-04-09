@@ -19,7 +19,7 @@ linked_files:
   - backend/src/linkedout/commands/import_contacts.py
   - backend/src/linkedout/commands/import_seed.py
   - backend/tests/integration/linkedout/import_pipeline/test_import_pipeline.py
-version: 1
+version: 2
 last_verified: "2026-04-09"
 ---
 
@@ -29,7 +29,7 @@ last_verified: "2026-04-09"
 
 ## Intent
 
-Orchestrate CSV contact file uploads and seed data through parse, dedup, and merge pipelines that create or update connections and reference data in the user's network. Supports 4 contact source formats (LinkedIn CSV, Google Contacts with job titles, Google Contacts with phone numbers, email-only contacts) plus SQLite seed data import for company/reference tables. Each contact import creates an ImportJob for status tracking and processes contacts through 3-stage dedup (URL, email, fuzzy name+company) before merging into the connection graph. Three CLI commands (`import-connections`, `import-contacts`, `import-seed`) provide direct import paths alongside the API-based pipeline.
+Orchestrate CSV contact file uploads and seed data through parse, dedup, and merge pipelines that create or update connections and reference data in the user's network. Supports 4 contact source formats (LinkedIn CSV, Google Contacts with job titles, Google Contacts with phone numbers, email-only contacts) plus pg_dump seed data import for company/reference tables. Each contact import creates an ImportJob for status tracking and processes contacts through 3-stage dedup (URL, email, fuzzy name+company) before merging into the connection graph. Three CLI commands (`import-connections`, `import-contacts`, `import-seed`) provide direct import paths alongside the API-based pipeline.
 
 ## Behaviors
 
@@ -125,19 +125,19 @@ Orchestrate CSV contact file uploads and seed data through parse, dedup, and mer
 
 ### CLI: import-seed
 
-- **Command**: `linkedout import-seed [--seed-file PATH]` -- imports seed company/reference data from SQLite into PostgreSQL. Defined in `commands/import_seed.py`.
+- **Command**: `linkedout import-seed [--seed-file PATH]` -- imports seed company/reference data from a pg_dump file into PostgreSQL. Defined in `commands/import_seed.py`.
 
 - **Six reference tables**: Imports `company`, `company_alias`, `role_alias`, `funding_round`, `startup_tracking`, `growth_signal` in FK-safe order. Profile data (crawled_profile, experience, education) is NOT part of seed data.
 
-- **SQLite source format**: Reads from a downloaded seed SQLite file with a `_metadata` table containing version, created_at, and table_counts. Auto-detects `seed-core.sqlite` or `seed-full.sqlite` in `~/linkedout-data/seed/`.
+- **pg_dump source format**: Reads from a downloaded `.dump` file (pg_dump format). Auto-detects `seed-core.dump` or `seed-full.dump` in `~/linkedout-data/seed/`.
+
+- **Staging schema pattern**: Uses `_seed_staging` as a staging schema. `pg_restore` loads the dump into the staging schema, then SQL upserts merge into the public schema. The staging schema is dropped after import (or on error). Column intersection ensures only columns present in both staging and public schemas are upserted, handling version skew gracefully.
 
 - **Idempotent upsert**: Uses `INSERT ... ON CONFLICT (id) DO UPDATE` with `IS DISTINCT FROM` null-safe comparison. Distinguishes inserts from updates via PostgreSQL's `xmax = 0` trick. Rows with identical data are skipped. Verify re-running with same data produces 0 inserts and 0 updates.
 
-- **Type conversion**: Handles SQLite-to-PostgreSQL type differences: JSON-encoded arrays (e.g., `enrichment_sources`, `lead_investors`) are parsed back to Python lists, and INTEGER 0/1 booleans (e.g., `startup_tracking.watching`) are converted to Python bools.
+- **pg_restore error handling**: Exit codes: 0 = success, 1 = warnings (expected with `--clean --if-exists` when staging tables don't exist yet). Only exit code >= 2 is a real failure.
 
-- **Batch processing**: Processes rows in batches of 1000 with progress reporting per table.
-
-- **Dry-run support**: `--dry-run` reads the SQLite file and reports what would be imported (new vs. existing row counts per table) without writing.
+- **Dry-run support**: `--dry-run` restores into the staging schema and reports what would be imported (new vs. existing row counts per table) without writing to public schema.
 
 - **Detailed report**: Generates both a JSON report (in `~/linkedout-data/reports/`) and an `OperationReport` for consistency with other commands.
 
@@ -153,7 +153,7 @@ Orchestrate CSV contact file uploads and seed data through parse, dedup, and mer
 
 > Edge: `import-contacts` deletes all prior `contact_source` rows for the 3 external source types before re-import, making it a destructive re-import rather than incremental.
 
-> Edge: Seed import validates that all 6 expected tables exist in the SQLite file and raises a clear error if any are missing.
+> Edge: Seed import validates the manifest `format` field is `"pgdump"` before attempting restore. pg_restore exit code 1 (warnings) is tolerated; only exit code >= 2 is treated as failure.
 
 ## Decisions
 
@@ -177,10 +177,10 @@ Orchestrate CSV contact file uploads and seed data through parse, dedup, and mer
 **Over:** Single unified import command with subcommands
 **Because:** Each import path has fundamentally different inputs (LinkedIn CSV vs. 3 Google CSVs vs. SQLite), matching logic, and output schemas. Separate commands keep each simple and independently testable.
 
-### SQLite as seed distribution format -- 2026-04-09
-**Chose:** SQLite file with metadata table as seed transport
-**Over:** SQL dump, CSV bundle, or API-based seed download
-**Because:** SQLite is single-file, self-describing (with `_metadata` table for version tracking), supports typed data (arrays, booleans), and works offline. Upsert logic with `IS DISTINCT FROM` makes re-import safe.
+### pg_dump as seed distribution format -- 2026-04-09
+**Chose:** pg_dump file with staging schema pattern as seed transport
+**Over:** SQLite, CSV bundle, or API-based seed download
+**Because:** pg_dump eliminates ~640 lines of type conversion code (boolean casting, array serialization, column naming) and the entire impedance mismatch bug class. Staging schema + column intersection handles version skew. Upsert logic with `IS DISTINCT FROM` makes re-import safe.
 
 ## Not Included
 

@@ -3,13 +3,13 @@ feature: seed-data
 module: seed-data
 linked_files:
   - seed-data/seed-manifest.json
-  - seed-data/seed-core.sqlite
-  - seed-data/seed-full.sqlite
+  - seed-data/seed-core.dump
+  - seed-data/seed-full.dump
   - seed-data/README.md
   - backend/src/linkedout/commands/download_seed.py
   - backend/src/linkedout/commands/import_seed.py
   - scripts/verify-seed-checksums.py
-version: 1
+version: 2
 last_verified: "2026-04-09"
 ---
 
@@ -28,10 +28,10 @@ Provide pre-curated company reference data so new LinkedOut installations have u
 - **Company reference data only**: Seed data covers 6 tables of public company intelligence that is shared across all tenants. These tables provide the foundation for company matching during profile import, role title normalization, and startup tracking. Personal data (profiles, connections, contact sources) is explicitly excluded -- it ships via the demo pipeline instead.
 
 - **Two tiers**:
-  - **Core** (`seed-core.sqlite`, ~30 MB): Companies from the LinkedOut network where connections actually work. Contains ~47K companies, ~63K role aliases, ~108 funding rounds, ~148 startup tracking entries.
-  - **Full** (`seed-full.sqlite`, ~84 MB): Core data plus ~171K additional US/India companies from PDL (People Data Labs) with 201+ employees. Contains ~218K companies, ~63K role aliases, ~320 funding rounds, ~322 startup tracking entries.
+  - **Core** (`seed-core.dump`, ~30 MB): Companies from the LinkedOut network where connections actually work. Contains ~47K companies, ~63K role aliases, ~108 funding rounds, ~148 startup tracking entries.
+  - **Full** (`seed-full.dump`, ~84 MB): Core data plus ~171K additional US/India companies from PDL (People Data Labs) with 201+ employees. Contains ~218K companies, ~63K role aliases, ~320 funding rounds, ~322 startup tracking entries.
 
-- **Data format**: SQLite files with one table per seed table, plus a `_metadata` table containing `version`, `created_at`, and `table_counts` (JSON string). SQLite is used as a portable, single-file transport format -- the actual data lives in PostgreSQL after import.
+- **Data format**: pg_dump files using a `_seed_staging` schema. Data is exported from PostgreSQL into a staging schema, then dumped with `pg_dump`. On import, `pg_restore` loads into the staging schema, then SQL upserts merge into the public schema. This eliminates type conversion issues (boolean casting, array serialization) that existed with the previous SQLite-based format.
 
 ### Tables Covered
 
@@ -46,19 +46,19 @@ Provide pre-curated company reference data so new LinkedOut installations have u
 
 ### Manifest Structure
 
-- **File**: `seed-data/seed-manifest.json`, published alongside SQLite files as a GitHub Release asset.
+- **File**: `seed-data/seed-manifest.json`, published alongside dump files as a GitHub Release asset.
 
-- **Top-level fields**: `version` (semver string, currently `"0.1.0"`), `created_at` (ISO 8601 timestamp), `files` (array of file entries).
+- **Top-level fields**: `version` (semver string, currently `"0.1.0"`), `created_at` (ISO 8601 timestamp), `format` (`"pgdump"`), `files` (array of file entries).
 
 - **Per-file fields**: `name` (filename), `tier` (`"core"` or `"full"`), `size_bytes` (integer), `sha256` (hex digest for integrity verification), `table_counts` (object mapping table name to row count).
 
-- **Validation**: Both `download-seed` and `import-seed` validate the manifest. `download-seed` checks that each file entry has `name`, `tier`, `sha256`, and `size_bytes`. `import-seed` validates that the SQLite file contains all 6 expected tables from `IMPORT_ORDER`.
+- **Validation**: Both `download-seed` and `import-seed` validate the manifest. `download-seed` checks that each file entry has `name`, `tier`, `sha256`, and `size_bytes`. `import-seed` validates the manifest `format` field is `"pgdump"`.
 
 ### Download Flow
 
 - **Command**: `linkedout download-seed [--full] [--output DIR] [--version TAG] [--force]`
 
-- **Source**: GitHub Releases on `sridherj/linkedout-oss`. Default tier is core; pass `--full` for the full dataset. The base URL can be overridden with `LINKEDOUT_SEED_URL` for forks.
+- **Source**: GitHub Releases on `sridherj/linkedout-oss`. Default tier is core; pass `--full` for the full dataset. Files are `.dump` format (pg_dump). The base URL can be overridden with `LINKEDOUT_SEED_URL` for forks.
 
 - **Version resolution**: If `--version` is not specified, queries the GitHub API (`/repos/.../releases/latest`) to find the latest release tag. Handles rate limiting (403/429) with a message to set `GITHUB_TOKEN`. Supports `GITHUB_TOKEN` for authenticated requests throughout.
 
@@ -78,25 +78,22 @@ Provide pre-curated company reference data so new LinkedOut installations have u
 
 - **Command**: `linkedout import-seed [--seed-file PATH] [--dry-run]`
 
-- **File location**: Auto-detects seed files in `~/linkedout-data/seed/`, preferring `seed-core.sqlite` over `seed-full.sqlite`. Can be overridden with `--seed-file`.
+- **File location**: Auto-detects seed files in `~/linkedout-data/seed/`, preferring `seed-core.dump` over `seed-full.dump`. Can be overridden with `--seed-file`.
 
-- **Validation**: Reads `_metadata` table for version/created_at/table_counts, then checks that all 6 tables in `IMPORT_ORDER` exist in the SQLite file.
+- **Staging schema pattern**: Import uses `_seed_staging` as a staging schema. `pg_restore` loads the dump file into the staging schema, then SQL upserts merge data from staging into public. The staging schema is dropped after import (or on error).
+
+- **Column intersection**: The upsert uses the intersection of staging and public columns — only columns present in BOTH schemas are included. This handles version skew gracefully (newer seed files with extra columns, or older seed files missing columns).
 
 - **Import order**: Tables are imported in FK-safe order: `company`, `company_alias`, `role_alias`, `funding_round`, `startup_tracking`, `growth_signal`. This matches the order defined in `IMPORT_ORDER`.
 
 - **RLS context**: All database writes use `SYSTEM_USER_ID` (`usr_sys_001`) from `dev_tools.db.fixed_data` as the `app_user_id` parameter for `db_session_manager.get_session()`. This is required because RLS policies gate all table access.
-
-- **Type conversion**: SQLite stores PostgreSQL arrays as JSON strings and booleans as integers. `_convert_row()` handles the conversion:
-  - `company.enrichment_sources`: JSON string to Python list.
-  - `funding_round.lead_investors` and `funding_round.all_investors`: JSON string to Python list.
-  - `startup_tracking.watching`: Integer 0/1 to Python bool.
 
 - **Upsert logic**: Uses `INSERT ... ON CONFLICT (id) DO UPDATE SET ... WHERE <change detection> RETURNING (xmax = 0) AS inserted`:
   - `IS DISTINCT FROM` for null-safe column comparison -- identical rows are skipped entirely (no write, no version bump).
   - `xmax = 0` in RETURNING distinguishes inserts (new row) from updates (changed row).
   - If no rows returned, the ON CONFLICT matched but WHERE excluded the update (data identical = skipped).
 
-- **Batch processing**: Rows are processed in batches of 1,000 (`BATCH_SIZE = 1000`). Progress is printed per batch as `Importing <table>... N/M`.
+- **pg_restore error handling**: Exit codes: 0 = success, 1 = warnings (expected with `--clean --if-exists` when tables don't exist yet). Only exit code >= 2 is a real failure.
 
 - **Dry run**: `--dry-run` reads all rows and checks existing IDs (via `SELECT id FROM <table>`) to report what would be inserted vs. skipped, without writing anything. Uses a READ session instead of WRITE.
 
@@ -110,15 +107,15 @@ Provide pre-curated company reference data so new LinkedOut installations have u
 
 ### Seed Data Generation (Maintainer-Only)
 
-- **Export tool**: `python -m dev_tools.seed_export --output seed-data/` produces both SQLite files and the manifest. Requires access to the production LinkedOut PostgreSQL database.
+- **Export tool**: `python -m dev_tools.seed_export --output seed-data/` produces both dump files and the manifest. Export uses the `_seed_staging` schema pattern: filtered data is written to the staging schema, then `pg_dump` produces the `.dump` files. Requires access to the production LinkedOut PostgreSQL database.
 
-- **Release process**: Uses `gh release create "seed-v<VERSION>"` with all 3 files (core SQLite, full SQLite, manifest) as release assets. Tag format is `seed-v{semver}` to keep seed releases separate from code releases.
+- **Release process**: Uses `gh release create "seed-v<VERSION>"` with all 3 files (core dump, full dump, manifest) as release assets. Tag format is `seed-v{semver}` to keep seed releases separate from code releases.
 
 - **PII policy**: Seed data contains only company reference data -- no personal profile information. Company names, websites, industries, and funding data are all public.
 
 ## Decisions
 
-- **SQLite as transport format**: Seed data ships as SQLite files rather than SQL dumps, CSV, or JSON. SQLite provides a portable single-file format that supports typed columns, is queryable for validation, and avoids encoding/escaping issues with text formats. The tradeoff is requiring a SQLite-to-PostgreSQL import step.
+- **pg_dump as transport format**: Seed data ships as pg_dump files using a staging schema pattern. This eliminates the entire type conversion layer (boolean casting, array serialization, column naming) that was required with the previous SQLite-based format. pg_restore loads data natively into PostgreSQL with correct types, and the staging schema + column intersection pattern handles version skew gracefully.
 
 - **Two tiers over one**: Core (47K companies from the actual network) and Full (218K including PDL companies) provide a meaningful choice. Users who just want matching for their connections use core; users who want broader company intelligence use full. This keeps the default download small (~30 MB) while offering comprehensive data for those who want it.
 
@@ -138,4 +135,4 @@ Provide pre-curated company reference data so new LinkedOut installations have u
 
 - **PDL import script**: While the README mentions PDL (People Data Labs) as the source for the ~171K additional companies in the full tier, the actual PDL import script is part of the maintainer toolchain and not exposed as a user-facing command.
 
-- **Seed data export from user DB**: No command to export the user's own company data back to SQLite format for sharing or backup.
+- **Seed data export from user DB**: No command to export the user's own company data back to dump format for sharing or backup.

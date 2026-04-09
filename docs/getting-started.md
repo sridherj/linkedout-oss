@@ -138,7 +138,7 @@ All LinkedOut data lives in `~/linkedout-data/`. Override this location with the
 ├── logs/                      # Per-component log files (backend, cli, import, etc.)
 ├── metrics/                   # JSONL daily metrics (append-only)
 ├── reports/                   # Operation reports from CLI commands (JSON)
-├── seed/                      # Downloaded seed data (SQLite files)
+├── seed/                      # Downloaded seed data (dump files)
 ├── state/                     # Embedding progress, sync state
 ├── crawled/                   # LinkedIn profile data from Chrome extension
 ├── uploads/                   # User-uploaded CSVs, VCFs

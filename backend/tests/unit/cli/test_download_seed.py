@@ -121,20 +121,20 @@ class TestChecksumVerification:
 
     def test_correct_checksum(self, tmp_path):
         """Correct checksum -> returns True."""
-        f = tmp_path / 'test.sqlite'
+        f = tmp_path / 'test.dump'
         f.write_bytes(b'hello world')
         sha = compute_sha256(f)
         assert verify_checksum(f, sha) is True
 
     def test_incorrect_checksum(self, tmp_path):
         """Incorrect checksum -> returns False."""
-        f = tmp_path / 'test.sqlite'
+        f = tmp_path / 'test.dump'
         f.write_bytes(b'hello world')
         assert verify_checksum(f, 'wrong_hash') is False
 
     def test_empty_file_checksum(self, tmp_path):
         """Empty file -> valid checksum (of empty content)."""
-        f = tmp_path / 'empty.sqlite'
+        f = tmp_path / 'empty.dump'
         f.write_bytes(b'')
         sha = compute_sha256(f)
         assert verify_checksum(f, sha) is True
