@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# LinkedOut — Bootstrap skill installation for AI coding assistants.
+# LinkedOut — Check prerequisites and install AI skills.
 #
-# Symlinks generated skills into your AI host's skill directory so that
-# /linkedout-setup and other LinkedOut skills are immediately available.
+# Checks system dependencies (Python, PostgreSQL, pgvector), then
+# symlinks generated skills into your AI host's skill directory so
+# that /linkedout-setup and other LinkedOut skills are available.
 #
 # Usage:
-#   ./setup           # detect hosts, install skills
+#   ./setup           # check prerequisites, install skills
 #   ./setup --check   # verify skills are installed (exit 0/1)
 #
 # After running this script, open Claude Code in this repo and invoke
@@ -27,9 +28,9 @@ HOSTS=(
 
 # ── Colours (CI-safe) ────────────────────────────────────────────
 if [ -t 1 ]; then
-  GREEN='\033[0;32m'; YELLOW='\033[0;33m'; RED='\033[0;31m'; NC='\033[0m'
+  GREEN='\033[0;32m'; YELLOW='\033[0;33m'; RED='\033[0;31m'; BOLD='\033[1m'; NC='\033[0m'
 else
-  GREEN=''; YELLOW=''; RED=''; NC=''
+  GREEN=''; YELLOW=''; RED=''; BOLD=''; NC=''
 fi
 
 # ── Helpers ───────────────────────────────────────────────────────
@@ -114,6 +115,131 @@ if [ "${1:-}" = "--check" ]; then
   echo "Run ./setup to install." && exit 1
 fi
 
+# ── Prerequisite checks ──────────────────────────────────────────
+detect_os() {
+  case "$(uname -s)" in
+    Darwin*) echo "macos" ;;
+    Linux*)  echo "linux" ;;
+    *)       echo "unknown" ;;
+  esac
+}
+
+check_prerequisites() {
+  local os="$1"
+  local missing=()
+  local install_cmds=()
+
+  echo "Checking prerequisites..."
+  echo ""
+
+  # ── Python 3.11+ ─────────────────────────────────────────────
+  if command -v python3 &>/dev/null; then
+    local py_version
+    py_version="$(python3 --version 2>&1 | grep -oP '\d+\.\d+' | head -1)"
+    local py_major py_minor
+    py_major="${py_version%%.*}"
+    py_minor="${py_version##*.}"
+    if [ "$py_major" -ge 3 ] && [ "$py_minor" -ge 11 ] 2>/dev/null; then
+      echo -e "  ${GREEN}✓${NC} Python $(python3 --version 2>&1 | grep -oP '\d+\.\d+\.\d+')"
+    else
+      echo -e "  ${RED}✗${NC} Python $py_version (need 3.11+)"
+      missing+=("Python 3.11+")
+      if [ "$os" = "macos" ]; then
+        install_cmds+=("brew install python@3.12")
+      else
+        install_cmds+=("sudo apt-get install -y python3 python3-pip python3-venv")
+      fi
+    fi
+  else
+    echo -e "  ${RED}✗${NC} Python not found"
+    missing+=("Python 3.11+")
+    if [ "$os" = "macos" ]; then
+      install_cmds+=("brew install python@3.12")
+    else
+      install_cmds+=("sudo apt-get install -y python3 python3-pip python3-venv")
+    fi
+  fi
+
+  # ── PostgreSQL ───────────────────────────────────────────────
+  if command -v psql &>/dev/null; then
+    local pg_version
+    pg_version="$(psql --version 2>&1 | grep -oP '\d+\.\d+' | head -1)"
+    local pg_major="${pg_version%%.*}"
+    if [ "$pg_major" -ge 14 ] 2>/dev/null; then
+      echo -e "  ${GREEN}✓${NC} PostgreSQL $pg_version"
+    else
+      echo -e "  ${RED}✗${NC} PostgreSQL $pg_version (need 14+)"
+      missing+=("PostgreSQL 14+")
+      if [ "$os" = "macos" ]; then
+        install_cmds+=("brew install postgresql@16")
+      else
+        install_cmds+=("sudo apt-get install -y postgresql postgresql-contrib")
+      fi
+    fi
+  else
+    echo -e "  ${RED}✗${NC} PostgreSQL not found"
+    missing+=("PostgreSQL")
+    if [ "$os" = "macos" ]; then
+      install_cmds+=("brew install postgresql@16")
+    else
+      install_cmds+=("sudo apt-get install -y postgresql postgresql-contrib")
+    fi
+  fi
+
+  # ── pgvector extension ───────────────────────────────────────
+  # Check if pgvector package is installed (can't query DB yet)
+  local has_pgvector=false
+  if [ "$os" = "macos" ]; then
+    if brew list pgvector &>/dev/null 2>&1; then
+      has_pgvector=true
+    fi
+  else
+    if dpkg -l 2>/dev/null | grep -q "pgvector\|postgresql.*-pgvector"; then
+      has_pgvector=true
+    fi
+  fi
+
+  if $has_pgvector; then
+    echo -e "  ${GREEN}✓${NC} pgvector extension"
+  else
+    # pgvector might still be available if PostgreSQL was installed
+    # via a method we can't detect (e.g., compiled from source).
+    # Only flag it if PostgreSQL IS installed but pgvector is not.
+    if command -v psql &>/dev/null; then
+      echo -e "  ${YELLOW}?${NC} pgvector — could not confirm installation"
+      echo "    (will be verified when /linkedout-setup creates the database)"
+      # Don't block on this — it may be available but undetectable
+    else
+      echo -e "  ${RED}✗${NC} pgvector extension (requires PostgreSQL first)"
+      missing+=("pgvector")
+      if [ "$os" = "macos" ]; then
+        install_cmds+=("brew install pgvector")
+      else
+        # Detect PG major version for the right package name
+        install_cmds+=("sudo apt-get install -y postgresql-16-pgvector")
+      fi
+    fi
+  fi
+
+  # ── Report missing deps ─────────────────────────────────────
+  if [ ${#missing[@]} -gt 0 ]; then
+    echo ""
+    echo -e "${RED}Missing prerequisites:${NC} ${missing[*]}"
+    echo ""
+    echo -e "${BOLD}Install with:${NC}"
+    echo ""
+    for cmd in "${install_cmds[@]}"; do
+      echo "  $cmd"
+    done
+    echo ""
+    echo "Then re-run: ./setup"
+    return 1
+  fi
+
+  echo ""
+  return 0
+}
+
 # ── Main ──────────────────────────────────────────────────────────
 if [ ! -d "$SKILLS_OUTPUT" ]; then
   echo -e "${RED}Error:${NC} $SKILLS_OUTPUT not found."
@@ -122,7 +248,16 @@ if [ ! -d "$SKILLS_OUTPUT" ]; then
 fi
 
 echo ""
-echo "LinkedOut — Skill Installation"
+echo "LinkedOut — Setup"
+echo ""
+
+# Check prerequisites (skip in --check mode, already handled above)
+OS_TYPE="$(detect_os)"
+if ! check_prerequisites "$OS_TYPE"; then
+  exit 1
+fi
+
+echo "Installing skills..."
 echo ""
 
 detected=0
@@ -147,11 +282,11 @@ if [ $detected -eq 0 ]; then
 fi
 
 echo ""
-echo "Done. Next steps:"
+echo -e "${GREEN}Done.${NC} Next steps:"
 echo ""
 echo "  1. Open Claude Code in this repo:  claude"
 echo "  2. Invoke:  /linkedout-setup"
-echo "  3. Setup handles PostgreSQL, dependencies, and data import."
+echo "  3. Setup handles database creation, data import, and embeddings."
 echo ""
 echo "After git pull, skills auto-update via symlinks."
 echo "Re-run ./setup only if new skills are added."
