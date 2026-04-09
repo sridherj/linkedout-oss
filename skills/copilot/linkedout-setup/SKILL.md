@@ -11,31 +11,42 @@ tools:
 
 # /linkedout-setup — Initial Setup
 
-Set up LinkedOut from scratch. The `linkedout setup` command handles everything:
-prerequisites, database, Python environment, demo offer, data import, and readiness check.
+Set up LinkedOut from scratch.
 
 ## Prerequisites
 
 Run `./setup` first — it installs skills, checks system prerequisites, and initializes PostgreSQL.
 
-## Run Setup
+## Step 1: Ask the user
 
-Activate the virtual environment and run the interactive setup flow:
+Before running anything, ask the user which path they'd like:
 
+> **Want to play around with sample data first?**
+>
+> - **Quick start (recommended):** I'll load ~2,000 sample profiles so you can try search, affinity scoring, and the AI agent right away. No API keys needed — takes about 2 minutes.
+> - **Full setup:** Import your own LinkedIn connections and profile. You'll need an OpenAI API key for embeddings.
+>
+> You can always switch later.
+
+Wait for their answer before proceeding.
+
+## Step 2: Run setup
+
+Activate the virtual environment and run setup with the appropriate flag:
+
+**If they chose demo (or quick start):**
 ```bash
-cd $(git rev-parse --show-toplevel)/backend && uv venv .venv && source .venv/bin/activate && uv pip install -r requirements.txt && source ~/linkedout-data/config/agent-context.env && linkedout setup
+cd $(git rev-parse --show-toplevel)/backend && uv venv .venv && source .venv/bin/activate && uv pip install -r requirements.txt && source ~/linkedout-data/config/agent-context.env && linkedout setup --demo
 ```
 
-The setup flow will:
-1. Detect prerequisites (Python, PostgreSQL, pgvector, pg_restore)
-2. Run system setup and database migrations
-3. Set up the Python environment
-4. **Offer a choice between two paths:**
-   - **Demo (recommended):** Loads 2,000 sample profiles. No API keys needed — runs entirely locally. Ready in ~2 minutes.
-   - **Full setup:** Import your own LinkedIn data. Requires an OpenAI API key for embeddings.
-5. Install skills and run a readiness check
+**If they chose full setup:**
+```bash
+cd $(git rev-parse --show-toplevel)/backend && uv venv .venv && source .venv/bin/activate && uv pip install -r requirements.txt && source ~/linkedout-data/config/agent-context.env && linkedout setup --full
+```
 
-**Important:** Let `linkedout setup` handle the entire flow — do NOT run individual steps manually. Follow the interactive prompts. The flow is idempotent — re-running resumes from where it left off.
+The `--demo` / `--full` flag skips the interactive prompt. Do NOT run `linkedout setup` without a flag — the interactive prompt doesn't work well in this context.
+
+The setup flow is idempotent — re-running resumes from where it left off.
 
 ## After Setup
 

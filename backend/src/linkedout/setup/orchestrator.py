@@ -547,6 +547,7 @@ def _dispatch_step(step: SetupStep, context: SetupContext) -> OperationReport | 
 def run_setup(
     data_dir: Path | None = None,
     repo_root: Path | None = None,
+    demo_choice: bool | None = None,
 ) -> None:
     """Run the full LinkedOut setup flow.
 
@@ -565,6 +566,8 @@ def run_setup(
         data_dir: Override data directory. Defaults to ``~/linkedout-data``
             or ``LINKEDOUT_DATA_DIR`` env var.
         repo_root: Override repo root. Defaults to auto-detection.
+        demo_choice: Pre-selected demo choice. ``True`` for demo,
+            ``False`` for full setup, ``None`` to prompt interactively.
     """
     # Resolve paths
     if data_dir is None:
@@ -722,7 +725,10 @@ def run_setup(
         if step.name == "python_env" and demo_eligible:
             from linkedout.setup.demo_offer import offer_demo, run_demo_setup
 
-            if offer_demo():
+            # Use pre-selected choice or prompt interactively
+            wants_demo = demo_choice if demo_choice is not None else offer_demo()
+
+            if wants_demo:
                 # Run demo steps D1-D5
                 db_url = context.db_url or "postgresql://linkedout:linkedout@localhost:5432/linkedout"
                 success = run_demo_setup(data_dir, repo_root, db_url)
