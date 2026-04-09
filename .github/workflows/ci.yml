@@ -11,6 +11,7 @@ jobs:
   # ── Unit Tests ─────────────────────────────────────────────────────────────
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -27,7 +28,7 @@ jobs:
         run: |
           cd backend
           pytest tests/ -n auto --dist=loadfile -v --tb=short \
-            -m "not live_llm and not live_langfuse and not live_services and not integration and not eval" \
+            -m "not live_llm and not live_langfuse and not live_services and not integration and not eval and not smoke" \
             --cov=src --cov-report=term-missing --cov-report=xml:coverage.xml
       - name: Run skill tests
         env:
@@ -43,6 +44,7 @@ jobs:
   # ── Tier 3: Integration Tests ───────────────────────────────────────────────
   integration:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -88,6 +90,7 @@ jobs:
   # ── Extension: Build Check ──────────────────────────────────────────────────
   extension-lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

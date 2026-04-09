@@ -8,6 +8,9 @@ Requires:
     - PostgreSQL with pgvector extension
     - DATABASE_URL environment variable pointing to a Postgres cluster
     - demo-seed.dump file at DEMO_DUMP_PATH (or default location)
+
+Run standalone: ``python tests/smoke/test_demo_search_smoke.py``
+Run via pytest: ``pytest tests/smoke/ -m smoke``
 """
 from __future__ import annotations
 
@@ -16,8 +19,12 @@ import subprocess
 import sys
 from urllib.parse import urlparse, urlunparse
 
+import pytest
 import psycopg2
 import psycopg2.extras
+
+# Exclude from unit test runs — requires PostgreSQL + demo dump
+pytestmark = pytest.mark.smoke
 
 # ---------------------------------------------------------------------------
 # Config

@@ -187,6 +187,9 @@ def pytest_configure(config):
     config.addinivalue_line(
         'markers', 'seed_config(config): specify custom SeedDb.SeedConfig for isolated DB fixtures'
     )
+    config.addinivalue_line(
+        'markers', 'smoke: smoke tests requiring PostgreSQL + demo dump (deselected in unit runs)'
+    )
 
 
 def pytest_collection_modifyitems(config, items):
