@@ -290,7 +290,7 @@ check_prerequisites() {
     local one_shot=""
     for cmd in "${install_cmds[@]}"; do
       if [[ "$cmd" == curl* ]]; then
-        one_shot="${one_shot}${cmd} && "
+        one_shot="${one_shot}${cmd}; "
       fi
     done
     if [ "$os" = "linux" ]; then
@@ -299,14 +299,14 @@ check_prerequisites() {
         [[ "$cmd" == curl* ]] && continue
         apt_pkgs_one="$apt_pkgs_one ${cmd#sudo apt-get install -y }"
       done
-      [ -n "$apt_pkgs_one" ] && one_shot="${one_shot}sudo apt-get update && sudo apt-get install -y$apt_pkgs_one && sudo service postgresql start 2>/dev/null; "
+      [ -n "$apt_pkgs_one" ] && one_shot="${one_shot}sudo apt-get update -qq && sudo apt-get install -y$apt_pkgs_one; sudo service postgresql start 2>/dev/null; "
     elif [ "$os" = "macos" ]; then
       local brew_pkgs_one=""
       for cmd in "${install_cmds[@]}"; do
         [[ "$cmd" == curl* ]] && continue
         brew_pkgs_one="$brew_pkgs_one ${cmd#brew install }"
       done
-      [ -n "$brew_pkgs_one" ] && one_shot="${one_shot}brew install$brew_pkgs_one && brew services start postgresql 2>/dev/null; "
+      [ -n "$brew_pkgs_one" ] && one_shot="${one_shot}brew install$brew_pkgs_one; brew services start postgresql 2>/dev/null; "
     fi
     one_shot="${one_shot}source \$HOME/.local/bin/env 2>/dev/null; ./setup"
     echo "  $one_shot"
