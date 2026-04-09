@@ -224,7 +224,7 @@ check_prerequisites() {
   # ── Report missing deps ─────────────────────────────────────
   if [ ${#missing[@]} -gt 0 ]; then
     echo ""
-    echo -e "${RED}Missing prerequisites:${NC} ${missing[*]}"
+    echo -e "${YELLOW}Missing prerequisites:${NC} ${missing[*]}"
     echo ""
     echo -e "${BOLD}Install with:${NC}"
     echo ""
@@ -232,7 +232,6 @@ check_prerequisites() {
       echo "  $cmd"
     done
     echo ""
-    echo "Then re-run: ./setup"
     return 1
   fi
 
@@ -251,12 +250,7 @@ echo ""
 echo "LinkedOut — Setup"
 echo ""
 
-# Check prerequisites (skip in --check mode, already handled above)
-OS_TYPE="$(detect_os)"
-if ! check_prerequisites "$OS_TYPE"; then
-  exit 1
-fi
-
+# ── Step 1: Install skills (always, so /linkedout-setup works) ──
 echo "Installing skills..."
 echo ""
 
@@ -282,6 +276,15 @@ if [ $detected -eq 0 ]; then
 fi
 
 echo ""
+
+# ── Step 2: Check prerequisites (informational) ─────────────────
+OS_TYPE="$(detect_os)"
+if ! check_prerequisites "$OS_TYPE"; then
+  echo "Once installed, open Claude Code and invoke /linkedout-setup."
+  echo ""
+  exit 0
+fi
+
 echo -e "${GREEN}Done.${NC} Next steps:"
 echo ""
 echo "  1. Open Claude Code in this repo:  claude"
