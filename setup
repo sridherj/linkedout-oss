@@ -135,12 +135,12 @@ check_prerequisites() {
   # ── Python 3.11+ ─────────────────────────────────────────────
   if command -v python3 &>/dev/null; then
     local py_version
-    py_version="$(python3 --version 2>&1 | grep -oP '\d+\.\d+' | head -1)"
+    py_version="$(python3 --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)"
     local py_major py_minor
     py_major="${py_version%%.*}"
     py_minor="${py_version##*.}"
     if [ "$py_major" -ge 3 ] && [ "$py_minor" -ge 11 ] 2>/dev/null; then
-      echo -e "  ${GREEN}✓${NC} Python $(python3 --version 2>&1 | grep -oP '\d+\.\d+\.\d+')"
+      echo -e "  ${GREEN}✓${NC} Python $(python3 --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
     else
       echo -e "  ${RED}✗${NC} Python $py_version (need 3.11+)"
       missing+=("Python 3.11+")
@@ -163,7 +163,7 @@ check_prerequisites() {
   # ── PostgreSQL ───────────────────────────────────────────────
   if command -v psql &>/dev/null; then
     local pg_version
-    pg_version="$(psql --version 2>&1 | grep -oP '\d+\.\d+' | head -1)"
+    pg_version="$(psql --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)"
     local pg_major="${pg_version%%.*}"
     if [ "$pg_major" -ge 14 ] 2>/dev/null; then
       echo -e "  ${GREEN}✓${NC} PostgreSQL $pg_version"
@@ -236,10 +236,25 @@ check_prerequisites() {
         apt_pkgs="$apt_pkgs ${cmd#sudo apt-get install -y }"
       done
       echo "  sudo apt-get update && sudo apt-get install -y$apt_pkgs"
-    else
+    elif [ "$os" = "macos" ]; then
+      # Check for Homebrew first
+      if ! command -v brew &>/dev/null; then
+        echo "  # Install Homebrew first: https://brew.sh"
+        echo "  /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+        echo ""
+      fi
+      # Combine all brew packages into a single command
+      local brew_pkgs=""
       for cmd in "${install_cmds[@]}"; do
-        echo "  $cmd"
+        brew_pkgs="$brew_pkgs ${cmd#brew install }"
       done
+      echo "  brew install$brew_pkgs"
+      # Remind to start PostgreSQL if it's being installed
+      if [[ "$brew_pkgs" == *"postgresql"* ]]; then
+        echo ""
+        echo "  # Start PostgreSQL after install:"
+        echo "  brew services start postgresql@16"
+      fi
     fi
     echo ""
     return 1
