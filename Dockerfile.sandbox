@@ -41,9 +41,6 @@ WORKDIR /linkedout-oss
 # Copy local setup script (may not be on GitHub yet)
 COPY setup /linkedout-oss/setup
 
-# Run ./setup to symlink skills — same as a real user would do
-RUN ./setup
-
 # ── Entrypoint (prints banner, drops to shell) ───────────────────
 RUN printf '#!/usr/bin/env bash\n\
 set -e\n\
@@ -54,13 +51,14 @@ echo "============================================"\n\
 echo ""\n\
 echo "  Python:  $(python3 --version)"\n\
 echo "  Claude:  $(claude --version 2>/dev/null || echo not found)"\n\
-echo "  Skills:  $(ls /root/.claude/skills/linkedout/ 2>/dev/null | wc -l) installed"\n\
 echo "  Repo:    /linkedout-oss (already cloned)"\n\
 echo ""\n\
 echo "  Next steps:"\n\
-echo "    1. Run: claude"\n\
-echo "    2. Invoke /linkedout-setup"\n\
-echo "    3. Setup handles PostgreSQL, deps, and data import"\n\
+echo "    1. Run: ./setup"\n\
+echo "    2. Install any missing prerequisites it reports"\n\
+echo "    3. Re-run ./setup (installs skills)"\n\
+echo "    4. Run: claude"\n\
+echo "    5. Invoke /linkedout-setup"\n\
 echo ""\n\
 echo "  Each docker run is a clean slate."\n\
 echo "============================================"\n\
