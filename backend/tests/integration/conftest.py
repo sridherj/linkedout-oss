@@ -45,6 +45,7 @@ load_dotenv(env_path / '.env.local', override=True)
 
 # Set environment for integration tests
 os.environ['LINKEDOUT_ENVIRONMENT'] = 'integration_test'
+os.environ.setdefault('LINKEDOUT_EMBEDDING__PROVIDER', 'local')
 
 from common.entities.base_entity import Base
 from shared.config.config import backend_config
