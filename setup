@@ -169,69 +169,65 @@ check_prerequisites() {
     install_cmds+=("curl -LsSf https://astral.sh/uv/install.sh | sh")
   fi
 
-  # ── PostgreSQL ───────────────────────────────────────────────
+  # ── PostgreSQL 18+ ──────────────────────────────────────────
+  local need_pg=false
   if command -v psql &>/dev/null; then
     local pg_version
     pg_version="$(psql --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)"
     local pg_major="${pg_version%%.*}"
-    if [ "$pg_major" -ge 14 ] 2>/dev/null; then
+    if [ "$pg_major" -ge 18 ] 2>/dev/null; then
       echo -e "  ${GREEN}✓${NC} PostgreSQL $pg_version"
     else
-      echo -e "  ${RED}✗${NC} PostgreSQL $pg_version (need 14+)"
-      missing+=("PostgreSQL 14+")
-      if [ "$os" = "macos" ]; then
-        install_cmds+=("brew install postgresql@18")
-      else
-        install_cmds+=("sudo apt-get install -y postgresql postgresql-contrib")
-      fi
+      echo -e "  ${RED}✗${NC} PostgreSQL $pg_version (need 18+)"
+      need_pg=true
     fi
   else
     echo -e "  ${RED}✗${NC} PostgreSQL not found"
-    missing+=("PostgreSQL")
+    need_pg=true
+  fi
+
+  if $need_pg; then
+    missing+=("PostgreSQL 18+")
     if [ "$os" = "macos" ]; then
       install_cmds+=("brew install postgresql@18")
     else
-      install_cmds+=("sudo apt-get install -y postgresql postgresql-contrib")
+      # Need PGDG apt repo for pg 18
+      install_cmds+=("pgdg_repo")
+      install_cmds+=("sudo apt-get install -y postgresql-18 postgresql-18-pgvector")
     fi
   fi
 
   # ── pgvector extension ───────────────────────────────────────
-  # Check if pgvector package is installed (can't query DB yet)
-  local has_pgvector=false
-  if [ "$os" = "macos" ]; then
-    if brew list pgvector &>/dev/null 2>&1; then
-      has_pgvector=true
+  if ! $need_pg; then
+    local has_pgvector=false
+    if [ "$os" = "macos" ]; then
+      if brew list pgvector &>/dev/null 2>&1; then
+        has_pgvector=true
+      fi
+    else
+      if dpkg -l 2>/dev/null | grep -q "pgvector\|postgresql.*-pgvector"; then
+        has_pgvector=true
+      fi
     fi
-  else
-    if dpkg -l 2>/dev/null | grep -q "pgvector\|postgresql.*-pgvector"; then
-      has_pgvector=true
-    fi
-  fi
 
-  if $has_pgvector; then
-    echo -e "  ${GREEN}✓${NC} pgvector extension"
-  else
-    # pgvector might still be available if PostgreSQL was installed
-    # via a method we can't detect (e.g., compiled from source).
-    # Only flag it if PostgreSQL IS installed but pgvector is not.
-    if command -v psql &>/dev/null; then
+    if $has_pgvector; then
+      echo -e "  ${GREEN}✓${NC} pgvector extension"
+    elif command -v psql &>/dev/null; then
       echo -e "  ${YELLOW}?${NC} pgvector — could not confirm installation"
       echo "    (will be verified when /linkedout-setup creates the database)"
-      # Don't block on this — it may be available but undetectable
     else
       echo -e "  ${RED}✗${NC} pgvector extension (requires PostgreSQL first)"
       missing+=("pgvector")
       if [ "$os" = "macos" ]; then
         install_cmds+=("brew install pgvector")
       else
-        # Detect PG major version for the right package name
         local pg_maj=""
-        if command -v psql &>/dev/null; then
-          pg_maj="$(psql --version 2>&1 | grep -oE '[0-9]+' | head -1)"
-        fi
-        install_cmds+=("sudo apt-get install -y postgresql-${pg_maj:-16}-pgvector")
+        pg_maj="$(psql --version 2>&1 | grep -oE '[0-9]+' | head -1)"
+        install_cmds+=("sudo apt-get install -y postgresql-${pg_maj:-18}-pgvector")
       fi
     fi
+  else
+    echo -e "  ${RED}✗${NC} pgvector extension (requires PostgreSQL first)"
   fi
 
   # ── Report missing deps ─────────────────────────────────────
@@ -241,52 +237,58 @@ check_prerequisites() {
     echo ""
     echo -e "${BOLD}Install with:${NC}"
     echo ""
+
+    # Check if PGDG repo is needed
+    local needs_pgdg=false
+    for cmd in "${install_cmds[@]}"; do
+      [[ "$cmd" == "pgdg_repo" ]] && needs_pgdg=true
+    done
+
     # Print standalone installers (curl-based) first
-    local has_pkg_cmds=false
     for cmd in "${install_cmds[@]}"; do
       if [[ "$cmd" == curl* ]]; then
         echo "  $cmd"
-      else
-        has_pkg_cmds=true
       fi
     done
 
+    # Print PGDG repo setup if needed
+    if $needs_pgdg && [ "$os" = "linux" ]; then
+      echo "  # Add PostgreSQL 18 apt repository"
+      echo "  sudo install -d /usr/share/postgresql-common/pgdg"
+      echo "  sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc"
+      echo "  echo \"deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt \$(lsb_release -cs)-pgdg main\" | sudo tee /etc/apt/sources.list.d/pgdg.list"
+    fi
+
     # Print package manager commands
-    if $has_pkg_cmds; then
-      if [ "$os" = "linux" ]; then
-        # Combine all apt packages into a single command with update
-        local apt_pkgs=""
-        for cmd in "${install_cmds[@]}"; do
-          [[ "$cmd" == curl* ]] && continue
-          # Extract package names from "sudo apt-get install -y pkg1 pkg2"
-          apt_pkgs="$apt_pkgs ${cmd#sudo apt-get install -y }"
-        done
-        [ -n "$apt_pkgs" ] && echo "  sudo apt-get update && sudo apt-get install -y$apt_pkgs"
-      elif [ "$os" = "macos" ]; then
-        # Check for Homebrew first
-        if ! command -v brew &>/dev/null; then
-          echo "  # Install Homebrew first: https://brew.sh"
-          echo "  /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
-          echo ""
-        fi
-        # Combine all brew packages into a single command
-        local brew_pkgs=""
-        for cmd in "${install_cmds[@]}"; do
-          [[ "$cmd" == curl* ]] && continue
-          brew_pkgs="$brew_pkgs ${cmd#brew install }"
-        done
-        [ -n "$brew_pkgs" ] && echo "  brew install$brew_pkgs"
-        # Remind to start PostgreSQL if it's being installed
-        if [[ "$brew_pkgs" == *"postgresql"* ]]; then
-          echo ""
-          echo "  # Start PostgreSQL after install:"
-          echo "  brew services start postgresql@18"
-        fi
+    if [ "$os" = "linux" ]; then
+      local apt_pkgs=""
+      for cmd in "${install_cmds[@]}"; do
+        [[ "$cmd" == curl* || "$cmd" == "pgdg_repo" ]] && continue
+        apt_pkgs="$apt_pkgs ${cmd#sudo apt-get install -y }"
+      done
+      [ -n "$apt_pkgs" ] && echo "  sudo apt-get update && sudo apt-get install -y$apt_pkgs"
+    elif [ "$os" = "macos" ]; then
+      if ! command -v brew &>/dev/null; then
+        echo "  # Install Homebrew first: https://brew.sh"
+        echo "  /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+        echo ""
+      fi
+      local brew_pkgs=""
+      for cmd in "${install_cmds[@]}"; do
+        [[ "$cmd" == curl* ]] && continue
+        brew_pkgs="$brew_pkgs ${cmd#brew install }"
+      done
+      [ -n "$brew_pkgs" ] && echo "  brew install$brew_pkgs"
+      if [[ "$brew_pkgs" == *"postgresql"* ]]; then
+        echo ""
+        echo "  # Start PostgreSQL after install:"
+        echo "  brew services start postgresql@18"
       fi
     fi
+    echo ""
     echo "Then re-run ./setup, or run it all in one shot:"
     echo ""
-    # Print the one-shot block: install + re-run setup
+    # Build one-shot command
     local one_shot=""
     for cmd in "${install_cmds[@]}"; do
       if [[ "$cmd" == curl* ]]; then
@@ -294,9 +296,12 @@ check_prerequisites() {
       fi
     done
     if [ "$os" = "linux" ]; then
+      if $needs_pgdg; then
+        one_shot="${one_shot}sudo install -d /usr/share/postgresql-common/pgdg && sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc && echo \"deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt \$(lsb_release -cs)-pgdg main\" | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null; "
+      fi
       local apt_pkgs_one=""
       for cmd in "${install_cmds[@]}"; do
-        [[ "$cmd" == curl* ]] && continue
+        [[ "$cmd" == curl* || "$cmd" == "pgdg_repo" ]] && continue
         apt_pkgs_one="$apt_pkgs_one ${cmd#sudo apt-get install -y }"
       done
       [ -n "$apt_pkgs_one" ] && one_shot="${one_shot}sudo apt-get update -qq && sudo apt-get install -y$apt_pkgs_one; sudo service postgresql start 2>/dev/null; "
