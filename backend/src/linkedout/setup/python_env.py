@@ -2,7 +2,7 @@
 """Virtual environment creation and package installation.
 
 Handles ``.venv`` creation in the repo root, dependency installation
-via ``uv`` (bootstrapped through pip), CLI entry point verification,
+via ``uv`` (system-installed), CLI entry point verification,
 and optional local embedding model pre-download.
 
 All operations are idempotent:
@@ -11,6 +11,7 @@ All operations are idempotent:
 """
 from __future__ import annotations
 
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -71,8 +72,8 @@ def create_venv(repo_root: Path) -> bool:
 def install_dependencies(repo_root: Path) -> OperationReport:
     """Install Python dependencies via uv.
 
-    Bootstraps ``uv`` via pip, then uses ``uv pip install`` for fast
-    installation of requirements and the editable backend package.
+    Uses the system ``uv`` (installed by ``./setup``) directly.
+    Falls back to pip if uv is not available.
 
     Args:
         repo_root: Path to the repository root.
@@ -82,26 +83,22 @@ def install_dependencies(repo_root: Path) -> OperationReport:
     """
     log = get_setup_logger('python_env')
     start = time.monotonic()
-    venv_pip = repo_root / '.venv' / 'bin' / 'pip'
-    venv_uv = repo_root / '.venv' / 'bin' / 'uv'
     requirements = repo_root / 'backend' / 'requirements.txt'
 
-    # Step 1: Bootstrap uv via pip
-    log.info('Installing uv package manager...')
-    result = subprocess.run(
-        [str(venv_pip), 'install', 'uv'],
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
-    if result.returncode != 0:
-        log.warning('Failed to install uv via pip, falling back to pip directly')
+    # Find uv: prefer venv copy, then system
+    venv_uv = repo_root / '.venv' / 'bin' / 'uv'
+    if venv_uv.exists():
+        uv_cmd = str(venv_uv)
+    elif shutil.which('uv'):
+        uv_cmd = 'uv'
+    else:
+        log.warning('uv not found, falling back to pip')
         return _install_via_pip(repo_root, start)
 
-    # Step 2: Install requirements.txt via uv
+    # Step 1: Install requirements.txt via uv
     log.info('Installing dependencies via uv...')
     result = subprocess.run(
-        [str(venv_uv), 'pip', 'install', '-r', str(requirements)],
+        [uv_cmd, 'pip', 'install', '-r', str(requirements)],
         capture_output=True,
         text=True,
         timeout=_SUBPROCESS_TIMEOUT,
@@ -116,11 +113,11 @@ def install_dependencies(repo_root: Path) -> OperationReport:
             next_steps=['Check requirements.txt and try: .venv/bin/pip install -r backend/requirements.txt'],
         )
 
-    # Step 3: Install backend as editable package
+    # Step 2: Install backend as editable package
     log.info('Installing backend package (editable)...')
     backend_dir = repo_root / 'backend'
     result = subprocess.run(
-        [str(venv_uv), 'pip', 'install', '-e', str(backend_dir)],
+        [uv_cmd, 'pip', 'install', '-e', str(backend_dir)],
         capture_output=True,
         text=True,
         timeout=_SUBPROCESS_TIMEOUT,

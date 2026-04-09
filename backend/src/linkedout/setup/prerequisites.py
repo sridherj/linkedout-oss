@@ -51,6 +51,7 @@ class PythonStatus:
     installed: bool
     version: str | None = None  # e.g., "3.12.1"
     has_pip: bool = False
+    has_uv: bool = False
     has_venv: bool = False
 
 
@@ -199,7 +200,8 @@ def check_python() -> PythonStatus:
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
 
-    # Check pip
+    # Check uv (preferred) and pip (fallback)
+    has_uv = shutil.which('uv') is not None
     has_pip = False
     for cmd in (['pip3', '--version'], ['pip', '--version']):
         try:
@@ -232,6 +234,7 @@ def check_python() -> PythonStatus:
         installed=installed,
         version=version,
         has_pip=has_pip,
+        has_uv=has_uv,
         has_venv=has_venv,
     )
 
@@ -324,8 +327,8 @@ def run_all_checks(data_dir: Path | None = None) -> PrerequisiteReport:
         except (ValueError, IndexError):
             pass
 
-    if not py.has_pip:
-        blockers.append('pip is not available. Install python3-pip.')
+    if not py.has_uv and not py.has_pip:
+        blockers.append('Neither uv nor pip is available. Install uv: curl -LsSf https://astral.sh/uv/install.sh | sh')
 
     if not py.has_venv:
         blockers.append('Python venv module is not available. Install python3-venv.')
