@@ -26,10 +26,12 @@ The setup flow will:
 1. Detect prerequisites (Python, PostgreSQL, pgvector, pg_restore)
 2. Run system setup and database migrations
 3. Set up the Python environment
-4. **Offer a choice**: try the demo dataset (~2,000 sample profiles) or import your own LinkedIn data
+4. **Offer a choice between two paths:**
+   - **Demo (recommended):** Loads 2,000 sample profiles. No API keys needed — runs entirely locally. Ready in ~2 minutes.
+   - **Full setup:** Import your own LinkedIn data. Requires an OpenAI API key for embeddings.
 5. Install skills and run a readiness check
 
-Follow the interactive prompts. The flow is idempotent — re-running resumes from where it left off.
+**Important:** Let `linkedout setup` handle the entire flow — do NOT run individual steps manually. Follow the interactive prompts. The flow is idempotent — re-running resumes from where it left off.
 
 ## After Setup
 

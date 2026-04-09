@@ -28,22 +28,24 @@ def offer_demo() -> bool:
     log = get_setup_logger("demo_offer")
 
     prompt = """
-+----------------------------------------------+
-|  Want to try LinkedOut with demo data first?  |
-|                                               |
-|  We'll load 2,000 sample profiles so you can  |
-|  test search, affinity scoring, and the AI    |
-|  agent before importing your own connections. |
-|                                               |
-|  ~375 MB total download                       |
-|  (demo data + search model)                   |
-|                                               |
-|  [Y] Try the demo   [n] Skip to full setup   |
-+----------------------------------------------+"""
++--------------------------------------------------+
+|  How would you like to get started?               |
+|                                                   |
+|  [Y] Quick start with demo data (recommended)    |
+|      2,000 sample profiles, ready in ~2 minutes   |
+|      No API keys needed — everything runs locally  |
+|      ~375 MB download (demo data + search model)  |
+|                                                   |
+|  [n] Full setup with your own LinkedIn data       |
+|      Import your connections and profile           |
+|      Requires an OpenAI API key for embeddings    |
+|      You can always switch later                   |
+|                                                   |
++--------------------------------------------------+"""
     print(prompt)
 
     try:
-        choice = input("\n> ").strip().lower()
+        choice = input("\n  Your choice [Y/n]: ").strip().lower()
     except (EOFError, KeyboardInterrupt):
         print()
         log.info("Demo offer interrupted, continuing with full setup")
