@@ -7,79 +7,36 @@ description: Set up LinkedOut — install dependencies, configure database, and 
 
 # /linkedout-setup — Initial Setup
 
-Set up LinkedOut from scratch: install dependencies, create the database, configure credentials, and import your LinkedIn data export.
-
-> **Note:** Full interactive setup flow coming in a future release (Phase 9). For now, follow the manual steps below.
+Set up LinkedOut from scratch. The `linkedout setup` command handles everything:
+prerequisites, database, Python environment, demo offer, data import, and readiness check.
 
 ## Prerequisites
 
-Run `./setup` first — it installs skills, checks prerequisites, and initializes the PostgreSQL database.
+Run `./setup` first — it installs skills, checks system prerequisites, and initializes PostgreSQL.
 
-- **LinkedIn data export** — download from LinkedIn Settings > Get a copy of your data
+## Run Setup
 
-## Setup Steps
-
-1. **Install Python dependencies:**
+Activate the virtual environment and run the interactive setup flow:
 
 ```bash
-cd $(git rev-parse --show-toplevel)/backend && uv venv .venv && source .venv/bin/activate && uv pip install -r requirements.txt
+cd $(git rev-parse --show-toplevel)/backend && uv venv .venv && source .venv/bin/activate && uv pip install -r requirements.txt && source ~/linkedout-data/config/agent-context.env && linkedout setup
 ```
 
-2. **Configure environment:**
+The setup flow will:
+1. Detect prerequisites (Python, PostgreSQL, pgvector, pg_restore)
+2. Run system setup and database migrations
+3. Set up the Python environment
+4. **Offer a choice**: try the demo dataset (~2,000 sample profiles) or import your own LinkedIn data
+5. Install skills and run a readiness check
 
-Create `~/linkedout-data/config/agent-context.env` with your database connection:
+Follow the interactive prompts. The flow is idempotent — re-running resumes from where it left off.
 
-```bash
-mkdir -p ~/linkedout-data/config/
-cat > ~/linkedout-data/config/agent-context.env << 'EOF'
-DATABASE_URL=postgresql://linkedout:linkedout@localhost:5432/linkedout
-LINKEDOUT_TENANT_ID=default
-LINKEDOUT_BU_ID=default
-LINKEDOUT_USER_ID=system
-EOF
-```
+## After Setup
 
-3. **Run migrations:**
-
-```bash
-cd $(git rev-parse --show-toplevel)/backend && source .venv/bin/activate && source ~/linkedout-data/config/agent-context.env && alembic upgrade head
-```
-
-4. **Choose a data source:**
-
-Ask the user: **"Do you have a LinkedIn data export (Connections.csv), or would you like to use the demo dataset?"**
-
-### Option A: Import your LinkedIn connections
-
-```bash
-cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env && linkedout import-connections ~/Downloads/Connections.csv
-```
-
-Then generate embeddings:
-
-```bash
-cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env && linkedout embed
-```
-
-### Option B: Use the demo dataset
-
-Download and restore the pre-built demo database (~500 synthetic profiles):
-
-```bash
-cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env && linkedout download-demo
-```
-
-```bash
-cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env && linkedout restore-demo
-```
-
-See `CONTRIBUTING.md` for detailed manual setup instructions.
-
-## Verify Setup
+Verify everything is working:
 
 ```bash
 cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env && linkedout status
-cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env && linkedout diagnostics
 ```
 
 ## Data Paths
