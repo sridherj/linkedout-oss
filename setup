@@ -417,13 +417,20 @@ else
 fi
 
 # Create pgvector extension (idempotent)
+# Install in template1 so all future databases (including linkedout_demo) inherit it
+if sudo -u postgres psql -d template1 -c "CREATE EXTENSION IF NOT EXISTS vector;" 2>/dev/null; then
+  echo -e "  ${GREEN}✓${NC} pgvector extension enabled in template1 (inherited by future databases)"
+else
+  echo -e "  ${YELLOW}?${NC} Could not enable pgvector in template1 — will retry during /linkedout-setup"
+fi
+# Also install in linkedout DB (may have been created before the template change)
 if sudo -u postgres psql -d linkedout -tc "SELECT 1 FROM pg_extension WHERE extname='vector'" 2>/dev/null | grep -q 1; then
-  echo -e "  ${GREEN}✓${NC} pgvector extension enabled"
+  echo -e "  ${GREEN}✓${NC} pgvector extension enabled in linkedout"
 else
   if sudo -u postgres psql -d linkedout -c "CREATE EXTENSION IF NOT EXISTS vector;" 2>/dev/null; then
-    echo -e "  ${GREEN}✓${NC} Enabled pgvector extension"
+    echo -e "  ${GREEN}✓${NC} Enabled pgvector extension in linkedout"
   else
-    echo -e "  ${YELLOW}?${NC} Could not enable pgvector — will retry during /linkedout-setup"
+    echo -e "  ${YELLOW}?${NC} Could not enable pgvector in linkedout — will retry during /linkedout-setup"
   fi
 fi
 

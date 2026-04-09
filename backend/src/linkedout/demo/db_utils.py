@@ -66,7 +66,7 @@ def create_demo_database(db_url: str) -> str:
                 f"Failed to {label} demo database: {result.stderr.strip()}"
             )
 
-    # Enable pgvector in the new database
+    # Enable pgvector in the new database (usually inherited from template1)
     ext_sql = "CREATE EXTENSION IF NOT EXISTS vector;"
     result = subprocess.run(
         ["psql", demo_url, "-c", ext_sql],
@@ -75,7 +75,12 @@ def create_demo_database(db_url: str) -> str:
         timeout=30,
     )
     if result.returncode != 0:
-        logger.warning(f"Could not enable pgvector: {result.stderr.strip()}")
+        raise RuntimeError(
+            "pgvector extension not available in demo database.\n"
+            "This requires superuser privileges that the application cannot use directly.\n"
+            'Run: sudo -u postgres psql -d template1 -c "CREATE EXTENSION IF NOT EXISTS vector;"\n'
+            "Then retry."
+        )
 
     logger.info(f"Created demo database: {DEMO_DB_NAME}")
     return demo_url

@@ -18,14 +18,15 @@ linked_files:
   - src/linkedout/commands/use_real_db.py
   - src/linkedout/commands/demo_help.py
   - src/linkedout/commands/setup.py
-last_verified: 2026-04-08
-version: 2
+last_verified: 2026-04-10
+version: 3
 ---
 
 # Onboarding Experience
 
 **Created:** 2026-04-08 -- New spec covering setup flow, demo mode, and transition
 **Updated:** 2026-04-08 -- Added full setup prompt principles (WHY before HOW for steps 5-9)
+**Updated:** 2026-04-10 -- Added --demo/--full flags, pgvector template1 install, actionable pgvector error
 
 ## Intent
 
@@ -41,6 +42,13 @@ LinkedIn data). Users can transition from demo to full setup at any time via
 ## Behaviors
 
 ### Common Infrastructure (Steps 1-4)
+
+- **CLI flags for path selection**: `linkedout setup` accepts `--demo` and `--full` flags
+  to skip the interactive demo offer. `--demo` proceeds directly to demo setup (D1-D5)
+  after infrastructure steps. `--full` proceeds directly to full setup (steps 5-14).
+  Without either flag, the interactive demo offer appears after step 4. The
+  `/linkedout-setup` skill asks the user conversationally which mode they prefer, then
+  invokes `linkedout setup --demo` or `linkedout setup --full`.
 
 - **Four shared infrastructure steps**: Running `linkedout setup` begins with 4 steps
   common to both paths: (1) Prerequisites Detection, (2) System Setup, (3) Database
@@ -101,7 +109,10 @@ LinkedIn data). Users can transition from demo to full setup at any time via
   D1 so progress is clear. Verify the model is available after D2 completes.
 
 - **D3 restores the demo database**: D3 creates a `linkedout_demo` Postgres database and
-  restores the dump via `pg_restore`. Verify the demo database contains the expected
+  restores the dump via `pg_restore`. The pgvector extension is inherited from `template1`
+  (installed during the `setup` script). If pgvector is not available, `db_utils.py`
+  raises a clear error telling the user to run the superuser command manually — the
+  application never attempts `sudo`. Verify the demo database contains the expected
   profile count after restore.
 
 - **D4 auto-installs skills**: D4 installs skills for Claude Code, Codex, and Copilot

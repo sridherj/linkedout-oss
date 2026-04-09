@@ -35,9 +35,11 @@ class _LazyLinkedOutCLI(CategoryHelpGroup):
         # --- Processing ---
         from linkedout.commands.compute_affinity import compute_affinity_command
         from linkedout.commands.embed import embed_command
+        from linkedout.commands.embed_query import embed_query_command
 
         self.add_command(compute_affinity_command)
         self.add_command(embed_command)
+        self.add_command(embed_query_command)
 
         # --- Server ---
         from linkedout.commands.start_backend import start_backend_command

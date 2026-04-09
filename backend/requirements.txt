@@ -30,7 +30,5 @@ tenacity
 tqdm>=4.66.0
 uvicorn
 
-# Optional: local embedding provider (nomic-embed-text-v1.5)
-# Install if using LINKEDOUT_EMBEDDING_PROVIDER=local
-# sentence-transformers>=3.0.0
-# onnxruntime>=1.18.0
+sentence-transformers>=3.0.0
+onnxruntime>=1.18.0

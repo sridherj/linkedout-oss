@@ -10,6 +10,7 @@ linked_files:
   - backend/src/linkedout/commands/download_seed.py
   - backend/src/linkedout/commands/compute_affinity.py
   - backend/src/linkedout/commands/embed.py
+  - backend/src/linkedout/commands/embed_query.py
   - backend/src/linkedout/commands/status.py
   - backend/src/linkedout/commands/diagnostics.py
   - backend/src/linkedout/commands/version.py
@@ -26,8 +27,8 @@ linked_files:
   - backend/src/linkedout/commands/setup.py
   - backend/src/linkedout/commands/upgrade.py
   - backend/src/linkedout/commands/migrate.py
-version: 2
-last_verified: "2026-04-09"
+version: 3
+last_verified: "2026-04-10"
 ---
 
 # CLI Commands
@@ -102,6 +103,13 @@ Provide a user-facing CLI surface for all LinkedOut operations: setup, data impo
   - Output: Progress bar (real-time mode) or batch status updates, then final counts (embedded/skipped/failed), provider info, and duration.
   - Suggested next steps: `linkedout compute-affinity`.
   - Verify: embeddings are written to the correct column; `--force` clears and re-embeds; progress file enables resume after interruption; `--batch` with non-OpenAI provider raises `UsageError`.
+
+- **embed-query**: Generate a single embedding vector for a query string. Takes a positional `TEXT` argument, generates the embedding via the configured provider, and outputs the vector to stdout. Designed for use by Claude Code when constructing similarity search SQL.
+  - Options: `--provider {openai,local}` (default: from config), `--format {json,raw}` (default: json).
+  - Output (json): JSON array of floats (e.g., `[0.123, -0.456, ...]`).
+  - Output (raw): Space-separated floats.
+  - No `search_query:` prefix is applied — query embeddings must match document embeddings, which are generated without prefixes.
+  - Verify: outputs valid JSON array of correct dimension (768 for local, 1536 for OpenAI); `--provider` choice constraint works; `--format raw` outputs space-separated values.
 
 ### System
 
