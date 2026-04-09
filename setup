@@ -338,11 +338,70 @@ if ! check_prerequisites "$OS_TYPE"; then
   exit 0
 fi
 
+# ── Step 3: Initialize PostgreSQL database ─────────────────────
+echo "Initializing database..."
+echo ""
+
+# Start PostgreSQL if not running
+if ! pg_isready -q 2>/dev/null; then
+  if [ "$OS_TYPE" = "macos" ]; then
+    brew services start postgresql@18 2>/dev/null || brew services start postgresql 2>/dev/null
+  else
+    sudo service postgresql start 2>/dev/null || sudo systemctl start postgresql 2>/dev/null
+  fi
+  sleep 2
+fi
+
+if pg_isready -q 2>/dev/null; then
+  echo -e "  ${GREEN}✓${NC} PostgreSQL running"
+else
+  echo -e "  ${RED}✗${NC} Could not start PostgreSQL"
+  echo "  Start it manually and re-run ./setup"
+  exit 1
+fi
+
+# Create role (idempotent — ignore "already exists" errors)
+if sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='linkedout'" 2>/dev/null | grep -q 1; then
+  echo -e "  ${GREEN}✓${NC} Role 'linkedout' exists"
+else
+  if sudo -u postgres psql -c "CREATE ROLE linkedout WITH LOGIN CREATEDB PASSWORD 'linkedout';" 2>/dev/null; then
+    echo -e "  ${GREEN}✓${NC} Created role 'linkedout'"
+  else
+    echo -e "  ${RED}✗${NC} Could not create role 'linkedout'"
+    echo "  Create it manually: sudo -u postgres psql -c \"CREATE ROLE linkedout WITH LOGIN CREATEDB PASSWORD 'linkedout';\""
+    exit 1
+  fi
+fi
+
+# Create database (idempotent)
+if sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='linkedout'" 2>/dev/null | grep -q 1; then
+  echo -e "  ${GREEN}✓${NC} Database 'linkedout' exists"
+else
+  if sudo -u postgres createdb -O linkedout linkedout 2>/dev/null; then
+    echo -e "  ${GREEN}✓${NC} Created database 'linkedout'"
+  else
+    echo -e "  ${RED}✗${NC} Could not create database 'linkedout'"
+    exit 1
+  fi
+fi
+
+# Create pgvector extension (idempotent)
+if sudo -u postgres psql -d linkedout -tc "SELECT 1 FROM pg_extension WHERE extname='vector'" 2>/dev/null | grep -q 1; then
+  echo -e "  ${GREEN}✓${NC} pgvector extension enabled"
+else
+  if sudo -u postgres psql -d linkedout -c "CREATE EXTENSION IF NOT EXISTS vector;" 2>/dev/null; then
+    echo -e "  ${GREEN}✓${NC} Enabled pgvector extension"
+  else
+    echo -e "  ${YELLOW}?${NC} Could not enable pgvector — will retry during /linkedout-setup"
+  fi
+fi
+
+echo ""
 echo -e "${GREEN}Done.${NC} Next steps:"
 echo ""
 echo "  1. Open Claude Code in this repo:  claude"
 echo "  2. Invoke:  /linkedout-setup"
-echo "  3. Setup handles database creation, data import, and embeddings."
+echo "  3. Setup handles dependencies, migrations, and data import."
 echo ""
 echo "After git pull, skills auto-update via symlinks."
 echo "Re-run ./setup only if new skills are added."

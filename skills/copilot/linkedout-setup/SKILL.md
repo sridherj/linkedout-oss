@@ -17,8 +17,8 @@ Set up LinkedOut from scratch: install dependencies, create the database, config
 
 ## Prerequisites
 
-- **Python 3.11+** — `python3 --version`
-- **PostgreSQL 16+** with **pgvector** extension — `psql --version`
+Run `./setup` first — it installs skills, checks prerequisites, and initializes the PostgreSQL database.
+
 - **LinkedIn data export** — download from LinkedIn Settings > Get a copy of your data
 
 ## Setup Steps
@@ -29,16 +29,7 @@ Set up LinkedOut from scratch: install dependencies, create the database, config
 cd $(git rev-parse --show-toplevel)/backend && uv venv .venv && source .venv/bin/activate && uv pip install -r requirements.txt
 ```
 
-2. **Start PostgreSQL and create the database:**
-
-```bash
-sudo service postgresql start
-sudo -u postgres psql -c "CREATE ROLE linkedout WITH LOGIN CREATEDB PASSWORD 'linkedout';"
-sudo -u postgres createdb -O linkedout linkedout
-sudo -u postgres psql -d linkedout -c "CREATE EXTENSION IF NOT EXISTS vector;"
-```
-
-3. **Configure environment:**
+2. **Configure environment:**
 
 Create `~/linkedout-data/config/agent-context.env` with your database connection:
 
@@ -52,19 +43,19 @@ LINKEDOUT_USER_ID=system
 EOF
 ```
 
-4. **Run migrations:**
+3. **Run migrations:**
 
 ```bash
 cd $(git rev-parse --show-toplevel)/backend && source .venv/bin/activate && source ~/linkedout-data/config/agent-context.env && alembic upgrade head
 ```
 
-5. **Import your LinkedIn connections:**
+4. **Import your LinkedIn connections:**
 
 ```bash
 cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env && linkedout import-connections ~/Downloads/Connections.csv
 ```
 
-6. **Generate embeddings:**
+5. **Generate embeddings:**
 
 ```bash
 cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env && linkedout embed
