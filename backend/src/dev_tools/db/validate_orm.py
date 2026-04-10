@@ -22,8 +22,6 @@ from sqlalchemy.orm import configure_mappers
 
 from shared.utilities.logger import get_logger
 from shared.config import get_config
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
-
 # Import all entities to ensure they're registered
 # Organization domain
 from organization.entities.tenant_entity import TenantEntity

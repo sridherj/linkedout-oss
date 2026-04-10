@@ -24,10 +24,13 @@ import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
+
+if TYPE_CHECKING:
+    from shared.infra.db.db_session_manager import DbSessionManager
 
 
 @dataclass
@@ -52,25 +55,31 @@ def _get_data_dir() -> Path:
     )
 
 
-def check_db_connection() -> HealthCheckResult:
+def check_db_connection(db_manager: 'DbSessionManager | None' = None) -> HealthCheckResult:
     """Test PostgreSQL connectivity.
+
+    Args:
+        db_manager: An existing ``DbSessionManager``. When *None*, one is
+            created internally via ``cli_db_manager()``.
 
     Returns ``pass`` when a simple ``SELECT 1`` succeeds, ``fail`` on any
     connection or query error.
     """
     try:
-        from shared.config import get_config
+        if db_manager is None:
+            from shared.config import get_config
+            settings = get_config()
+            if not settings.database_url:
+                return HealthCheckResult(
+                    check='db_connection', status='fail',
+                    detail='Database URL not configured',
+                )
+            from shared.infra.db.cli_db import cli_db_manager
+            db_manager = cli_db_manager()
 
-        settings = get_config()
-        if not settings.database_url:
-            return HealthCheckResult(
-                check='db_connection', status='fail', detail='not configured',
-            )
+        from shared.infra.db.db_session_manager import DbSessionType
 
-        from shared.infra.db.db_session_manager import DbSessionManager, DbSessionType
-
-        db_mgr = DbSessionManager()
-        with db_mgr.get_session(DbSessionType.READ) as session:
+        with db_manager.get_session(DbSessionType.READ) as session:
             session.execute(text('SELECT 1'))
         return HealthCheckResult(check='db_connection', status='pass')
     except Exception as e:
@@ -182,12 +191,17 @@ def check_disk_space() -> HealthCheckResult:
         )
 
 
-def get_db_stats(session: Session | None = None) -> dict:
+def get_db_stats(
+    session: Session | None = None,
+    db_manager: 'DbSessionManager | None' = None,
+) -> dict:
     """Return database statistics for diagnostics.
 
     Args:
         session: An existing SQLAlchemy session. When *None*, one is
-            created internally via ``DbSessionManager``.
+            created internally via ``db_manager`` or ``cli_db_manager()``.
+        db_manager: An existing ``DbSessionManager``. Used when *session*
+            is None. When both are *None*, ``cli_db_manager()`` is called.
 
     Returns:
         A dict with keys: ``profiles_total``, ``profiles_with_embeddings``,
@@ -257,10 +271,13 @@ def get_db_stats(session: Session | None = None) -> dict:
         return _collect(session)
 
     try:
-        from shared.infra.db.db_session_manager import DbSessionManager, DbSessionType
+        if db_manager is None:
+            from shared.infra.db.cli_db import cli_db_manager
+            db_manager = cli_db_manager()
 
-        db_mgr = DbSessionManager()
-        with db_mgr.get_session(DbSessionType.READ) as db:
+        from shared.infra.db.db_session_manager import DbSessionType
+
+        with db_manager.get_session(DbSessionType.READ) as db:
             return _collect(db)
     except Exception:
         return stats

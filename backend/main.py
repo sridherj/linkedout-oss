@@ -11,9 +11,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
+from sqlalchemy import create_engine
+
 from shared.utilities.logger import get_logger, set_level, setup_logging
 from shared.utilities.request_logging_middleware import RequestLoggingMiddleware
 from shared.config import get_config
+from shared.infra.db.db_session_manager import DbSessionManager
 
 settings = get_config()
 from shared.auth.config import AuthConfig
@@ -73,6 +76,15 @@ async def lifespan(app: FastAPI):
     logger.info(f'Environment: {settings.environment}')
     logger.info(f'Database: {settings.database_url}')
 
+    # Create DbSessionManager and store on app.state
+    # Skip if tests pre-set db_manager (integration tests do this)
+    if not hasattr(app.state, 'db_manager'):
+        engine = create_engine(settings.database_url, echo=settings.db_echo_log)
+        app.state.db_manager = DbSessionManager(engine)
+        app.state._owns_engine = True
+    else:
+        app.state._owns_engine = False
+
     # Initialize auth
     auth_config = AuthConfig()
     init_auth(auth_config)
@@ -83,7 +95,9 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Shutdown
+    # Shutdown — dispose engine if lifespan created it
+    if app.state._owns_engine:
+        app.state.db_manager._engine.dispose()
     logger.info('Shutting down LinkedOut API...')
 
 

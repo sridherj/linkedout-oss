@@ -2,7 +2,7 @@
 """Controller for SearchTurn endpoints — CRUD at flat URL + nested listing."""
 from typing import Generator
 
-from fastapi import Depends, Query
+from fastapi import Depends, Query, Request
 
 from common.controllers.base_controller_utils import create_service_dependency
 from common.controllers.crud_router_factory import CRUDRouterConfig, create_crud_router
@@ -51,8 +51,8 @@ _get_write_search_turn_service = _result.get_write_service
 
 # -- Nested listing: GET /tenants/{tenant_id}/bus/{bu_id}/search-sessions/{session_id}/turns --
 
-def _get_read_service() -> Generator[SearchTurnService, None, None]:
-    yield from create_service_dependency(SearchTurnService, DbSessionType.READ)
+def _get_read_service(request: Request) -> Generator[SearchTurnService, None, None]:
+    yield from create_service_dependency(request, SearchTurnService, DbSessionType.READ)
 
 
 @search_turns_router.get(

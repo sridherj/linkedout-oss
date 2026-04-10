@@ -52,7 +52,6 @@ def _parse_sse_events(raw_lines: list[str]) -> list[dict]:
 
 @pytest.mark.asyncio
 @patch("linkedout.intelligence.controllers.search_controller.create_or_resume_session")
-@patch("linkedout.intelligence.controllers.search_controller.db_session_manager")
 @patch("linkedout.intelligence.controllers.search_controller.get_client")
 @patch("linkedout.intelligence.agents.search_agent.SearchAgent")
 @patch("linkedout.intelligence.explainer.why_this_person.WhyThisPersonExplainer.prepare_enrichment")
@@ -62,7 +61,6 @@ async def test_streams_multiple_explanation_events_for_large_result_sets(
     mock_prepare,
     mock_agent_cls,
     mock_langfuse,
-    mock_db,
     mock_create_session,
 ):
     """With 25 results (3 batches of 10,10,5), the SSE stream should contain 3 separate explanation events."""
@@ -87,7 +85,8 @@ async def test_streams_multiple_explanation_events_for_large_result_sets(
     mock_langfuse_client.start_as_current_observation.return_value.__exit__ = MagicMock(return_value=False)
     mock_langfuse.return_value = mock_langfuse_client
 
-    # Mock DB session manager
+    # Create mock DB manager (passed directly to _stream_search)
+    mock_db = MagicMock()
     mock_session = MagicMock()
     mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
     mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
@@ -110,7 +109,7 @@ async def test_streams_multiple_explanation_events_for_large_result_sets(
 
     # Collect all SSE lines
     sse_lines = []
-    async for line in _stream_search("t1", "bu1", "user1", request, explain=True):
+    async for line in _stream_search(mock_db, "t1", "bu1", "user1", request, explain=True):
         sse_lines.append(line)
 
     events = _parse_sse_events(sse_lines)
@@ -194,7 +193,6 @@ class TestMergeResultsWithExplanations:
 @pytest.mark.asyncio
 @patch("linkedout.intelligence.controllers.search_controller.save_session_state")
 @patch("linkedout.intelligence.controllers.search_controller.create_or_resume_session")
-@patch("linkedout.intelligence.controllers.search_controller.db_session_manager")
 @patch("linkedout.intelligence.controllers.search_controller.get_client")
 @patch("linkedout.intelligence.agents.search_agent.SearchAgent")
 @patch("linkedout.intelligence.explainer.why_this_person.WhyThisPersonExplainer.prepare_enrichment")
@@ -204,7 +202,6 @@ async def test_save_session_state_receives_accumulated_explanations(
     mock_prepare,
     mock_agent_cls,
     mock_langfuse,
-    mock_db,
     mock_create_session,
     mock_save,
 ):
@@ -226,6 +223,8 @@ async def test_save_session_state_receives_accumulated_explanations(
     mock_langfuse_client.start_as_current_observation.return_value.__exit__ = MagicMock(return_value=False)
     mock_langfuse.return_value = mock_langfuse_client
 
+    # Create mock DB manager (passed directly to _stream_search)
+    mock_db = MagicMock()
     mock_session = MagicMock()
     mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
     mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
@@ -245,16 +244,18 @@ async def test_save_session_state_receives_accumulated_explanations(
     request = SearchRequest(query="test query")
 
     # Drain the generator
-    async for _ in _stream_search("t1", "bu1", "user1", request, explain=True):
+    async for _ in _stream_search(mock_db, "t1", "bu1", "user1", request, explain=True):
         pass
 
     # Verify _save_session_state was called with explanations
+    # save_session_state(db_manager, session_id, query, turn_response, explanations)
     mock_save.assert_called_once()
     args = mock_save.call_args
-    assert args[0][0] == "sess_123"  # session_id
-    assert args[0][1] == "test query"  # user_query
-    assert args[0][2] is turn_response  # turn_response
-    all_explanations = args[0][3]  # explanations
+    assert args[0][0] is mock_db  # db_manager
+    assert args[0][1] == "sess_123"  # session_id
+    assert args[0][2] == "test query"  # user_query
+    assert args[0][3] is turn_response  # turn_response
+    all_explanations = args[0][4]  # explanations
     assert len(all_explanations) == 25
     assert "conn_000" in all_explanations
     assert all_explanations["conn_000"]["explanation"] == "Match for conn_000"
@@ -294,12 +295,20 @@ async def test_heartbeat_reaches_client_during_slow_llm():
         async for event in _original_swh(stream, interval=0.5):
             yield event
 
+    from main import app
+
+    # Pre-set db_manager on app.state so the route can use it
+    mock_db = MagicMock()
+    mock_session = MagicMock()
+    mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+    mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
+    app.state.db_manager = mock_db
+
     with (
         patch(
             "linkedout.intelligence.controllers.search_controller.create_or_resume_session",
             return_value=("sess_heartbeat", []),
         ),
-        patch("linkedout.intelligence.controllers.search_controller.db_session_manager") as mock_db,
         patch("linkedout.intelligence.controllers.search_controller.get_client") as mock_langfuse,
         patch("linkedout.intelligence.agents.search_agent.SearchAgent") as mock_agent_cls,
         patch(
@@ -318,11 +327,6 @@ async def test_heartbeat_reaches_client_during_slow_llm():
         )
         mock_langfuse.return_value = mock_langfuse_client
 
-        # Mock DB session
-        mock_session = MagicMock()
-        mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
-        mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
-
         # Mock agent — make run_turn synchronous but wrap the call in asyncio.to_thread
         # so we need the mock to sleep synchronously
         import time
@@ -334,8 +338,6 @@ async def test_heartbeat_reaches_client_during_slow_llm():
         mock_agent_instance = MagicMock()
         mock_agent_instance.run_turn.side_effect = slow_run_turn
         mock_agent_cls.return_value = mock_agent_instance
-
-        from main import app
 
         transport = ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:

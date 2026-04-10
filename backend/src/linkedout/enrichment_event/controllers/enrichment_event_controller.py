@@ -36,12 +36,12 @@ _META_FIELDS = [
 ]
 
 
-def _get_enrichment_event_service() -> Generator[EnrichmentEventService, None, None]:
-    yield from create_service_dependency(EnrichmentEventService, DbSessionType.READ)
+def _get_enrichment_event_service(request: Request) -> Generator[EnrichmentEventService, None, None]:
+    yield from create_service_dependency(request, EnrichmentEventService, DbSessionType.READ)
 
 
-def _get_write_enrichment_event_service() -> Generator[EnrichmentEventService, None, None]:
-    yield from create_service_dependency(EnrichmentEventService, DbSessionType.WRITE)
+def _get_write_enrichment_event_service(request: Request) -> Generator[EnrichmentEventService, None, None]:
+    yield from create_service_dependency(request, EnrichmentEventService, DbSessionType.WRITE)
 
 
 @enrichment_events_router.get(

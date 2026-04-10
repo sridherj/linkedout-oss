@@ -58,13 +58,14 @@ File: `src/<domain>/<entity>/controllers/<entity>_controller.py`
 
 ### Service Dependencies
 ```python
+from fastapi import Request
 from common.controllers.base_controller_utils import create_service_dependency
 
-def _get_<entity>_service() -> Generator[<Entity>Service, None, None]:
-    yield from create_service_dependency(<Entity>Service, DbSessionType.READ)
+def _get_<entity>_service(request: Request) -> Generator[<Entity>Service, None, None]:
+    yield from create_service_dependency(request, <Entity>Service, DbSessionType.READ)
 
-def _get_write_<entity>_service() -> Generator[<Entity>Service, None, None]:
-    yield from create_service_dependency(<Entity>Service, DbSessionType.WRITE)
+def _get_write_<entity>_service(request: Request) -> Generator[<Entity>Service, None, None]:
+    yield from create_service_dependency(request, <Entity>Service, DbSessionType.WRITE)
 ```
 
 **Critical**: These functions MUST be defined at module level so tests can target them with `app.dependency_overrides`.

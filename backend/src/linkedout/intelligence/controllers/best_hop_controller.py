@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncGenerator
 
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Header, Request
 from fastapi.responses import StreamingResponse
 from shared.utilities.langfuse_guard import get_client, propagate_attributes
 
@@ -22,7 +22,7 @@ from linkedout.intelligence.controllers._sse_helpers import (
     stream_with_heartbeat,
 )
 from linkedout.intelligence.services.best_hop_service import BestHopDone, BestHopService
-from shared.infra.db.db_session_manager import db_session_manager
+from shared.infra.db.db_session_manager import DbSessionManager
 from shared.utilities.logger import get_logger
 
 logger = get_logger(__name__, component="backend")
@@ -35,6 +35,7 @@ best_hop_router = APIRouter(
 
 @best_hop_router.post("/best-hop")
 async def best_hop(
+    http_request: Request,
     tenant_id: str,
     bu_id: str,
     request: BestHopRequest,
@@ -49,8 +50,9 @@ async def best_hop(
         app_user_id,
         request.mutual_urls[:5],  # first 5 for debugging
     )
+    db_manager = http_request.app.state.db_manager
     return StreamingResponse(
-        stream_with_heartbeat(_stream_best_hop(tenant_id, bu_id, app_user_id, request)),
+        stream_with_heartbeat(_stream_best_hop(db_manager, tenant_id, bu_id, app_user_id, request)),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -61,6 +63,7 @@ async def best_hop(
 
 
 async def _stream_best_hop(
+    db_manager: DbSessionManager,
     tenant_id: str,
     bu_id: str,
     app_user_id: str,
@@ -73,6 +76,7 @@ async def _stream_best_hop(
         # Create or resume session
         session_id, _ = await asyncio.to_thread(
             create_or_resume_session,
+            db_manager,
             tenant_id,
             bu_id,
             app_user_id,
@@ -93,7 +97,7 @@ async def _stream_best_hop(
                 },
             ):
                 with propagate_attributes(session_id=session_id):
-                    with db_session_manager.get_session(app_user_id=app_user_id) as db:
+                    with db_manager.get_session(app_user_id=app_user_id) as db:
                         service = BestHopService(db, app_user_id)
                         return list(service.rank(request))
 
@@ -135,6 +139,7 @@ async def _stream_best_hop(
         asyncio.get_event_loop().run_in_executor(
             None,
             _save_best_hop_session,
+            db_manager,
             session_id,
             request.target_name,
             results,
@@ -146,6 +151,7 @@ async def _stream_best_hop(
 
 
 def _save_best_hop_session(
+    db_manager: DbSessionManager,
     session_id: str,
     target_name: str,
     results: list[BestHopResultItem],
@@ -169,6 +175,7 @@ def _save_best_hop_session(
         results=search_results,
     )
     save_session_state(
+        db_manager=db_manager,
         session_id=session_id,
         user_query=f"Best hop → {target_name}",
         turn_response=turn_response,

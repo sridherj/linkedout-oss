@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from linkedout.intelligence.contracts import ConversationTurnResponse, SearchResultItem
 from linkedout.search_session.entities.search_session_entity import SearchSessionEntity
 from linkedout.search_session.services.search_session_service import SearchSessionService
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
+from shared.infra.db.db_session_manager import DbSessionManager, DbSessionType
 from shared.utilities.logger import get_logger
 
 logger = get_logger(__name__, component="backend")
@@ -59,6 +59,7 @@ async def stream_with_heartbeat(
 
 
 def create_or_resume_session(
+    db_manager: DbSessionManager,
     tenant_id: str,
     bu_id: str,
     app_user_id: str,
@@ -72,7 +73,7 @@ def create_or_resume_session(
     """
     from linkedout.search_session.entities.search_turn_entity import SearchTurnEntity
 
-    with db_session_manager.get_session(DbSessionType.WRITE) as db:
+    with db_manager.get_session(DbSessionType.WRITE) as db:
         service = SearchSessionService(db)
 
         if session_id:
@@ -126,6 +127,7 @@ def merge_results_with_explanations(
 
 
 def save_session_state(
+    db_manager: DbSessionManager,
     session_id: str,
     user_query: str,
     turn_response: ConversationTurnResponse,
@@ -135,7 +137,7 @@ def save_session_state(
     from linkedout.search_session.entities.search_turn_entity import SearchTurnEntity
     from linkedout.search_session.schemas.search_session_api_schema import UpdateSearchSessionRequestSchema
 
-    with db_session_manager.get_session(DbSessionType.WRITE) as db:
+    with db_manager.get_session(DbSessionType.WRITE) as db:
         service = SearchSessionService(db)
         existing = service.get_by_id(session_id)
         if not existing:

@@ -11,8 +11,8 @@ linked_files:
   - backend/tests/linkedout/
   - backend/tests/dev_tools/
   - backend/pytest.ini
-version: 1
-last_verified: "2026-04-09"
+version: 2
+last_verified: "2026-04-10"
 ---
 
 # Unit Tests
@@ -27,9 +27,9 @@ Provide fast, isolated unit tests for the repository, service, and controller la
 
 ### Repository Tests (SQLite)
 
-- **Shared DB for read-only tests**: Read-only tests use `shared_db_session` fixture backed by a session-scoped SQLite engine. The DB is seeded once and shared across all read-only tests. The session auto-rolls back changes at the end.
+- **Shared DB for read-only tests**: Read-only tests use `shared_db_session` fixture backed by a session-scoped SQLite engine. The `_shared_db_resources` fixture creates its own engine and passes it directly to `SeedDb` — no global mutation. The DB is seeded once and shared across all read-only tests. The session auto-rolls back changes at the end.
 
-- **Isolated DB for mutation tests**: Tests that create/update/delete use `class_scoped_isolated_db_session` or `function_scoped_isolated_db_session`. Each gets a fresh SQLite database with its own engine. Verify mutations in one test class do not affect another.
+- **Isolated DB for mutation tests**: Tests that create/update/delete use `class_scoped_isolated_db_session` or `function_scoped_isolated_db_session`. Each gets a fresh SQLite database with its own engine and creates its own `DbSessionManager(engine)` instance — no save-restore pattern. Verify mutations in one test class do not affect another.
 
 - **Custom seed config**: `@pytest.mark.seed_config(SeedDb.SeedConfig(...))` on a test class customizes what data is seeded for isolated DBs. The marker is extracted from class-level first, then node-level. Default `SeedConfig()` is used when no marker is present.
 
@@ -47,7 +47,7 @@ Provide fast, isolated unit tests for the repository, service, and controller la
 
 ### Controller Tests (Mocked Service)
 
-- **Service mocking via dependency overrides**: Controller tests mock the service layer using `create_autospec` and inject via FastAPI's `app.dependency_overrides[_get_<entity>_service]`. This replaces the service factory dependency. Tests use FastAPI's `TestClient`. Verify HTTP status codes, response schemas, and error handling.
+- **Service mocking via dependency overrides**: Controller tests mock the service layer using `create_autospec` and inject via FastAPI's `app.dependency_overrides[_get_<entity>_service]`. This replaces the service factory dependency. Controller tests mock `request.app.state.db_manager` rather than patching `db_session_manager` at module level. Tests use FastAPI's `TestClient`. Verify HTTP status codes, response schemas, and error handling.
 
 - **Shared entity endpoints**: Shared entities (Company, CrawledProfile, CompanyAlias, RoleAlias) use root-level paths (e.g., `/companies`). Tests verify CRUD without tenant/BU URL parameters.
 
@@ -83,13 +83,21 @@ Provide fast, isolated unit tests for the repository, service, and controller la
 
 ### Test Configuration (pytest.ini)
 
-- **Default addopts**: Tests run with `pytest-xdist` (`-n auto --dist=loadfile`) and exclude markers: `live_llm`, `live_langfuse`, `live_services`, `integration`, `eval`.
+- **Default addopts**: Tests run with `pytest-xdist` (`-n auto --dist=loadfile`) and exclude markers: `live_llm`, `live_langfuse`, `live_services`, `integration`, `eval`. After the DI refactor, xdist parallel execution is safe — there is no singleton contamination across workers.
 
 - **Custom markers**: `unit`, `integration`, `live_llm`, `live_langfuse`, `live_services`, `eval` are registered in `pytest.ini`. The `smoke` and `seed_config` markers are registered in `conftest.py`'s `pytest_configure`.
 
 - **Auto-marker hook**: `pytest_collection_modifyitems` adds `unit` marker to files under `repositories/` or `services/` paths, and `integration` marker to files under `controllers/` paths. Note: this auto-marker labels unit controller tests as "integration" which is misleading but is the current behavior.
 
 - **Environment**: `LINKEDOUT_ENVIRONMENT=test` is set both in pytest.ini (`env` section) and in conftest.py.
+
+### Mock Pattern Migration
+
+Post-DI-refactor, the three mock patterns for tests are:
+
+1. **Controller tests**: Mock `request.app.state.db_manager` — no more patching a module-level `db_session_manager` global.
+2. **CLI command tests**: Patch the `cli_db_manager` factory function (from `shared.infra.db.cli_db`) instead of a global singleton.
+3. **Utility tests**: Pass `db_manager` as a parameter — no patching needed.
 
 ## Decisions
 

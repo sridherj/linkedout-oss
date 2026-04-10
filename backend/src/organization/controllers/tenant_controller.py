@@ -22,7 +22,7 @@ from organization.schemas.tenants_api_schema import (
     UpdateTenantResponseSchema,
 )
 from organization.services.tenant_service import TenantService
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
+from shared.infra.db.db_session_manager import DbSessionType
 from shared.utilities.logger import get_logger
 
 logger = get_logger(__name__)
@@ -37,19 +37,22 @@ tenants_router = APIRouter(
 
 
 def _get_tenant_service(
+    request: Request,
     session_type: DbSessionType = DbSessionType.READ,
 ) -> Generator[TenantService, None, None]:
     """
     Dependency to get TenantService with appropriate session type.
 
     Args:
+        request: The FastAPI request (provides app.state.db_manager).
         session_type: Type of database session (READ or WRITE)
 
     Yields:
         TenantService: Service instance with database session
     """
     logger.debug(f'Requesting TenantService with session type: {session_type.value}')
-    with db_session_manager.get_session(session_type) as session:
+    db_manager = request.app.state.db_manager
+    with db_manager.get_session(session_type) as session:
         logger.debug(f'Session {session} acquired for TenantService')
         try:
             yield TenantService(session)
@@ -57,9 +60,9 @@ def _get_tenant_service(
             logger.debug(f'TenantService session {session} lifecycle complete')
 
 
-def _get_write_tenant_service() -> Generator[TenantService, None, None]:
+def _get_write_tenant_service(request: Request) -> Generator[TenantService, None, None]:
     """Dependency for write operations."""
-    yield from _get_tenant_service(session_type=DbSessionType.WRITE)
+    yield from _get_tenant_service(request, session_type=DbSessionType.WRITE)
 
 
 class TenantController:

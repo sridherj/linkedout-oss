@@ -44,18 +44,14 @@ class TestCheckDbConnection:
         assert result.status == 'fail'
         assert 'not configured' in result.detail
 
-    @patch('shared.infra.db.db_session_manager.DbSessionManager')
-    @patch('shared.config.get_config')
-    def test_returns_pass_on_successful_connection(self, mock_config, mock_db_cls):
+    def test_returns_pass_on_successful_connection(self):
         """Returns pass when SELECT 1 succeeds."""
-        mock_config.return_value.database_url = 'postgresql://localhost/test'
         mock_session = MagicMock()
-        mock_instance = MagicMock()
-        mock_instance.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
-        mock_instance.get_session.return_value.__exit__ = MagicMock(return_value=False)
-        mock_db_cls.return_value = mock_instance
+        mock_db = MagicMock()
+        mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
 
-        result = check_db_connection()
+        result = check_db_connection(db_manager=mock_db)
         assert result.check == 'db_connection'
         assert result.status == 'pass'
 
@@ -221,7 +217,7 @@ class TestGetDbStats:
     def test_returns_defaults_when_no_session_and_no_db(self):
         """Returns zero-valued dict when no session given and DB is unavailable."""
         with patch(
-            'shared.infra.db.db_session_manager.DbSessionManager',
+            'shared.infra.db.cli_db.cli_db_manager',
             side_effect=Exception('no db'),
         ):
             stats = get_db_stats()

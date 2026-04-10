@@ -22,7 +22,8 @@ from sqlalchemy import inspect, text
 
 from dev_tools.db.fixed_data import SYSTEM_USER_ID
 from shared.config import get_config
-from shared.infra.db.db_session_manager import db_session_manager, DbSessionType
+from shared.infra.db.cli_db import cli_db_manager
+from shared.infra.db.db_session_manager import DbSessionType
 from shared.utils.checksum import compute_sha256
 
 VERSION = "0.2.0"
@@ -245,6 +246,7 @@ def _generate_manifest(output_dir: Path, files: list[dict]) -> None:
 @click.option("--dry-run", is_flag=True, help="Show counts without writing files")
 def main(output: str, tiers: str, dry_run: bool):
     """Export seed data from PostgreSQL to pg_dump files."""
+    db_manager = cli_db_manager()
     output_dir = Path(output)
     tier_list = [t.strip() for t in tiers.split(",")]
 
@@ -264,7 +266,7 @@ def main(output: str, tiers: str, dry_run: bool):
     start = time.time()
     exported: list[dict] = []
 
-    with db_session_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
+    with db_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
         inspector = inspect(session.get_bind())
         for tier in tier_list:
             result = _export_tier(session, inspector, tier, output_dir, dry_run)

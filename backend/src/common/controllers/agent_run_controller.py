@@ -2,7 +2,7 @@
 """Controller for AgentRun endpoints using CRUDRouterFactory."""
 from typing import Annotated
 
-from fastapi import BackgroundTasks, Body, Depends
+from fastapi import BackgroundTasks, Body, Depends, Request
 
 from common.controllers.crud_router_factory import CRUDRouterConfig, create_crud_router
 from common.schemas.agent_run_schema import (
@@ -22,7 +22,7 @@ from common.schemas.agent_run_schema import (
     UpdateAgentRunResponseSchema,
 )
 from common.services.agent_run_service import AgentRunService
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
+from shared.infra.db.db_session_manager import DbSessionType
 from shared.utilities.logger import get_logger
 
 logger = get_logger(__name__)
@@ -73,6 +73,7 @@ def _run_agent_background(**kwargs) -> None:
     summary='Invoke an agent asynchronously',
 )
 def invoke_agent(
+    request: Request,
     tenant_id: str,
     bu_id: str,
     invoke_request: Annotated[InvokeAgentRequestSchema, Body()],
@@ -85,7 +86,8 @@ def invoke_agent(
     execution in the background. Returns 202 Accepted with the
     ``agent_run_id`` so the caller can poll for status.
     """
-    with db_session_manager.get_session(DbSessionType.WRITE) as session:
+    db_manager = request.app.state.db_manager
+    with db_manager.get_session(DbSessionType.WRITE) as session:
         write_service = AgentRunService(session)
         agent_run_schema = write_service.create_agent_run(
             tenant_id=tenant_id,

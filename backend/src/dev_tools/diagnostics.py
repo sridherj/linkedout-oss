@@ -74,10 +74,11 @@ def _get_linkedout_version() -> str:
 def _get_pg_version() -> str:
     """Get PostgreSQL version from DB connection or psql."""
     try:
-        from shared.infra.db.db_session_manager import DbSessionManager, DbSessionType
+        from shared.infra.db.cli_db import cli_db_manager
+        from shared.infra.db.db_session_manager import DbSessionType
         from sqlalchemy import text
 
-        db_mgr = DbSessionManager()
+        db_mgr = cli_db_manager()
         with db_mgr.get_session(DbSessionType.READ) as session:
             row = session.execute(text('SHOW server_version')).first()
             if row:
@@ -396,11 +397,12 @@ def _register_builtin_repair_hooks() -> None:
 
     def _detect_missing_affinity() -> RepairDetection:
         try:
-            from shared.infra.db.db_session_manager import DbSessionManager, DbSessionType
+            from shared.infra.db.cli_db import cli_db_manager
+            from shared.infra.db.db_session_manager import DbSessionType
             from linkedout.connection.entities.connection_entity import ConnectionEntity
             from sqlalchemy import func
 
-            db_mgr = DbSessionManager()
+            db_mgr = cli_db_manager()
             with db_mgr.get_session(DbSessionType.READ) as session:
                 count = session.execute(
                     func.count(ConnectionEntity.id).select().where(
@@ -429,7 +431,8 @@ def _register_builtin_repair_hooks() -> None:
     def _detect_stale_enrichment() -> RepairDetection:
         try:
             from shared.config import get_config
-            from shared.infra.db.db_session_manager import DbSessionManager, DbSessionType
+            from shared.infra.db.cli_db import cli_db_manager
+            from shared.infra.db.db_session_manager import DbSessionType
             from linkedout.crawled_profile.entities.crawled_profile_entity import CrawledProfileEntity
             from sqlalchemy import func
 
@@ -439,7 +442,7 @@ def _register_builtin_repair_hooks() -> None:
             from datetime import timedelta
             cutoff = datetime.now(timezone.utc) - timedelta(days=ttl_days)
 
-            db_mgr = DbSessionManager()
+            db_mgr = cli_db_manager()
             with db_mgr.get_session(DbSessionType.READ) as session:
                 count = session.execute(
                     func.count(CrawledProfileEntity.id).select().where(

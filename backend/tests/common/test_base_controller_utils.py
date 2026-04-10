@@ -213,7 +213,7 @@ class TestBuildPaginationLinks:
 class TestCreateServiceDependency:
     """Tests for the create_service_dependency factory function."""
 
-    def test_creates_service_with_read_session(self, monkeypatch):
+    def test_creates_service_with_read_session(self):
         """Verify service is created with read session."""
         mock_session = Mock()
         mock_context_manager = MagicMock()
@@ -223,11 +223,8 @@ class TestCreateServiceDependency:
         mock_db_session_manager = Mock()
         mock_db_session_manager.get_session = Mock(return_value=mock_context_manager)
 
-        # Patch the db_session_manager in the module
-        monkeypatch.setattr(
-            'common.controllers.base_controller_utils.db_session_manager',
-            mock_db_session_manager,
-        )
+        mock_request = Mock()
+        mock_request.app.state.db_manager = mock_db_session_manager
 
         # Create a mock service class
         mock_service_class = Mock()
@@ -235,14 +232,14 @@ class TestCreateServiceDependency:
         mock_service_class.return_value = mock_service_instance
 
         # Use the factory
-        gen = create_service_dependency(mock_service_class, DbSessionType.READ)
+        gen = create_service_dependency(mock_request, mock_service_class, DbSessionType.READ)
         service = next(gen)
 
         assert service == mock_service_instance
         mock_db_session_manager.get_session.assert_called_once_with(DbSessionType.READ, app_user_id=None)
         mock_service_class.assert_called_once_with(mock_session)
 
-    def test_creates_service_with_write_session(self, monkeypatch):
+    def test_creates_service_with_write_session(self):
         """Verify service is created with write session."""
         mock_session = Mock()
         mock_context_manager = MagicMock()
@@ -252,22 +249,20 @@ class TestCreateServiceDependency:
         mock_db_session_manager = Mock()
         mock_db_session_manager.get_session = Mock(return_value=mock_context_manager)
 
-        monkeypatch.setattr(
-            'common.controllers.base_controller_utils.db_session_manager',
-            mock_db_session_manager,
-        )
+        mock_request = Mock()
+        mock_request.app.state.db_manager = mock_db_session_manager
 
         mock_service_class = Mock()
         mock_service_instance = Mock()
         mock_service_class.return_value = mock_service_instance
 
-        gen = create_service_dependency(mock_service_class, DbSessionType.WRITE)
+        gen = create_service_dependency(mock_request, mock_service_class, DbSessionType.WRITE)
         service = next(gen)
 
         assert service == mock_service_instance
         mock_db_session_manager.get_session.assert_called_once_with(DbSessionType.WRITE, app_user_id=None)
 
-    def test_defaults_to_read_session(self, monkeypatch):
+    def test_defaults_to_read_session(self):
         """Verify default session type is READ."""
         mock_session = Mock()
         mock_context_manager = MagicMock()
@@ -277,19 +272,17 @@ class TestCreateServiceDependency:
         mock_db_session_manager = Mock()
         mock_db_session_manager.get_session = Mock(return_value=mock_context_manager)
 
-        monkeypatch.setattr(
-            'common.controllers.base_controller_utils.db_session_manager',
-            mock_db_session_manager,
-        )
+        mock_request = Mock()
+        mock_request.app.state.db_manager = mock_db_session_manager
 
         mock_service_class = Mock()
 
-        gen = create_service_dependency(mock_service_class)
+        gen = create_service_dependency(mock_request, mock_service_class)
         next(gen)
 
         mock_db_session_manager.get_session.assert_called_once_with(DbSessionType.READ, app_user_id=None)
 
-    def test_is_generator(self, monkeypatch):
+    def test_is_generator(self):
         """Verify the function returns a generator."""
         mock_session = Mock()
         mock_context_manager = MagicMock()
@@ -299,13 +292,11 @@ class TestCreateServiceDependency:
         mock_db_session_manager = Mock()
         mock_db_session_manager.get_session = Mock(return_value=mock_context_manager)
 
-        monkeypatch.setattr(
-            'common.controllers.base_controller_utils.db_session_manager',
-            mock_db_session_manager,
-        )
+        mock_request = Mock()
+        mock_request.app.state.db_manager = mock_db_session_manager
 
         mock_service_class = Mock()
 
-        result = create_service_dependency(mock_service_class)
+        result = create_service_dependency(mock_request, mock_service_class)
 
         assert isinstance(result, Generator)

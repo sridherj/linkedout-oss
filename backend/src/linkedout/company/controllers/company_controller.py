@@ -37,12 +37,12 @@ _META_FIELDS = [
 ]
 
 
-def _get_company_service() -> Generator[CompanyService, None, None]:
-    yield from create_service_dependency(CompanyService, DbSessionType.READ)
+def _get_company_service(request: Request) -> Generator[CompanyService, None, None]:
+    yield from create_service_dependency(request, CompanyService, DbSessionType.READ)
 
 
-def _get_write_company_service() -> Generator[CompanyService, None, None]:
-    yield from create_service_dependency(CompanyService, DbSessionType.WRITE)
+def _get_write_company_service(request: Request) -> Generator[CompanyService, None, None]:
+    yield from create_service_dependency(request, CompanyService, DbSessionType.WRITE)
 
 
 def _build_pagination_links(

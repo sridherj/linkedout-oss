@@ -29,12 +29,12 @@ startup_trackings_router = APIRouter(
 )
 
 
-def _get_service() -> Generator[StartupTrackingService, None, None]:
-    yield from create_service_dependency(StartupTrackingService, DbSessionType.READ)
+def _get_service(request: Request) -> Generator[StartupTrackingService, None, None]:
+    yield from create_service_dependency(request, StartupTrackingService, DbSessionType.READ)
 
 
-def _get_write_service() -> Generator[StartupTrackingService, None, None]:
-    yield from create_service_dependency(StartupTrackingService, DbSessionType.WRITE)
+def _get_write_service(request: Request) -> Generator[StartupTrackingService, None, None]:
+    yield from create_service_dependency(request, StartupTrackingService, DbSessionType.WRITE)
 
 
 @startup_trackings_router.get(

@@ -8,10 +8,12 @@ import click
 from sqlalchemy import text
 
 from dev_tools.db.fixed_data import SYSTEM_USER_ID
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
+from shared.infra.db.cli_db import cli_db_manager
+from shared.infra.db.db_session_manager import DbSessionType
 
 
 def main(dry_run: bool = False) -> int:
+    db_manager = cli_db_manager()
     count_sql = text("""
         SELECT COUNT(*) FROM crawled_profile WHERE full_name LIKE '%None%'
     """)
@@ -27,7 +29,7 @@ def main(dry_run: bool = False) -> int:
         WHERE full_name LIKE '%None%'
     """)
 
-    with db_session_manager.get_session(DbSessionType.READ, app_user_id=SYSTEM_USER_ID) as session:
+    with db_manager.get_session(DbSessionType.READ, app_user_id=SYSTEM_USER_ID) as session:
         affected = session.execute(count_sql).scalar()
 
     click.echo(f"Rows with 'None' in full_name: {affected}")
@@ -40,7 +42,7 @@ def main(dry_run: bool = False) -> int:
         click.echo('Nothing to fix.')
         return 0
 
-    with db_session_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
+    with db_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
         session.execute(fix_sql)
 
     click.echo(f'Fixed {affected} rows.')

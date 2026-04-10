@@ -24,7 +24,7 @@ from linkedout.crawled_profile.schemas.crawled_profile_api_schema import (
 )
 from linkedout.crawled_profile.services.crawled_profile_service import CrawledProfileService
 from linkedout.crawled_profile.services.profile_enrichment_service import ProfileEnrichmentService
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
+from shared.infra.db.db_session_manager import DbSessionType
 from shared.utilities.logger import get_logger
 from utilities.llm_manager.embedding_factory import get_embedding_provider
 
@@ -44,21 +44,25 @@ _META_FIELDS = [
 
 
 def _get_crawled_profile_service(
+    request: Request,
     app_user_id: str = Header(..., alias="X-App-User-Id"),
 ) -> Generator[CrawledProfileService, None, None]:
-    yield from create_service_dependency(CrawledProfileService, DbSessionType.READ, app_user_id=app_user_id)
+    yield from create_service_dependency(request, CrawledProfileService, DbSessionType.READ, app_user_id=app_user_id)
 
 
 def _get_write_crawled_profile_service(
+    request: Request,
     app_user_id: str = Header(..., alias="X-App-User-Id"),
 ) -> Generator[CrawledProfileService, None, None]:
-    yield from create_service_dependency(CrawledProfileService, DbSessionType.WRITE, app_user_id=app_user_id)
+    yield from create_service_dependency(request, CrawledProfileService, DbSessionType.WRITE, app_user_id=app_user_id)
 
 
 def _get_enrichment_service(
+    request: Request,
     app_user_id: str = Header(..., alias="X-App-User-Id"),
 ) -> Generator[ProfileEnrichmentService, None, None]:
-    with db_session_manager.get_session(DbSessionType.WRITE, app_user_id=app_user_id) as session:
+    db_manager = request.app.state.db_manager
+    with db_manager.get_session(DbSessionType.WRITE, app_user_id=app_user_id) as session:
         try:
             embedding_provider = get_embedding_provider()
         except Exception:

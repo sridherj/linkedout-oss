@@ -2,7 +2,7 @@
 """Controller for EnrichmentConfig endpoints."""
 from typing import Annotated, Generator
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response
 
 from organization.enrichment_config.schemas.enrichment_config_api_schema import (
     CreateEnrichmentConfigRequestSchema,
@@ -14,7 +14,7 @@ from organization.enrichment_config.schemas.enrichment_config_api_schema import 
     UpdateEnrichmentConfigResponseSchema,
 )
 from organization.enrichment_config.services.enrichment_config_service import EnrichmentConfigService
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
+from shared.infra.db.db_session_manager import DbSessionType
 from shared.utilities.logger import get_logger
 
 logger = get_logger(__name__)
@@ -26,14 +26,16 @@ enrichment_configs_router = APIRouter(
 
 
 def _get_service(
+    request: Request,
     session_type: DbSessionType = DbSessionType.READ,
 ) -> Generator[EnrichmentConfigService, None, None]:
-    with db_session_manager.get_session(session_type) as session:
+    db_manager = request.app.state.db_manager
+    with db_manager.get_session(session_type) as session:
         yield EnrichmentConfigService(session)
 
 
-def _get_write_service() -> Generator[EnrichmentConfigService, None, None]:
-    yield from _get_service(session_type=DbSessionType.WRITE)
+def _get_write_service(request: Request) -> Generator[EnrichmentConfigService, None, None]:
+    yield from _get_service(request, session_type=DbSessionType.WRITE)
 
 
 @enrichment_configs_router.get(

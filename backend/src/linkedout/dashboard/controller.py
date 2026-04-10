@@ -2,12 +2,12 @@
 """Dashboard controller — read-only network aggregation endpoint."""
 import asyncio
 
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Header, Request
 
 from linkedout.dashboard.repository import DashboardRepository
 from linkedout.dashboard.schemas import DashboardResponse
 from linkedout.dashboard.service import DashboardService
-from shared.infra.db.db_session_manager import DbSessionManager, DbSessionType
+from shared.infra.db.db_session_manager import DbSessionType
 
 dashboard_router = APIRouter(
     prefix="/tenants/{tenant_id}/bus/{bu_id}/dashboard",
@@ -17,15 +17,16 @@ dashboard_router = APIRouter(
 
 @dashboard_router.get("", response_model=DashboardResponse)
 async def get_dashboard(
+    request: Request,
     tenant_id: str,
     bu_id: str,
     app_user_id: str = Header(..., alias="X-App-User-Id"),
 ) -> DashboardResponse:
     """Return network aggregation data for the authenticated user."""
+    db_manager = request.app.state.db_manager
 
     def _run() -> DashboardResponse:
-        db = DbSessionManager()
-        with db.get_session(DbSessionType.READ, app_user_id=app_user_id) as session:
+        with db_manager.get_session(DbSessionType.READ, app_user_id=app_user_id) as session:
             repo = DashboardRepository(session)
             service = DashboardService(repo)
             return service.get_dashboard(tenant_id, bu_id, app_user_id)

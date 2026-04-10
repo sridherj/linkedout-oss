@@ -27,7 +27,8 @@ from dev_tools.wikidata_utils import (
     batch_sparql_metadata,
     wikidata_search,
 )
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
+from shared.infra.db.cli_db import cli_db_manager
+from shared.infra.db.db_session_manager import DbSessionType
 from shared.utilities.logger import get_logger
 
 logger = get_logger(__name__, component="cli")
@@ -424,13 +425,14 @@ def run_wikidata_gapfill(session, limit: int = 500) -> int:
 @click.option("--force", is_flag=True, help="Re-enrich companies that already have PDL data")
 def main(dry_run: bool, skip_wikidata: bool, pdl_file: str, wikidata_limit: int, force: bool) -> int:
     """Enrich company records from PDL CSV + Wikidata SPARQL."""
+    db_manager = cli_db_manager()
     pdl_path = Path(pdl_file)
     if not pdl_path.exists():
         click.echo(f"PDL file not found: {pdl_file}. Download from People Data Labs free dataset.", err=True)
         return 1
 
     # --- Gather targets ---
-    with db_session_manager.get_session(DbSessionType.WRITE) as session:
+    with db_manager.get_session(DbSessionType.WRITE) as session:
         if force:
             target_rows = session.execute(
                 text("SELECT id, universal_name, canonical_name FROM company")
@@ -482,7 +484,7 @@ def main(dry_run: bool, skip_wikidata: bool, pdl_file: str, wikidata_limit: int,
             items = list(matches.items())
             for batch_start in range(0, len(items), BATCH_SIZE):
                 batch = items[batch_start:batch_start + BATCH_SIZE]
-                with db_session_manager.get_session(DbSessionType.WRITE) as session:
+                with db_manager.get_session(DbSessionType.WRITE) as session:
                     batch_count = 0
                     for company_id, fields in batch:
                         try:
@@ -504,7 +506,7 @@ def main(dry_run: bool, skip_wikidata: bool, pdl_file: str, wikidata_limit: int,
     if not skip_wikidata:
         try:
             click.echo("Phase B: Wikidata gap-fill...")
-            with db_session_manager.get_session(DbSessionType.WRITE) as session:
+            with db_manager.get_session(DbSessionType.WRITE) as session:
                 wiki_count = run_wikidata_gapfill(session, limit=wikidata_limit)
             click.echo(f"Wikidata-enriched: {wiki_count}")
         except Exception:
@@ -519,7 +521,7 @@ def main(dry_run: bool, skip_wikidata: bool, pdl_file: str, wikidata_limit: int,
     click.echo(f"Wikidata-enriched: {wiki_count} ({100 * wiki_count // total if total else 0}%)")
 
     # Coverage stats
-    with db_session_manager.get_session(DbSessionType.WRITE) as session:
+    with db_manager.get_session(DbSessionType.WRITE) as session:
         coverage = session.execute(text("""
             SELECT
                 COUNT(*) AS total,

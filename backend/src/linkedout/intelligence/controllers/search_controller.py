@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncGenerator
 
-from fastapi import APIRouter, Header, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from shared.utilities.langfuse_guard import get_client
 from sqlalchemy import text
@@ -25,7 +25,7 @@ from linkedout.intelligence.controllers._sse_helpers import (
     stream_with_heartbeat,
 )
 from linkedout.intelligence.explainer.why_this_person import BATCH_SIZE, WhyThisPersonExplainer
-from shared.infra.db.db_session_manager import db_session_manager
+from shared.infra.db.db_session_manager import DbSessionManager
 from shared.utilities.logger import get_logger
 from utilities.llm_manager.embedding_factory import get_embedding_column_name, get_embedding_provider
 
@@ -76,6 +76,7 @@ LIMIT :limit
 
 @search_router.post("/search/similar/{connection_id}")
 async def find_similar(
+    request: Request,
     tenant_id: str,
     bu_id: str,
     connection_id: str,
@@ -83,11 +84,12 @@ async def find_similar(
     app_user_id: str = Header(..., alias="X-App-User-Id"),
 ) -> list[SearchResultItem]:
     """Find people similar to a given connection."""
+    db_manager = request.app.state.db_manager
 
     def _run() -> list[SearchResultItem]:
         provider = get_embedding_provider()
         col = get_embedding_column_name(provider)
-        with db_session_manager.get_session(app_user_id=app_user_id) as session:
+        with db_manager.get_session(app_user_id=app_user_id) as session:
             # Look up the connection and its profile (RLS scopes to this user)
             # col is one of two known values from application config, not user input
             row = session.execute(
@@ -156,15 +158,17 @@ LIMIT 5
 
 @search_router.get("/search/intros/{connection_id}")
 async def find_intro_paths(
+    request: Request,
     tenant_id: str,
     bu_id: str,
     connection_id: str,
     app_user_id: str = Header(..., alias="X-App-User-Id"),
 ) -> IntroPathsResponse:
     """Find mutual connections who could introduce you to target."""
+    db_manager = request.app.state.db_manager
 
     def _run() -> IntroPathsResponse:
-        with db_session_manager.get_session(app_user_id=app_user_id) as session:
+        with db_manager.get_session(app_user_id=app_user_id) as session:
             # Look up target connection (RLS scopes to this user)
             target = session.execute(
                 text(
@@ -215,6 +219,7 @@ async def find_intro_paths(
 
 @search_router.get("/search/profile/{connection_id}")
 async def get_profile(
+    request: Request,
     tenant_id: str,
     bu_id: str,
     connection_id: str,
@@ -223,9 +228,10 @@ async def get_profile(
 ) -> ProfileDetailResponse:
     """Get full profile detail for the slide-over panel (all 4 tabs)."""
     from linkedout.intelligence.tools.profile_tool import get_profile_detail
+    db_manager = request.app.state.db_manager
 
     def _run() -> ProfileDetailResponse:
-        with db_session_manager.get_session(app_user_id=app_user_id) as session:
+        with db_manager.get_session(app_user_id=app_user_id) as session:
             data = get_profile_detail(
                 connection_id=connection_id,
                 session=session,
@@ -243,6 +249,7 @@ async def get_profile(
 # ---------------------------------------------------------------------------
 
 async def _stream_search(
+    db_manager: DbSessionManager,
     tenant_id: str,
     bu_id: str,
     app_user_id: str,
@@ -258,7 +265,7 @@ async def _stream_search(
         # Create or resume session
         search_session_id, turn_history = await asyncio.to_thread(
             create_or_resume_session,
-            tenant_id, bu_id, app_user_id, request.query, request.session_id,
+            db_manager, tenant_id, bu_id, app_user_id, request.query, request.session_id,
         )
 
         yield sse_line({"type": "session", "payload": {"session_id": search_session_id}})
@@ -270,7 +277,7 @@ async def _stream_search(
                 name="search_request",
                 metadata={"session_id": search_session_id, "query": request.query},
             ):
-                with db_session_manager.get_session(app_user_id=app_user_id) as session:
+                with db_manager.get_session(app_user_id=app_user_id) as session:
                     agent = SearchAgent(
                         session=session,
                         app_user_id=app_user_id,
@@ -303,7 +310,7 @@ async def _stream_search(
 
             # Phase 1: Enrichment fetch (needs DB session, one call)
             def _prep():
-                with db_session_manager.get_session(app_user_id=app_user_id) as session:
+                with db_manager.get_session(app_user_id=app_user_id) as session:
                     return explainer.prepare_enrichment(results, session)
 
             enrichment_map = await asyncio.to_thread(_prep)
@@ -348,6 +355,7 @@ async def _stream_search(
         try:
             await asyncio.to_thread(
                 save_session_state,
+                db_manager,
                 search_session_id,
                 request.query,
                 turn_response,
@@ -365,6 +373,7 @@ async def _stream_search(
 
 @search_router.post("/search")
 async def search(
+    http_request: Request,
     tenant_id: str,
     bu_id: str,
     request: SearchRequest,
@@ -372,8 +381,9 @@ async def search(
     explain: bool = Query(default=True, description="Include 'Why This Person' explanations"),
 ):
     """SSE streaming search endpoint."""
+    db_manager = http_request.app.state.db_manager
     return StreamingResponse(
-        stream_with_heartbeat(_stream_search(tenant_id, bu_id, app_user_id, request, explain)),
+        stream_with_heartbeat(_stream_search(db_manager, tenant_id, bu_id, app_user_id, request, explain)),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

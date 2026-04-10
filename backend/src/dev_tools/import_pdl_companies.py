@@ -20,7 +20,8 @@ import click
 from sqlalchemy import text
 
 from dev_tools.db.fixed_data import SYSTEM_USER_ID
-from shared.infra.db.db_session_manager import db_session_manager, DbSessionType
+from shared.infra.db.cli_db import cli_db_manager
+from shared.infra.db.db_session_manager import DbSessionType
 
 # PDL size bracket -> (estimated_employee_count, size_tier)
 SIZE_MAP = {
@@ -95,6 +96,7 @@ def _get_existing_names(session) -> set[str]:
 @click.option('--dry-run', is_flag=True, help='Show counts without writing')
 def main(pdl_db: str, dry_run: bool):
     """Import top US/India companies from PDL SQLite into company table."""
+    db_manager = cli_db_manager()
     pdl_path = Path(pdl_db)
     start = time.time()
 
@@ -103,7 +105,7 @@ def main(pdl_db: str, dry_run: bool):
     click.echo(f'  PDL companies matching filter: {len(pdl_rows):,}')
 
     # Get existing names for dedup
-    with db_session_manager.get_session(DbSessionType.READ, app_user_id=SYSTEM_USER_ID) as session:
+    with db_manager.get_session(DbSessionType.READ, app_user_id=SYSTEM_USER_ID) as session:
         existing_names = _get_existing_names(session)
     click.echo(f'  Existing companies in DB: {len(existing_names):,}')
 
@@ -177,7 +179,7 @@ def main(pdl_db: str, dry_run: bool):
         ON CONFLICT (canonical_name) DO NOTHING
     """)
 
-    with db_session_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
+    with db_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
         for batch_start in range(0, len(to_insert), BATCH_SIZE):
             batch = to_insert[batch_start:batch_start + BATCH_SIZE]
             for row in batch:

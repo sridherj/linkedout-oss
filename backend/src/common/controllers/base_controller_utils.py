@@ -15,7 +15,7 @@ from typing import Any, Dict, Generator, Optional, Type, TypeVar
 from fastapi import Request
 
 from common.schemas.base_response_schema import PaginationLinks
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
+from shared.infra.db.db_session_manager import DbSessionType
 
 TService = TypeVar('TService')
 
@@ -102,6 +102,7 @@ def build_pagination_links(
 
 
 def create_service_dependency(
+    request: Request,
     service_class: Type[TService],
     session_type: DbSessionType = DbSessionType.READ,
     app_user_id: str | None = None,
@@ -114,6 +115,7 @@ def create_service_dependency(
     and closed) when the generator exits.
 
     Args:
+        request: The FastAPI request (provides app.state.db_manager).
         service_class: The service class to instantiate.
         session_type: The type of database session (READ or WRITE).
         app_user_id: Optional app user ID for RLS-enabled sessions.
@@ -122,11 +124,12 @@ def create_service_dependency(
         An instance of the service class connected to a database session.
 
     Example:
-        >>> def _get_lot_service() -> Generator[LotService, None, None]:
-        ...     yield from create_service_dependency(LotService, DbSessionType.READ)
+        >>> def _get_lot_service(request: Request) -> Generator[LotService, None, None]:
+        ...     yield from create_service_dependency(request, LotService, DbSessionType.READ)
         ...
-        >>> def _get_write_lot_service() -> Generator[LotService, None, None]:
-        ...     yield from create_service_dependency(LotService, DbSessionType.WRITE)
+        >>> def _get_write_lot_service(request: Request) -> Generator[LotService, None, None]:
+        ...     yield from create_service_dependency(request, LotService, DbSessionType.WRITE)
     """
-    with db_session_manager.get_session(session_type, app_user_id=app_user_id) as session:
+    db_manager = request.app.state.db_manager
+    with db_manager.get_session(session_type, app_user_id=app_user_id) as session:
         yield service_class(session)  # type: ignore[call-arg]

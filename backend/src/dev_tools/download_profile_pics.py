@@ -18,7 +18,8 @@ from sqlalchemy import text
 
 from dev_tools.db.fixed_data import SYSTEM_USER_ID
 from shared.config import get_config
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
+from shared.infra.db.cli_db import cli_db_manager
+from shared.infra.db.db_session_manager import DbSessionType
 
 IMAGES_DIR = Path(get_config().data_dir) / 'images'
 MAX_CONCURRENT = 10
@@ -52,7 +53,8 @@ def extract_image_url(raw_profile: str) -> str | None:
 
 def get_profiles_to_download(limit: int | None, retry_failed: bool) -> list[tuple[str, str, str]]:
     """Fetch (id, public_identifier, raw_profile) rows needing image download."""
-    with db_session_manager.get_session(DbSessionType.READ, app_user_id=SYSTEM_USER_ID) as session:
+    db_manager = cli_db_manager()
+    with db_manager.get_session(DbSessionType.READ, app_user_id=SYSTEM_USER_ID) as session:
         if retry_failed:
             # Re-attempt all profiles that have a profilePicture but no local image
             query = text("""
@@ -108,6 +110,7 @@ async def download_batch(
     images_dir: Path,
 ) -> dict[str, int]:
     """Download images for all profiles with concurrency limit."""
+    db_manager = cli_db_manager()
     stats = {'attempted': 0, 'success': 0, 'failed': 0, 'skipped_no_url': 0}
     semaphore = asyncio.Semaphore(MAX_CONCURRENT)
 
@@ -136,7 +139,7 @@ async def download_batch(
             failures = [(pid, err) for pid, _path, err in results if err]
 
             if successes:
-                with db_session_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
+                with db_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
                     for pid, path in successes:
                         session.execute(
                             text('UPDATE crawled_profile SET profile_image_url = :url WHERE id = :id'),

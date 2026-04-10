@@ -6,7 +6,7 @@ with no tenant/BU scoping.
 """
 from typing import Annotated, Generator
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response
 
 from linkedout.role_alias.schemas.role_alias_api_schema import (
     CreateRoleAliasRequestSchema,
@@ -20,7 +20,7 @@ from linkedout.role_alias.schemas.role_alias_api_schema import (
     UpdateRoleAliasResponseSchema,
 )
 from linkedout.role_alias.services.role_alias_service import RoleAliasService
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
+from shared.infra.db.db_session_manager import DbSessionType
 from shared.utilities.logger import get_logger
 
 logger = get_logger(__name__)
@@ -32,14 +32,16 @@ role_aliases_router = APIRouter(
 
 
 def _get_role_alias_service(
+    request: Request,
     session_type: DbSessionType = DbSessionType.READ,
 ) -> Generator[RoleAliasService, None, None]:
-    with db_session_manager.get_session(session_type) as session:
+    db_manager = request.app.state.db_manager
+    with db_manager.get_session(session_type) as session:
         yield RoleAliasService(session)
 
 
-def _get_write_role_alias_service() -> Generator[RoleAliasService, None, None]:
-    yield from _get_role_alias_service(session_type=DbSessionType.WRITE)
+def _get_write_role_alias_service(request: Request) -> Generator[RoleAliasService, None, None]:
+    yield from _get_role_alias_service(request, session_type=DbSessionType.WRITE)
 
 
 @role_aliases_router.get(

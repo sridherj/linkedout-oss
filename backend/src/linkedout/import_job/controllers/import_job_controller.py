@@ -35,12 +35,12 @@ _META_FIELDS = [
 ]
 
 
-def _get_import_job_service() -> Generator[ImportJobService, None, None]:
-    yield from create_service_dependency(ImportJobService, DbSessionType.READ)
+def _get_import_job_service(request: Request) -> Generator[ImportJobService, None, None]:
+    yield from create_service_dependency(request, ImportJobService, DbSessionType.READ)
 
 
-def _get_write_import_job_service() -> Generator[ImportJobService, None, None]:
-    yield from create_service_dependency(ImportJobService, DbSessionType.WRITE)
+def _get_write_import_job_service(request: Request) -> Generator[ImportJobService, None, None]:
+    yield from create_service_dependency(request, ImportJobService, DbSessionType.WRITE)
 
 
 @import_jobs_router.get(

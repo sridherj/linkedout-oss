@@ -11,7 +11,8 @@ from sqlalchemy import select
 
 from linkedout.intelligence.scoring.affinity_scorer import AffinityScorer
 from organization.entities.app_user_entity import AppUserEntity
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
+from shared.infra.db.cli_db import cli_db_manager
+from shared.infra.db.db_session_manager import DbSessionType
 from shared.utilities.logger import get_logger
 from shared.utilities.metrics import record_metric
 from shared.utilities.operation_report import OperationCounts, OperationReport
@@ -26,7 +27,8 @@ logger = get_logger(__name__, component="cli")
 @cli_logged("compute_affinity")
 def compute_affinity_command(dry_run: bool, force: bool):
     """Calculate affinity scores and Dunbar tiers for all connections."""
-    with db_session_manager.get_session(DbSessionType.READ) as session:
+    db_manager = cli_db_manager()
+    with db_manager.get_session(DbSessionType.READ) as session:
         user_ids = [u.id for u in session.execute(
             select(AppUserEntity).where(AppUserEntity.is_active.is_(True))
         ).scalars().all()]
@@ -40,7 +42,7 @@ def compute_affinity_command(dry_run: bool, force: bool):
     start_time = time.time()
     total = 0
     for uid in user_ids:
-        with db_session_manager.get_session(DbSessionType.WRITE, app_user_id=uid) as session:
+        with db_manager.get_session(DbSessionType.WRITE, app_user_id=uid) as session:
             scorer = AffinityScorer(session)
             count = scorer.compute_for_user(uid)
             click.echo(f'  {uid}: updated {count} connections')

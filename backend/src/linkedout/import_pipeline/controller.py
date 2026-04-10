@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Generator
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
 from common.controllers.base_controller_utils import create_service_dependency
 from linkedout.import_pipeline.service import ImportService
@@ -19,8 +19,8 @@ import_pipeline_router = APIRouter(
 )
 
 
-def _get_import_service() -> Generator[ImportService, None, None]:
-    yield from create_service_dependency(ImportService, DbSessionType.WRITE)
+def _get_import_service(request: Request) -> Generator[ImportService, None, None]:
+    yield from create_service_dependency(request, ImportService, DbSessionType.WRITE)
 
 
 @import_pipeline_router.post(
@@ -58,8 +58,8 @@ def upload_import(
     return result
 
 
-def _get_read_import_service() -> Generator[ImportService, None, None]:
-    yield from create_service_dependency(ImportService, DbSessionType.READ)
+def _get_read_import_service(request: Request) -> Generator[ImportService, None, None]:
+    yield from create_service_dependency(request, ImportService, DbSessionType.READ)
 
 
 @import_pipeline_router.get(

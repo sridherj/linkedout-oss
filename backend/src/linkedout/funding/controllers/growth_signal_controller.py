@@ -29,12 +29,12 @@ growth_signals_router = APIRouter(
 )
 
 
-def _get_service() -> Generator[GrowthSignalService, None, None]:
-    yield from create_service_dependency(GrowthSignalService, DbSessionType.READ)
+def _get_service(request: Request) -> Generator[GrowthSignalService, None, None]:
+    yield from create_service_dependency(request, GrowthSignalService, DbSessionType.READ)
 
 
-def _get_write_service() -> Generator[GrowthSignalService, None, None]:
-    yield from create_service_dependency(GrowthSignalService, DbSessionType.WRITE)
+def _get_write_service(request: Request) -> Generator[GrowthSignalService, None, None]:
+    yield from create_service_dependency(request, GrowthSignalService, DbSessionType.WRITE)
 
 
 @growth_signals_router.get(

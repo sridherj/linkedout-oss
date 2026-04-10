@@ -10,11 +10,13 @@ from sqlalchemy import select
 from linkedout.crawled_profile.entities.crawled_profile_entity import CrawledProfileEntity
 from linkedout.role_alias.repositories.role_alias_repository import RoleAliasRepository
 from dev_tools.db.fixed_data import SYSTEM_USER_ID
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
+from shared.infra.db.cli_db import cli_db_manager
+from shared.infra.db.db_session_manager import DbSessionType
 
 
 def main(dry_run: bool = False, limit: int = 0) -> int:
-    with db_session_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
+    db_manager = cli_db_manager()
+    with db_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
         query = (
             select(CrawledProfileEntity)
             .where(

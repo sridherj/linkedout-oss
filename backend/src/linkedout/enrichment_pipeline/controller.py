@@ -8,7 +8,7 @@ from typing import Generator, Optional
 
 import requests as http_requests
 from cryptography.fernet import Fernet
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -20,7 +20,7 @@ from linkedout.enrichment_event.entities.enrichment_event_entity import Enrichme
 from linkedout.enrichment_pipeline.schemas import EnrichTriggerRequest, EnrichTriggerResponse
 from shared.config import get_config
 from organization.enrichment_config.entities.enrichment_config_entity import EnrichmentConfigEntity
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
+from shared.infra.db.db_session_manager import DbSessionType
 from shared.utilities.logger import get_logger
 from shared.utilities.metrics import record_metric
 
@@ -265,12 +265,14 @@ class _EnrichmentTriggerService:
     response_model=EnrichTriggerResponse,
 )
 def trigger_enrichment(
+    http_request: Request,
     tenant_id: str,
     bu_id: str,
     request: EnrichTriggerRequest,
 ) -> EnrichTriggerResponse:
     """Trigger enrichment for selected profiles, connections, or all unenriched."""
-    with db_session_manager.get_session(DbSessionType.WRITE, app_user_id=request.app_user_id) as session:
+    db_manager = http_request.app.state.db_manager
+    with db_manager.get_session(DbSessionType.WRITE, app_user_id=request.app_user_id) as session:
         service = _EnrichmentTriggerService(session)
         return service.trigger_enrichment(tenant_id, bu_id, request)
 
@@ -357,12 +359,12 @@ class _ByokKeyService:
         )
 
 
-def _get_byok_service() -> Generator[_ByokKeyService, None, None]:
-    yield from create_service_dependency(_ByokKeyService, DbSessionType.WRITE)
+def _get_byok_service(request: Request) -> Generator[_ByokKeyService, None, None]:
+    yield from create_service_dependency(request, _ByokKeyService, DbSessionType.WRITE)
 
 
-def _get_byok_read_service() -> Generator[_ByokKeyService, None, None]:
-    yield from create_service_dependency(_ByokKeyService, DbSessionType.READ)
+def _get_byok_read_service(request: Request) -> Generator[_ByokKeyService, None, None]:
+    yield from create_service_dependency(request, _ByokKeyService, DbSessionType.READ)
 
 
 @enrichment_pipeline_router.put(
@@ -492,8 +494,8 @@ class _EnrichmentStatsService:
         )
 
 
-def _get_stats_service() -> Generator[_EnrichmentStatsService, None, None]:
-    yield from create_service_dependency(_EnrichmentStatsService, DbSessionType.READ)
+def _get_stats_service(request: Request) -> Generator[_EnrichmentStatsService, None, None]:
+    yield from create_service_dependency(request, _EnrichmentStatsService, DbSessionType.READ)
 
 
 @enrichment_pipeline_router.get(

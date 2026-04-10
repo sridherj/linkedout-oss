@@ -17,8 +17,8 @@ linked_files:
   - backend/src/shared/test_utils/seeders/base_seeder.py
   - backend/src/shared/test_utils/seeders/seed_config.py
   - backend/src/dev_tools/db/fixed_data.py
-version: 1
-last_verified: "2026-04-09"
+version: 2
+last_verified: "2026-04-10"
 ---
 
 # Integration Tests
@@ -49,7 +49,7 @@ Provide full-stack integration tests that run against a real PostgreSQL database
 
 - **Entity seeding**: Uses `BaseSeeder` with `EntityFactory` and `SeedConfig(tables=['*'])` to populate all tables with deterministic test data. Fixed data from `dev_tools.db.fixed_data` provides the primary tenant/BU/user IDs. Covers organization entities (Tenant, BU, AppUser, AppUserTenantRole, EnrichmentConfig), agent infrastructure (AgentRun), and LinkedOut domain entities (Company, CompanyAlias, RoleAlias, CrawledProfile, Experience, Education, ProfileSkill, Connection, ImportJob, ContactSource, EnrichmentEvent).
 
-- **TestClient**: FastAPI `TestClient` is configured by setting `db_session_manager.set_engine()` to the integration test engine. The app is imported after DB configuration to ensure middleware uses the test engine.
+- **TestClient**: FastAPI `TestClient` is configured by setting `app.state.db_manager = DbSessionManager(integration_db_engine)` before `TestClient(app)` context entry. The lifespan's `hasattr(app.state, 'db_manager')` check skips creating a second manager. The app is imported after DB configuration to ensure middleware uses the test engine.
 
 - **Fixed data IDs**: `test_tenant_id` returns `fixed_data.FIXED_TENANT['id']` and `test_bu_id` returns `fixed_data.FIXED_BUS[0]['id']`. These are used in URL path parameters for scoped entity requests.
 
@@ -83,7 +83,7 @@ The RLS tests (`test_rls_isolation.py`) verify that PostgreSQL Row-Level Securit
 
 - **Teardown contract**: On module teardown, `rls_policies_applied` drops all policies and disables RLS. Other test modules see no RLS side effects.
 
-- **RLS context via `get_session(app_user_id=...)`**: Tests set the RLS session variable by passing `app_user_id` to `db_session_manager.get_session()`, which calls `set_config('app.current_user_id', ...)` on the transaction. This matches production behavior.
+- **RLS context via `get_session(app_user_id=...)`**: Tests set the RLS session variable by passing `app_user_id` to the local `DbSessionManager` instance's `get_session()`, which calls `set_config('app.current_user_id', ...)` on the transaction. The `db_manager` is obtained from the fixture, not a global. This matches production behavior.
 
 - **Test categories**: Cross-user isolation (two users see only their own data), fail-closed (unset session variable returns 0 rows), reference data (company/company_alias not RLS-protected), complex queries (RLS across JOINs and CTEs).
 
@@ -127,6 +127,7 @@ The RLS tests (`test_rls_isolation.py`) verify that PostgreSQL Row-Level Securit
 | 2026-04-09 | RLS fixture scope | Module-scoped | Session-scoped | FORCE RLS affects the table owner too -- session scope would break all other tests that query RLS-protected tables |
 | 2026-04-09 | RLS DDL execution | Same session (`integration_db_session`) | New connection | Avoids AccessExclusive lock deadlock with the session-scoped transaction |
 | 2026-04-09 | RLS context mechanism | `get_session(app_user_id=...)` | Separate search engine | Single engine, RLS set per-session via `set_config`. Simpler, no second connection pool |
+| 2026-04-10 | Session manager wiring | App-state DI | Singleton `set_engine` | Singleton mutation caused non-deterministic xdist failures |
 
 ## Not Included
 

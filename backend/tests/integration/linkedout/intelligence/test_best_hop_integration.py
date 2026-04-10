@@ -369,10 +369,10 @@ class TestBestHopStreamsIncrementally:
         """
         import httpx
         from httpx._transports.asgi import ASGITransport
-        from shared.infra.db.db_session_manager import db_session_manager
-
-        db_session_manager.set_engine(integration_db_engine)
+        from shared.infra.db.db_session_manager import DbSessionManager
         from main import app
+
+        app.state.db_manager = DbSessionManager(integration_db_engine)
 
         data = best_hop_test_data
         user_a = data["user_a"]
@@ -429,10 +429,10 @@ class TestBestHopStreamsIncrementally:
         import httpx
         from httpx._transports.asgi import ASGITransport
         from linkedout.intelligence.services.best_hop_service import BestHopDone, BestHopResultItem
-        from shared.infra.db.db_session_manager import db_session_manager
-
-        db_session_manager.set_engine(integration_db_engine)
+        from shared.infra.db.db_session_manager import DbSessionManager
         from main import app
+
+        app.state.db_manager = DbSessionManager(integration_db_engine)
 
         data = best_hop_test_data
         user_a = data["user_a"]

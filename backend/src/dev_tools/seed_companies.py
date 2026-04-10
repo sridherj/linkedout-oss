@@ -19,7 +19,8 @@ from pathlib import Path
 import click
 from sqlalchemy import text
 
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
+from shared.infra.db.cli_db import cli_db_manager
+from shared.infra.db.db_session_manager import DbSessionType
 from shared.utils.company_matcher import normalize_company_name
 
 YC_API_URL = 'https://yc-oss.github.io/api/companies/all.json'
@@ -95,6 +96,7 @@ def domain_from_website(url):
 
 def import_yc_companies(dry_run: bool) -> dict[str, int]:
     """Fetch YC companies from yc-oss API and upsert into company table."""
+    db_manager = cli_db_manager()
     click.echo(f'Fetching YC companies from {YC_API_URL}...')
     with urllib.request.urlopen(YC_API_URL) as resp:
         data = json.loads(resp.read().decode())
@@ -108,7 +110,7 @@ def import_yc_companies(dry_run: bool) -> dict[str, int]:
     updated = 0
     skipped = 0
 
-    with db_session_manager.get_session(DbSessionType.WRITE) as session:
+    with db_manager.get_session(DbSessionType.WRITE) as session:
         # Pre-load existing companies by normalized_name for fast lookup
         existing_rows = session.execute(text(
             "SELECT id, canonical_name, normalized_name, enrichment_sources FROM company"
@@ -228,6 +230,7 @@ def normalize_linkedin_company_url(url: str) -> str | None:
 
 def pdl_cross_reference(pdl_csv_path: str, dry_run: bool) -> dict[str, int]:
     """Import PDL CSV into temp SQLite, cross-reference companies by linkedin_url."""
+    db_manager = cli_db_manager()
     csv_path = Path(pdl_csv_path)
     if not csv_path.exists():
         click.echo(f'  PDL CSV not found: {csv_path}')
@@ -242,7 +245,7 @@ def pdl_cross_reference(pdl_csv_path: str, dry_run: bool) -> dict[str, int]:
     try:
         # Step 1: Get all company linkedin_urls from our DB
         click.echo('  Fetching company linkedin_urls from DB...')
-        with db_session_manager.get_session(DbSessionType.READ) as session:
+        with db_manager.get_session(DbSessionType.READ) as session:
             rows = session.execute(text(
                 "SELECT id, linkedin_url FROM company "
                 "WHERE linkedin_url IS NOT NULL AND linkedin_url != ''"
@@ -305,7 +308,7 @@ def pdl_cross_reference(pdl_csv_path: str, dry_run: bool) -> dict[str, int]:
 
         # Step 4: Update matched companies
         enriched = 0
-        with db_session_manager.get_session(DbSessionType.WRITE) as session:
+        with db_manager.get_session(DbSessionType.WRITE) as session:
             for norm_url, pdl_data in matched_data.items():
                 company_id = our_companies[norm_url]
                 session.execute(text(

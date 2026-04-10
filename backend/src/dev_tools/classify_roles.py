@@ -16,7 +16,8 @@ from sqlalchemy import text
 
 from dev_tools.db.fixed_data import SYSTEM_USER_ID
 from shared.common.nanoids import Nanoid
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
+from shared.infra.db.cli_db import cli_db_manager
+from shared.infra.db.db_session_manager import DbSessionType
 
 # --- Seniority classification: first-match-wins, ordered by structural seniority ---
 
@@ -100,8 +101,9 @@ def main(dry_run: bool = False) -> int:
 
     Returns 0 on success, 1 on failure.
     """
+    db_manager = cli_db_manager()
     try:
-        with db_session_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
+        with db_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
             # Step 1: Extract distinct titles
             rows = session.execute(text("""
                 SELECT DISTINCT title FROM (

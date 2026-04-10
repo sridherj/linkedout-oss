@@ -19,7 +19,8 @@ from sqlalchemy.orm import Session
 from linkedout.connection.entities.connection_entity import ConnectionEntity
 from linkedout.crawled_profile.entities.crawled_profile_entity import CrawledProfileEntity
 from dev_tools.db.fixed_data import SYSTEM_USER_ID
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
+from shared.infra.db.cli_db import cli_db_manager
+from shared.infra.db.db_session_manager import DbSessionType
 from shared.utils.date_parsing import parse_linkedin_csv_date
 from shared.utils.linkedin_url import normalize_linkedin_url
 from shared.utilities.logger import get_logger
@@ -184,6 +185,7 @@ def load_csv_batch(
 @cli_logged("import_connections")
 def import_connections_command(csv_file: str, fmt: str, dry_run: bool, batch_size: int):
     """Import LinkedIn connections from CSV export."""
+    db_manager = cli_db_manager()
     start_time = time.time()
 
     if csv_file:
@@ -212,7 +214,7 @@ def import_connections_command(csv_file: str, fmt: str, dry_run: bool, batch_siz
 
     # Build URL index
     click.echo('Building crawled_profile URL index...')
-    with db_session_manager.get_session(DbSessionType.READ, app_user_id=SYSTEM_USER_ID) as session:
+    with db_manager.get_session(DbSessionType.READ, app_user_id=SYSTEM_USER_ID) as session:
         url_index = build_linkedin_url_index(session)
     click.echo(f'  -> {len(url_index)} existing profiles indexed')
 
@@ -224,7 +226,7 @@ def import_connections_command(csv_file: str, fmt: str, dry_run: bool, batch_siz
     for i in range(0, len(rows), batch_size):
         batch = rows[i:i + batch_size]
 
-        with db_session_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
+        with db_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
             counts = load_csv_batch(session, batch, url_index, now)
 
         for k in totals:

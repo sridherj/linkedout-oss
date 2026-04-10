@@ -53,7 +53,7 @@ class TestDetectPlatforms:
         claude = [p for p in platforms if p.name == "Claude Code"][0]
 
         assert claude.config_dir == tmp_path / ".claude"
-        assert claude.skill_install_dir == tmp_path / ".claude" / "skills" / "linkedout"
+        assert claude.skill_install_dir == tmp_path / ".claude" / "skills"
 
 
 class TestGenerateSkills:

@@ -25,7 +25,8 @@ from linkedout.experience.entities.experience_entity import ExperienceEntity
 from linkedout.import_pipeline.merge import merge_stub_into_connection
 from linkedout.intelligence.scoring.affinity_scorer import AffinityScorer
 from organization.entities.app_user_entity import AppUserEntity
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
+from shared.infra.db.cli_db import cli_db_manager
+from shared.infra.db.db_session_manager import DbSessionType
 
 MIN_FIRST_NAME_LEN = 3
 
@@ -239,8 +240,9 @@ def _save_log(merge_log: list[dict], user_id: str) -> str:
 
 
 def main(user_id: str | None = None, dry_run: bool = False) -> int:
+    db_manager = cli_db_manager()
     # First, resolve users without RLS (app_user table has no RLS)
-    with db_session_manager.get_session(DbSessionType.READ) as session:
+    with db_manager.get_session(DbSessionType.READ) as session:
         if user_id:
             user = session.get(AppUserEntity, user_id)
             if not user:
@@ -259,7 +261,7 @@ def main(user_id: str | None = None, dry_run: bool = False) -> int:
 
     # Process each user in a separate session with RLS context
     for uid in user_ids:
-        with db_session_manager.get_session(DbSessionType.WRITE, app_user_id=uid) as session:
+        with db_manager.get_session(DbSessionType.WRITE, app_user_id=uid) as session:
             merge_log = reconcile_for_user(session, uid, dry_run=dry_run)
             tier_1 = sum(1 for e in merge_log if e['tier'] == 'tier_1')
             tier_2 = sum(1 for e in merge_log if e['tier'] == 'tier_2')

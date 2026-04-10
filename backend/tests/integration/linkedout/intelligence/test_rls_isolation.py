@@ -17,7 +17,7 @@ RLS policies these tests mirror.
 import pytest
 from sqlalchemy import text
 
-from shared.infra.db.db_session_manager import db_session_manager
+from shared.infra.db.db_session_manager import DbSessionManager
 
 pytestmark = [
     pytest.mark.integration,
@@ -25,14 +25,20 @@ pytestmark = [
 ]
 
 
+@pytest.fixture(scope='session')
+def rls_db_manager(integration_db_engine):
+    """Create a DbSessionManager for RLS tests."""
+    return DbSessionManager(integration_db_engine)
+
+
 class TestRLSCrossUserIsolation:
     """Verify that two different users see only their own data."""
 
     def test_user_a_sees_own_connections(
-        self, intelligence_test_data
+        self, intelligence_test_data, rls_db_manager
     ):
         user_a = intelligence_test_data['user_a']
-        with db_session_manager.get_session(app_user_id=user_a.id) as session:
+        with rls_db_manager.get_session(app_user_id=user_a.id) as session:
             result = session.execute(
                 text("SELECT COUNT(*) FROM connection")
             ).scalar()
@@ -40,10 +46,10 @@ class TestRLSCrossUserIsolation:
             assert result == 20
 
     def test_user_b_sees_own_connections(
-        self, intelligence_test_data
+        self, intelligence_test_data, rls_db_manager
     ):
         user_b = intelligence_test_data['user_b']
-        with db_session_manager.get_session(app_user_id=user_b.id) as session:
+        with rls_db_manager.get_session(app_user_id=user_b.id) as session:
             result = session.execute(
                 text("SELECT COUNT(*) FROM connection")
             ).scalar()
@@ -51,10 +57,10 @@ class TestRLSCrossUserIsolation:
             assert result == 5
 
     def test_user_a_cannot_see_user_b_profiles(
-        self, intelligence_test_data
+        self, intelligence_test_data, rls_db_manager
     ):
         user_a = intelligence_test_data['user_a']
-        with db_session_manager.get_session(app_user_id=user_a.id) as session:
+        with rls_db_manager.get_session(app_user_id=user_a.id) as session:
             result = session.execute(
                 text(
                     "SELECT COUNT(*) FROM crawled_profile cp "
@@ -64,10 +70,10 @@ class TestRLSCrossUserIsolation:
             assert result == 0
 
     def test_user_b_cannot_see_user_a_profiles(
-        self, intelligence_test_data
+        self, intelligence_test_data, rls_db_manager
     ):
         user_b = intelligence_test_data['user_b']
-        with db_session_manager.get_session(app_user_id=user_b.id) as session:
+        with rls_db_manager.get_session(app_user_id=user_b.id) as session:
             result = session.execute(
                 text(
                     "SELECT COUNT(*) FROM crawled_profile cp "
@@ -80,12 +86,12 @@ class TestRLSCrossUserIsolation:
 class TestRLSFailClosed:
     """Verify fail-closed behavior when session variable is not set."""
 
-    def test_no_session_var_returns_zero_rows(self):
+    def test_no_session_var_returns_zero_rows(self, rls_db_manager):
         """Without set_config, the session variable defaults to empty string.
         NULLIF converts '' to NULL, and uuid cast of NULL returns NULL,
         so no rows match."""
-        # Use the search engine directly without setting the session variable
-        factory = db_session_manager._SessionLocal
+        # Use the session factory directly without setting the session variable
+        factory = rls_db_manager._SessionLocal
         if not factory:
             pytest.skip("No session factory available")
 
@@ -108,9 +114,9 @@ class TestRLSFailClosed:
 class TestRLSReferenceDataAccessible:
     """Verify company and company_alias are NOT RLS-protected."""
 
-    def test_company_accessible_without_user_context(self):
+    def test_company_accessible_without_user_context(self, rls_db_manager):
         """company table should be readable regardless of session variable."""
-        factory = db_session_manager._SessionLocal
+        factory = rls_db_manager._SessionLocal
         if not factory:
             pytest.skip("No session factory available")
 
@@ -125,9 +131,9 @@ class TestRLSReferenceDataAccessible:
             session.rollback()
             session.close()
 
-    def test_company_alias_accessible_without_user_context(self):
+    def test_company_alias_accessible_without_user_context(self, rls_db_manager):
         """company_alias table should be readable regardless of session variable."""
-        factory = db_session_manager._SessionLocal
+        factory = rls_db_manager._SessionLocal
         if not factory:
             pytest.skip("No session factory available")
 
@@ -147,11 +153,11 @@ class TestRLSAcrossQueryPatterns:
     """Verify RLS works correctly across complex query patterns."""
 
     def test_join_through_experience(
-        self, intelligence_test_data
+        self, intelligence_test_data, rls_db_manager
     ):
         """Experience data is scoped to user's connected profiles."""
         user_a = intelligence_test_data['user_a']
-        with db_session_manager.get_session(app_user_id=user_a.id) as session:
+        with rls_db_manager.get_session(app_user_id=user_a.id) as session:
             result = session.execute(
                 text(
                     "SELECT COUNT(*) FROM experience e "
@@ -161,11 +167,11 @@ class TestRLSAcrossQueryPatterns:
             assert result > 0, "User A should see experiences for their connected profiles"
 
     def test_cte_respects_rls(
-        self, intelligence_test_data
+        self, intelligence_test_data, rls_db_manager
     ):
         """CTE queries are filtered by RLS."""
         user_a = intelligence_test_data['user_a']
-        with db_session_manager.get_session(app_user_id=user_a.id) as session:
+        with rls_db_manager.get_session(app_user_id=user_a.id) as session:
             result = session.execute(
                 text(
                     "WITH profile_count AS ("
@@ -177,11 +183,11 @@ class TestRLSAcrossQueryPatterns:
             assert result == 20
 
     def test_direct_profile_access_scoped(
-        self, intelligence_test_data
+        self, intelligence_test_data, rls_db_manager
     ):
         """Direct crawled_profile query without JOIN is still scoped by RLS."""
         user_a = intelligence_test_data['user_a']
-        with db_session_manager.get_session(app_user_id=user_a.id) as session:
+        with rls_db_manager.get_session(app_user_id=user_a.id) as session:
             result = session.execute(
                 text("SELECT COUNT(*) FROM crawled_profile")
             ).scalar()

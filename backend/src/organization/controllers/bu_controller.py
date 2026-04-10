@@ -22,7 +22,7 @@ from organization.schemas.bus_api_schema import (
     UpdateBuResponseSchema,
 )
 from organization.services.bu_service import BuService
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
+from shared.infra.db.db_session_manager import DbSessionType
 from shared.utilities.logger import get_logger
 
 logger = get_logger(__name__)
@@ -37,19 +37,22 @@ bus_router = APIRouter(
 
 
 def _get_bu_service(
+    request: Request,
     session_type: DbSessionType = DbSessionType.READ,
 ) -> Generator[BuService, None, None]:
     """
     Dependency to get BuService with appropriate session type.
 
     Args:
+        request: The FastAPI request (provides app.state.db_manager).
         session_type: Type of database session (READ or WRITE)
 
     Yields:
         BuService: Service instance with database session
     """
     logger.debug(f'Requesting BuService with session type: {session_type.value}')
-    with db_session_manager.get_session(session_type) as session:
+    db_manager = request.app.state.db_manager
+    with db_manager.get_session(session_type) as session:
         logger.debug(f'Session {session} acquired for BuService')
         try:
             yield BuService(session)
@@ -57,9 +60,9 @@ def _get_bu_service(
             logger.debug(f'BuService session {session} lifecycle complete')
 
 
-def _get_write_bu_service() -> Generator[BuService, None, None]:
+def _get_write_bu_service(request: Request) -> Generator[BuService, None, None]:
     """Dependency for write operations."""
-    yield from _get_bu_service(session_type=DbSessionType.WRITE)
+    yield from _get_bu_service(request, session_type=DbSessionType.WRITE)
 
 
 class BuController:

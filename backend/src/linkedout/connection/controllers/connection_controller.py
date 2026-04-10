@@ -39,13 +39,14 @@ _META_FIELDS = [
 
 
 def _get_connection_service(
+    request: Request,
     app_user_id: str = Header(..., alias="X-App-User-Id"),
 ) -> Generator[ConnectionService, None, None]:
-    yield from create_service_dependency(ConnectionService, DbSessionType.READ, app_user_id=app_user_id)
+    yield from create_service_dependency(request, ConnectionService, DbSessionType.READ, app_user_id=app_user_id)
 
 
-def _get_write_connection_service() -> Generator[ConnectionService, None, None]:
-    yield from create_service_dependency(ConnectionService, DbSessionType.WRITE)
+def _get_write_connection_service(request: Request) -> Generator[ConnectionService, None, None]:
+    yield from create_service_dependency(request, ConnectionService, DbSessionType.WRITE)
 
 
 @connections_router.get(

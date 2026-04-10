@@ -11,7 +11,8 @@ Usage:
 import sys
 
 from shared.utilities.logger import get_logger
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
+from shared.infra.db.cli_db import cli_db_manager
+from shared.infra.db.db_session_manager import DbSessionType
 
 # Organization entities
 from organization.entities.tenant_entity import TenantEntity
@@ -27,9 +28,10 @@ logger = get_logger(__name__)
 
 def verify_seed():
     """Verify that the database has been seeded."""
+    db_manager = cli_db_manager()
     logger.info("Verifying database seed...")
 
-    with db_session_manager.get_session(DbSessionType.READ) as session:
+    with db_manager.get_session(DbSessionType.READ) as session:
         # Count all entities
         counts = {
             'Tenants': session.query(TenantEntity).count(),

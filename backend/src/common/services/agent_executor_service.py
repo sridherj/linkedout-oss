@@ -8,7 +8,8 @@ from typing import Dict, Optional, Type
 from common.schemas.agent_run_schema import AgentRunStatus
 from common.services.agent_run_service import AgentRunService
 from common.services.base_agent import BaseAgent
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
+from shared.infra.db.cli_db import cli_db_manager
+from shared.infra.db.db_session_manager import DbSessionType
 from shared.utilities.logger import get_logger
 
 logger = get_logger(__name__)
@@ -79,7 +80,8 @@ def execute_agent(
     """
     try:
         # 1. Create AgentRun record (if needed) and update to RUNNING
-        with db_session_manager.get_session(DbSessionType.WRITE) as session:
+        db_manager = cli_db_manager()
+        with db_manager.get_session(DbSessionType.WRITE) as session:
             service = AgentRunService(session)
             if agent_run_id is None:
                 agent_run_schema = service.create_agent_run(
@@ -102,7 +104,8 @@ def execute_agent(
         if agent_class is None:
             raise ValueError(f'Unknown agent type: {agent_type}')
 
-        with db_session_manager.get_session(DbSessionType.WRITE) as session:
+        db_manager = cli_db_manager()
+        with db_manager.get_session(DbSessionType.WRITE) as session:
             agent = agent_class(session)
             agent.run(
                 tenant_id=tenant_id,
@@ -113,7 +116,8 @@ def execute_agent(
             llm_metrics = agent.get_llm_metrics()
 
         # 3. Update to COMPLETED with LLM metrics
-        with db_session_manager.get_session(DbSessionType.WRITE) as session:
+        db_manager = cli_db_manager()
+        with db_manager.get_session(DbSessionType.WRITE) as session:
             service = AgentRunService(session)
             service.update_status(
                 tenant_id=tenant_id,
@@ -131,7 +135,8 @@ def execute_agent(
         logger.error(f'Agent run {agent_run_id} failed: {e}')
         if agent_run_id:
             try:
-                with db_session_manager.get_session(DbSessionType.WRITE) as session:
+                db_manager = cli_db_manager()
+                with db_manager.get_session(DbSessionType.WRITE) as session:
                     service = AgentRunService(session)
                     service.update_status(
                         tenant_id=tenant_id,

@@ -63,10 +63,9 @@ class TestBestHopController:
     @pytest.mark.asyncio
     @patch("linkedout.intelligence.controllers.best_hop_controller.save_session_state")
     @patch("linkedout.intelligence.controllers.best_hop_controller.create_or_resume_session")
-    @patch("linkedout.intelligence.controllers.best_hop_controller.db_session_manager")
     @patch("linkedout.intelligence.controllers.best_hop_controller.BestHopService")
     async def test_returns_sse_stream(
-        self, mock_service_cls, mock_db, mock_create_session, mock_save,
+        self, mock_service_cls, mock_create_session, mock_save,
     ):
         """Verify response is text/event-stream with correct SSE format."""
         from linkedout.intelligence.controllers.best_hop_controller import _stream_best_hop
@@ -78,13 +77,14 @@ class TestBestHopController:
         mock_service.rank.return_value = items
         mock_service_cls.return_value = mock_service
 
+        mock_db = MagicMock()
         mock_session = MagicMock()
         mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
 
         request = _make_request()
         sse_lines = []
-        async for line in _stream_best_hop("t1", "bu1", "usr_001", request):
+        async for line in _stream_best_hop(mock_db, "t1", "bu1", "usr_001", request):
             sse_lines.append(line)
 
         events = _parse_sse_events(sse_lines)
@@ -96,10 +96,9 @@ class TestBestHopController:
     @pytest.mark.asyncio
     @patch("linkedout.intelligence.controllers.best_hop_controller.save_session_state")
     @patch("linkedout.intelligence.controllers.best_hop_controller.create_or_resume_session")
-    @patch("linkedout.intelligence.controllers.best_hop_controller.db_session_manager")
     @patch("linkedout.intelligence.controllers.best_hop_controller.BestHopService")
     async def test_event_sequence(
-        self, mock_service_cls, mock_db, mock_create_session, mock_save,
+        self, mock_service_cls, mock_create_session, mock_save,
     ):
         """Mock service yielding 3 results. Verify SSE events: thinking, session, thinking, result x3, done."""
         from linkedout.intelligence.controllers.best_hop_controller import _stream_best_hop
@@ -116,13 +115,14 @@ class TestBestHopController:
         mock_service.rank.return_value = items
         mock_service_cls.return_value = mock_service
 
+        mock_db = MagicMock()
         mock_session = MagicMock()
         mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
 
         request = _make_request()
         sse_lines = []
-        async for line in _stream_best_hop("t1", "bu1", "usr_001", request):
+        async for line in _stream_best_hop(mock_db, "t1", "bu1", "usr_001", request):
             sse_lines.append(line)
 
         events = _parse_sse_events(sse_lines)
@@ -146,10 +146,9 @@ class TestBestHopController:
     @pytest.mark.asyncio
     @patch("linkedout.intelligence.controllers.best_hop_controller.save_session_state")
     @patch("linkedout.intelligence.controllers.best_hop_controller.create_or_resume_session")
-    @patch("linkedout.intelligence.controllers.best_hop_controller.db_session_manager")
     @patch("linkedout.intelligence.controllers.best_hop_controller.BestHopService")
     async def test_error_yields_error_event(
-        self, mock_service_cls, mock_db, mock_create_session, mock_save,
+        self, mock_service_cls, mock_create_session, mock_save,
     ):
         """Service raises exception → SSE error event emitted."""
         from linkedout.intelligence.controllers.best_hop_controller import _stream_best_hop
@@ -161,13 +160,14 @@ class TestBestHopController:
         mock_service.rank.side_effect = ValueError("Target not found in DB")
         mock_service_cls.return_value = mock_service
 
+        mock_db = MagicMock()
         mock_session = MagicMock()
         mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
 
         request = _make_request()
         sse_lines = []
-        async for line in _stream_best_hop("t1", "bu1", "usr_001", request):
+        async for line in _stream_best_hop(mock_db, "t1", "bu1", "usr_001", request):
             sse_lines.append(line)
 
         events = _parse_sse_events(sse_lines)

@@ -30,12 +30,12 @@ funding_rounds_router = APIRouter(
 )
 
 
-def _get_service() -> Generator[FundingRoundService, None, None]:
-    yield from create_service_dependency(FundingRoundService, DbSessionType.READ)
+def _get_service(request: Request) -> Generator[FundingRoundService, None, None]:
+    yield from create_service_dependency(request, FundingRoundService, DbSessionType.READ)
 
 
-def _get_write_service() -> Generator[FundingRoundService, None, None]:
-    yield from create_service_dependency(FundingRoundService, DbSessionType.WRITE)
+def _get_write_service(request: Request) -> Generator[FundingRoundService, None, None]:
+    yield from create_service_dependency(request, FundingRoundService, DbSessionType.WRITE)
 
 
 @funding_rounds_router.get(

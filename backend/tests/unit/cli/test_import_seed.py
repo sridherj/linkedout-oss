@@ -19,14 +19,12 @@ from linkedout.commands.import_seed import (
     _read_manifest,
 )
 
-FIXTURE_PATH = Path(__file__).parent.parent.parent / 'fixtures' / 'test-seed-core.dump'
-
-
 @pytest.fixture
-def fixture_path():
-    """Path to the test fixture dump file."""
-    assert FIXTURE_PATH.exists(), f'Test fixture not found: {FIXTURE_PATH}'
-    return FIXTURE_PATH
+def fixture_path(tmp_path):
+    """Create a temporary dump file for tests that need an existing file path."""
+    dump = tmp_path / 'test-seed.dump'
+    dump.write_bytes(b'fake dump content')
+    return dump
 
 
 # ── Auto-detect logic ────────────────────────────────────────────────────────

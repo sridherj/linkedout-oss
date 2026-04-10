@@ -23,7 +23,8 @@ from linkedout.education.entities.education_entity import EducationEntity
 from linkedout.experience.entities.experience_entity import ExperienceEntity
 from linkedout.profile_skill.entities.profile_skill_entity import ProfileSkillEntity
 from dev_tools.db.fixed_data import SYSTEM_USER_ID
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
+from shared.infra.db.cli_db import cli_db_manager
+from shared.infra.db.db_session_manager import DbSessionType
 from shared.utils.company_matcher import CompanyMatcher
 from shared.utils.date_parsing import parse_apify_date, parse_month_name
 from shared.utils.linkedin_url import normalize_linkedin_url
@@ -394,6 +395,7 @@ def load_profiles_batch(
 @click.option('--older', default=str(FILE_OLDER), help='Path to older JSONL file')
 def main(dry_run: bool, batch_size: int, newer: str, older: str):
     """Load Apify LinkedIn profile data into PostgreSQL."""
+    db_manager = cli_db_manager()
     start_time = time.time()
 
     newer_path = Path(newer)
@@ -435,7 +437,7 @@ def main(dry_run: bool, batch_size: int, newer: str, older: str):
 
     # Step 4: Insert into database
     click.echo('\nInserting companies...')
-    with db_session_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
+    with db_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
         company_id_map = insert_companies(session, matcher)
         click.echo(f'  -> {len(company_id_map)} companies inserted')
 
@@ -451,7 +453,7 @@ def main(dry_run: bool, batch_size: int, newer: str, older: str):
         batch = items[i:i + batch_size]
         batch_num += 1
 
-        with db_session_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
+        with db_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
             counts = load_profiles_batch(session, batch, company_id_map, matcher, now)
 
         for k in totals:

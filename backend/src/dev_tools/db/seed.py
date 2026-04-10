@@ -13,7 +13,8 @@ import sys
 import traceback
 from sqlalchemy import select
 
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
+from shared.infra.db.cli_db import cli_db_manager
+from shared.infra.db.db_session_manager import DbSessionType
 from shared.test_utils.entity_factories import EntityFactory
 from shared.test_utils.seeders.seed_config import DevSeedConfig
 from shared.test_utils.seeders.base_seeder import BaseSeeder
@@ -27,10 +28,11 @@ logger = get_logger(__name__)
 
 def main():
     """Main seeding function."""
+    db_manager = cli_db_manager()
     logger.info('Starting database seeding...')
 
     try:
-        with db_session_manager.get_session(DbSessionType.WRITE) as session:
+        with db_manager.get_session(DbSessionType.WRITE) as session:
             # Check if database is already seeded
             # We use TenantEntity as a proxy for "is seeded"
             if session.execute(select(TenantEntity)).first():

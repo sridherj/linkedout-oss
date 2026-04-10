@@ -191,3 +191,33 @@
 **Tags:** specs, documentation, oss, testing, unit-tests, integration-tests, fixtures
 
 ---
+
+## 2026-04-10 | Pre-condition Guards Lost During DI Refactor | taskos-wrap-up
+
+**Learning:** When replacing a global accessor (singleton/module-level function) with dependency injection, pre-condition guards that checked config validity *before* the accessor was invoked can silently disappear. The guard was part of the implicit contract, not the accessor's interface, so it doesn't transfer automatically.
+
+**Context:** Applies to any refactor that changes how a dependency is obtained. Example: `health_checks.py` had `if not database_url: return fail` before calling `get_db_manager()`. When refactored to accept an injected manager, the empty-URL guard was dropped because the new code assumed a valid manager would always be provided. The test `test_returns_fail_when_no_database_url` caught this. Principle violated: Design by Contract -- preconditions must be preserved or explicitly moved to the new injection site.
+
+**Tags:** refactoring, dependency-injection, design-by-contract, pre-conditions, regression
+
+---
+
+## 2026-04-10 | Permission Prompts Block Headless Agents | taskos-wrap-up
+
+**Learning:** Interactive permission prompts are the most common failure mode for headless agent dispatch. Agents stall silently waiting for user input that never arrives. Diagnosis requires inspecting the agent's terminal (e.g., tmux capture-pane) rather than relying on status polling alone.
+
+**Context:** Phase 4b of the DI refactor stalled for 45 minutes because the subphase runner hit a permission prompt when editing a file outside the expected scope. The 3-tier polling pattern (status check -> log inspection -> terminal capture) reliably diagnosed this. Fix: either pre-approve permissions or ensure agents only edit files within their declared scope.
+
+**Tags:** orchestration, automation, headless-agents, failure-modes, tmux, taskos
+
+---
+
+## 2026-04-10 | Verify Artifacts Independently of Output Contracts | taskos-wrap-up
+
+**Learning:** An agent's output contract (status file, output.json, completion signal) is a separate concern from the actual work performed. When the contract is missing or incomplete, verify the artifacts (files changed, tests passing, specs updated) directly rather than assuming nothing happened.
+
+**Context:** Phase 5 (spec updates) completed its work correctly but never wrote the expected `.agent-*.output.json` file. If we had trusted only the output contract, we would have re-run the phase unnecessarily. Principle: observe effects, not just signals.
+
+**Tags:** orchestration, observability, contracts, verification, taskos
+
+---

@@ -37,13 +37,14 @@ _META_FIELDS = [
 
 
 def _get_education_service(
+    request: Request,
     app_user_id: str = Header(..., alias="X-App-User-Id"),
 ) -> Generator[EducationService, None, None]:
-    yield from create_service_dependency(EducationService, DbSessionType.READ, app_user_id=app_user_id)
+    yield from create_service_dependency(request, EducationService, DbSessionType.READ, app_user_id=app_user_id)
 
 
-def _get_write_education_service() -> Generator[EducationService, None, None]:
-    yield from create_service_dependency(EducationService, DbSessionType.WRITE)
+def _get_write_education_service(request: Request) -> Generator[EducationService, None, None]:
+    yield from create_service_dependency(request, EducationService, DbSessionType.WRITE)
 
 
 def _build_pagination_links(

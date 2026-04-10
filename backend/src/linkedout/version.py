@@ -51,8 +51,10 @@ def _pg_version() -> str:
     """Query PostgreSQL for its version string, returning "not connected" on failure."""
     try:
         from sqlalchemy import text
-        from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
-        with db_session_manager.get_session(DbSessionType.READ) as session:
+        from shared.infra.db.cli_db import cli_db_manager
+        from shared.infra.db.db_session_manager import DbSessionType
+        db_manager = cli_db_manager()
+        with db_manager.get_session(DbSessionType.READ) as session:
             row = session.execute(text('SELECT version()')).scalar()
             return row or 'not connected'
     except Exception:

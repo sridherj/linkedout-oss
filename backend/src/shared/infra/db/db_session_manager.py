@@ -1,13 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """Database session manager for centralized session handling."""
 from enum import StrEnum
-from typing import Generator, Optional
+from typing import Generator
 import contextlib
 
-from sqlalchemy import create_engine, Engine, text
+from sqlalchemy import Engine, text
 from sqlalchemy.orm import sessionmaker, Session
 
-from shared.config import get_config
 from shared.utilities.logger import logger
 
 
@@ -48,82 +47,28 @@ class DbSessionType(StrEnum):
 
 
 class DbSessionManager:
-    """
-    Singleton class to manage database sessions.
+    """Database session manager with injected engine.
 
-    This class provides a centralized way to manage database connections
-    and sessions. It implements the singleton pattern to ensure only one
-    instance exists throughout the application lifecycle.
-
-    The database engine can be initialized in two ways:
-    1. Automatically using the DATABASE_URL from config
-    2. Manually by passing a custom engine using set_engine() method
-       (useful for testing with in-memory databases)
+    Engine is provided at construction time. FastAPI apps create the manager
+    in lifespan; CLI commands use ``cli_db_manager()``; tests create their
+    own manager per fixture.
 
     RLS support: pass ``app_user_id`` to ``get_session()`` to set
-    ``app.current_user_id`` for the transaction.  RLS policies enforce
-    tenant isolation at the database level.
-
-    Usage:
-        # Get a read session (default)
-        with db_session_manager.get_session() as session:
-            result = session.query(Model).all()
-
-        # Get a write session
-        with db_session_manager.get_session(DbSessionType.WRITE) as session:
-            session.add(new_model)
-            # Changes are automatically committed if no errors occur
-
-        # Get an RLS-scoped session
-        with db_session_manager.get_session(app_user_id=uid) as session:
-            # Session has app.current_user_id set; RLS enforces tenant isolation
-            result = session.execute(text("SELECT ..."))
+    ``app.current_user_id`` for the transaction.
     """
-    _instance: Optional['DbSessionManager'] = None
-    _engine: Optional[Engine] = None
-    _SessionLocal = None
 
-    def __new__(cls) -> 'DbSessionManager':
-        """Ensure only one instance exists (singleton pattern)."""
-        if cls._instance is None:
-            logger.info('Initializing DbSessionManager instance')
-            cls._instance = super(DbSessionManager, cls).__new__(cls)
-            cls._instance._initialize_engine()
-        return cls._instance
-
-    def _initialize_engine(self) -> None:
-        """Initialize the SQLAlchemy engine and session factory."""
-        if not self._engine:
-            settings = get_config()
-            self._engine = create_engine(
-                settings.database_url,
-                echo=settings.db_echo_log,
-            )
-            self._SessionLocal = sessionmaker(
-                bind=self._engine,
-                autoflush=False,
-                autocommit=False
-            )
-            logger.info('SQLAlchemy engine and SessionLocal initialized')
-
-    def set_engine(self, engine: Engine) -> None:
-        """
-        Set a custom engine for testing purposes.
-
-        This allows tests to provide their own engine while maintaining
-        the singleton pattern.
+    def __init__(self, engine: Engine) -> None:
+        """Create a session manager bound to the given engine.
 
         Args:
-            engine: The SQLAlchemy engine to use
+            engine: SQLAlchemy engine to bind sessions to.
         """
-        logger.info('Setting custom engine for testing')
-        self._engine = engine
+        self._engine: Engine = engine
         self._SessionLocal = sessionmaker(
-            bind=self._engine,
+            bind=engine,
             autoflush=False,
-            autocommit=False
+            autocommit=False,
         )
-        logger.info('Custom engine and SessionLocal initialized')
 
     def get_raw_session(self, session_type: DbSessionType = DbSessionType.WRITE) -> Session:
         """
@@ -139,9 +84,6 @@ class DbSessionManager:
         Returns:
             A raw SQLAlchemy Session object
         """
-        if not self._SessionLocal:
-            raise RuntimeError('Database session factory not initialized')
-        
         logger.info(f'Creating raw {session_type} session for manual management')
         return self._SessionLocal()
 
@@ -187,17 +129,11 @@ class DbSessionManager:
 
         Yields:
             A database session
-
-        Raises:
-            RuntimeError: If the session factory is not initialized
         """
         logger.debug(f'Requesting {session_type} session for context manager')
 
-        db: Optional[Session] = None
+        db: Session | None = None
         try:
-            if not self._SessionLocal:
-                raise RuntimeError('Database session factory not initialized')
-
             db = self._SessionLocal()
             logger.debug(f'Acquired {session_type} session: {db}')
 
@@ -238,7 +174,4 @@ class DbSessionManager:
                 {"uid": str(app_user_id)},
             )
 
-
-# Global instance of the DatabaseSessionManager
-db_session_manager = DbSessionManager()
 

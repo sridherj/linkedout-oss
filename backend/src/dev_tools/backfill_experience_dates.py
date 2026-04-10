@@ -11,7 +11,8 @@ import re
 import click
 from sqlalchemy import text
 
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
+from shared.infra.db.cli_db import cli_db_manager
+from shared.infra.db.db_session_manager import DbSessionType
 
 _YEAR_RE = re.compile(r'\b(19|20)\d{2}\b')
 
@@ -25,8 +26,9 @@ def _extract_year(text_val: str | None) -> int | None:
 
 def main(dry_run: bool = False) -> int:
     """Backfill experience date fields. Returns 0 on success, 1 on failure."""
+    db_manager = cli_db_manager()
     try:
-        with db_session_manager.get_session(DbSessionType.WRITE) as session:
+        with db_manager.get_session(DbSessionType.WRITE) as session:
             # 1. end_year from end_date
             result = session.execute(text("""
                 UPDATE experience

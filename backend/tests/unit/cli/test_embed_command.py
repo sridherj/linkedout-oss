@@ -38,15 +38,17 @@ class TestFlagRecognition:
                 mock_pp.return_value = MagicMock(exists=MagicMock(return_value=False))
 
                 with patch('linkedout.commands.embed.EmbeddingProgress.load', return_value=None):
-                    with patch('linkedout.commands.embed.db_session_manager') as mock_db:
+                    with patch('linkedout.commands.embed.cli_db_manager') as mock_cli_db:
                         mock_session = MagicMock()
                         mock_session.execute.return_value.fetchall.return_value = [
                             ('cp_1', 'John Doe', 'Engineer', 'About', 'Acme', 'SWE'),
                         ]
+                        mock_db = MagicMock()
                         mock_db.get_session.return_value.__enter__ = MagicMock(
                             return_value=mock_session
                         )
                         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
+                        mock_cli_db.return_value = mock_db
 
                         result = runner.invoke(embed_command, ['--dry-run'])
 
@@ -114,7 +116,7 @@ class TestDryRunOutput:
                 mock_pp.return_value = MagicMock(exists=MagicMock(return_value=False))
 
                 with patch('linkedout.commands.embed.EmbeddingProgress.load', return_value=None):
-                    with patch('linkedout.commands.embed.db_session_manager') as mock_db:
+                    with patch('linkedout.commands.embed.cli_db_manager') as mock_cli_db:
                         # Return 3 profiles
                         mock_session = MagicMock()
                         mock_session.execute.return_value.fetchall.side_effect = [
@@ -125,10 +127,12 @@ class TestDryRunOutput:
                             ],
                             [],  # experiences query
                         ]
+                        mock_db = MagicMock()
                         mock_db.get_session.return_value.__enter__ = MagicMock(
                             return_value=mock_session
                         )
                         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
+                        mock_cli_db.return_value = mock_db
 
                         result = runner.invoke(embed_command, ['--dry-run'])
 
@@ -151,16 +155,18 @@ class TestDryRunOutput:
                 mock_pp.return_value = MagicMock(exists=MagicMock(return_value=False))
 
                 with patch('linkedout.commands.embed.EmbeddingProgress.load', return_value=None):
-                    with patch('linkedout.commands.embed.db_session_manager') as mock_db:
+                    with patch('linkedout.commands.embed.cli_db_manager') as mock_cli_db:
                         mock_session = MagicMock()
                         mock_session.execute.return_value.fetchall.side_effect = [
                             [('cp_1', 'John', 'Eng', 'About', 'Acme', 'SWE')],
                             [],
                         ]
+                        mock_db = MagicMock()
                         mock_db.get_session.return_value.__enter__ = MagicMock(
                             return_value=mock_session
                         )
                         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
+                        mock_cli_db.return_value = mock_db
 
                         result = runner.invoke(embed_command, ['--dry-run'])
 
@@ -180,16 +186,18 @@ class TestDryRunOutput:
                 mock_pp.return_value = MagicMock(exists=MagicMock(return_value=False))
 
                 with patch('linkedout.commands.embed.EmbeddingProgress.load', return_value=None):
-                    with patch('linkedout.commands.embed.db_session_manager') as mock_db:
+                    with patch('linkedout.commands.embed.cli_db_manager') as mock_cli_db:
                         mock_session = MagicMock()
                         mock_session.execute.return_value.fetchall.side_effect = [
                             [('cp_1', 'John', 'Eng', 'About', 'Acme', 'SWE')],
                             [],
                         ]
+                        mock_db = MagicMock()
                         mock_db.get_session.return_value.__enter__ = MagicMock(
                             return_value=mock_session
                         )
                         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
+                        mock_cli_db.return_value = mock_db
 
                         result = runner.invoke(embed_command, ['--dry-run'])
 
@@ -213,13 +221,15 @@ class TestZeroProfiles:
                 mock_pp.return_value = MagicMock(exists=MagicMock(return_value=False))
 
                 with patch('linkedout.commands.embed.EmbeddingProgress.load', return_value=None):
-                    with patch('linkedout.commands.embed.db_session_manager') as mock_db:
+                    with patch('linkedout.commands.embed.cli_db_manager') as mock_cli_db:
                         mock_session = MagicMock()
                         mock_session.execute.return_value.fetchall.return_value = []
+                        mock_db = MagicMock()
                         mock_db.get_session.return_value.__enter__ = MagicMock(
                             return_value=mock_session
                         )
                         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
+                        mock_cli_db.return_value = mock_db
 
                         result = runner.invoke(embed_command, [])
 

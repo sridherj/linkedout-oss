@@ -4,19 +4,22 @@
 Tests require a PostgreSQL database. They are skipped automatically if
 ``DATABASE_URL`` is not configured or points to SQLite.
 
-Uses the test fixture at ``backend/tests/fixtures/test-seed-core.dump``
-and expected counts from ``backend/tests/fixtures/seed-manifest.json``.
+Generates a test fixture dynamically from current entity schema via
+``tests/fixtures/generate_test_seed.py``.
 """
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
 
+from common.entities.base_entity import Base
 from linkedout.commands.import_seed import (
     IMPORT_ORDER,
     import_seed_command,
@@ -24,15 +27,47 @@ from linkedout.commands.import_seed import (
 
 pytestmark = pytest.mark.integration
 
-FIXTURE_DIR = Path(__file__).parent.parent.parent / 'fixtures'
-FIXTURE_PATH = FIXTURE_DIR / 'test-seed-core.dump'
-MANIFEST_PATH = FIXTURE_DIR / 'seed-manifest.json'
+
+def _base_db_url(engine) -> str:
+    """Extract base database URL without search_path options."""
+    url = engine.url
+    return url.set(query={}).render_as_string(hide_password=False)
 
 
 @pytest.fixture(scope='module')
-def fixture_path():
-    assert FIXTURE_PATH.exists(), f'Test fixture not found: {FIXTURE_PATH}'
-    return FIXTURE_PATH
+def fixture_path(integration_db_engine):
+    """Generate a test seed dump dynamically from current schema."""
+    from tests.fixtures.generate_test_seed import generate
+
+    base_url = _base_db_url(integration_db_engine)
+    fd, tmp = tempfile.mkstemp(suffix='.dump')
+    os.close(fd)
+    output_path = Path(tmp)
+    manifest_path = output_path.parent / 'seed-manifest.json'
+
+    try:
+        dump_path = generate(base_db_url=base_url, output_path=output_path)
+        assert dump_path.exists(), f'Generated fixture not found: {dump_path}'
+        yield dump_path
+    finally:
+        output_path.unlink(missing_ok=True)
+        manifest_path.unlink(missing_ok=True)
+
+
+@pytest.fixture(scope='module', autouse=True)
+def public_tables(integration_db_engine, fixture_path):
+    """Create entity tables in public schema for the seed import pipeline.
+
+    Depends on fixture_path to ensure the dump is generated BEFORE public tables
+    exist (otherwise generate_test_seed's checkfirst=True skips _seed_staging tables).
+    """
+    base_url = _base_db_url(integration_db_engine)
+    engine = create_engine(base_url)
+    seed_tables = [Base.metadata.tables[t] for t in IMPORT_ORDER]
+    Base.metadata.create_all(engine, tables=seed_tables)
+    yield engine
+    Base.metadata.drop_all(engine, tables=seed_tables)
+    engine.dispose()
 
 
 @pytest.fixture(scope='module')
@@ -41,21 +76,22 @@ def runner():
 
 
 @pytest.fixture(scope='module')
-def expected_counts():
-    """Get expected row counts from seed-manifest.json."""
-    assert MANIFEST_PATH.exists(), f'Manifest not found: {MANIFEST_PATH}'
-    manifest = json.loads(MANIFEST_PATH.read_text())
+def expected_counts(fixture_path):
+    """Get expected row counts from the dynamically generated manifest."""
+    manifest_path = fixture_path.parent / 'seed-manifest.json'
+    assert manifest_path.exists(), f'Manifest not found: {manifest_path}'
+    manifest = json.loads(manifest_path.read_text())
     return manifest['table_counts']
 
 
 def _count_rows(session, table_name: str) -> int:
-    """Count rows in a PostgreSQL table."""
-    return session.execute(text(f'SELECT COUNT(*) FROM {table_name}')).scalar()
+    """Count rows in a public schema PostgreSQL table."""
+    return session.execute(text(f'SELECT COUNT(*) FROM public.{table_name}')).scalar()
 
 
 def _clear_seed_tables(session):
-    """Truncate all seed tables, cascading to dependent tables (e.g. experience)."""
-    tables = ', '.join(IMPORT_ORDER)
+    """Truncate all seed tables in public schema."""
+    tables = ', '.join(f'public.{t}' for t in IMPORT_ORDER)
     session.execute(text(f'TRUNCATE {tables} CASCADE'))
     session.commit()
 
@@ -91,15 +127,15 @@ class TestFullImport:
         """FK relationships are intact after import."""
         # company_alias records point to valid company IDs
         orphan_alias = integration_db_session.execute(text(
-            'SELECT COUNT(*) FROM company_alias ca '
-            'WHERE NOT EXISTS (SELECT 1 FROM company c WHERE c.id = ca.company_id)'
+            'SELECT COUNT(*) FROM public.company_alias ca '
+            'WHERE NOT EXISTS (SELECT 1 FROM public.company c WHERE c.id = ca.company_id)'
         )).scalar()
         assert orphan_alias == 0, f'{orphan_alias} company_alias records with invalid company_id'
 
         # funding_round records point to valid company IDs
         orphan_fr = integration_db_session.execute(text(
-            'SELECT COUNT(*) FROM funding_round fr '
-            'WHERE NOT EXISTS (SELECT 1 FROM company c WHERE c.id = fr.company_id)'
+            'SELECT COUNT(*) FROM public.funding_round fr '
+            'WHERE NOT EXISTS (SELECT 1 FROM public.company c WHERE c.id = fr.company_id)'
         )).scalar()
         assert orphan_fr == 0, f'{orphan_fr} funding_round records with invalid company_id'
 
@@ -171,7 +207,7 @@ class TestUpdateDetection:
 
         # Modify a company name directly in PostgreSQL
         integration_db_session.execute(
-            text("UPDATE company SET canonical_name = 'MODIFIED' WHERE id = 'co_test_001'")
+            text("UPDATE public.company SET canonical_name = 'MODIFIED' WHERE id = 'co_test_001'")
         )
         integration_db_session.commit()
 
@@ -185,7 +221,7 @@ class TestUpdateDetection:
 
         # Verify the original name was restored from the dump
         row = integration_db_session.execute(
-            text("SELECT canonical_name FROM company WHERE id = 'co_test_001'")
+            text("SELECT canonical_name FROM public.company WHERE id = 'co_test_001'")
         ).fetchone()
         assert row[0] != 'MODIFIED'
 

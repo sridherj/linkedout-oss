@@ -10,7 +10,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Res
 
 from common.controllers.base_controller_utils import build_pagination_links
 from common.services.base_service import BaseService
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
+from shared.infra.db.db_session_manager import DbSessionType
 from shared.utilities.logger import get_logger
 
 logger = get_logger(__name__)
@@ -144,20 +144,22 @@ def create_crud_router(config: CRUDRouterConfig) -> CRUDRouterResult:
 
     # Dependency functions for service
     def _get_service(
+        request: Request,
         session_type: DbSessionType = DbSessionType.READ,
     ) -> Generator[BaseService, None, None]:
         """Dependency to get service with appropriate session type."""
         logger.debug(f'Requesting {config.service_class.__name__} with session type: {session_type.value}')
-        with db_session_manager.get_session(session_type) as session:
+        db_manager = request.app.state.db_manager
+        with db_manager.get_session(session_type) as session:
             logger.debug(f'Session {session} acquired for {config.service_class.__name__}')
             try:
                 yield config.service_class(session)
             finally:
                 logger.debug(f'{config.service_class.__name__} session {session} lifecycle complete')
 
-    def _get_write_service() -> Generator[BaseService, None, None]:
+    def _get_write_service(request: Request) -> Generator[BaseService, None, None]:
         """Dependency for write operations."""
-        yield from _get_service(session_type=DbSessionType.WRITE)
+        yield from _get_service(request, session_type=DbSessionType.WRITE)
 
     def _get_paginated_response(
         request: Request,

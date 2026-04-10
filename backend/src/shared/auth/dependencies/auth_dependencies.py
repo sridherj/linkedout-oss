@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from shared.auth.config import AuthConfig
 from shared.auth.dependencies.schemas.auth_context import AuthContext, Principal, Actor, Subject
 from shared.auth.dependencies.schemas.role_enums import TenantRole, BuRole
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
+from shared.infra.db.db_session_manager import DbSessionType
 
 # Module-level config — initialized at app startup
 _auth_config: Optional[AuthConfig] = None
@@ -27,8 +27,9 @@ def _get_auth_config() -> AuthConfig:
     return _auth_config
 
 
-def _get_read_session() -> Generator[Session, None, None]:
-    with db_session_manager.get_session(DbSessionType.READ) as session:
+def _get_read_session(request: Request) -> Generator[Session, None, None]:
+    db_manager = request.app.state.db_manager
+    with db_manager.get_session(DbSessionType.READ) as session:
         yield session
 
 

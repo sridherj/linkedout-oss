@@ -35,13 +35,14 @@ _META_FIELDS = ['sort_by', 'sort_order', 'crawled_profile_id', 'skill_name']
 
 
 def _get_profile_skill_service(
+    request: Request,
     app_user_id: str = Header(..., alias="X-App-User-Id"),
 ) -> Generator[ProfileSkillService, None, None]:
-    yield from create_service_dependency(ProfileSkillService, DbSessionType.READ, app_user_id=app_user_id)
+    yield from create_service_dependency(request, ProfileSkillService, DbSessionType.READ, app_user_id=app_user_id)
 
 
-def _get_write_profile_skill_service() -> Generator[ProfileSkillService, None, None]:
-    yield from create_service_dependency(ProfileSkillService, DbSessionType.WRITE)
+def _get_write_profile_skill_service(request: Request) -> Generator[ProfileSkillService, None, None]:
+    yield from create_service_dependency(request, ProfileSkillService, DbSessionType.WRITE)
 
 
 def _build_pagination_links(

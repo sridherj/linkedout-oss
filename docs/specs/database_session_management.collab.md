@@ -3,10 +3,11 @@ feature: database-session-management
 module: backend/src/shared/infra/db
 linked_files:
   - backend/src/shared/infra/db/db_session_manager.py
+  - backend/src/shared/infra/db/cli_db.py
   - backend/src/shared/config/settings.py
   - backend/src/common/controllers/base_controller_utils.py
-version: 1
-last_verified: "2026-04-09"
+version: 2
+last_verified: "2026-04-10"
 ---
 
 # Database & Session Management
@@ -15,17 +16,17 @@ last_verified: "2026-04-09"
 
 ## Intent
 
-Provide a centralized database session manager (singleton) that enforces consistent session handling patterns: READ sessions auto-rollback, WRITE sessions auto-commit on success and rollback on error. Supports both PostgreSQL (production/integration) and SQLite (unit tests) with dialect-aware read-only enforcement.
+Provide a database session manager with constructor-injected engine that enforces consistent session handling patterns: READ sessions auto-rollback, WRITE sessions auto-commit on success and rollback on error. Supports both PostgreSQL (production/integration) and SQLite (unit tests) with dialect-aware read-only enforcement.
 
 ## Behaviors
 
-### DbSessionManager (Singleton)
+### DbSessionManager (Injected)
 
-- **Singleton pattern**: Only one `DbSessionManager` instance exists. Calling `DbSessionManager()` always returns the same instance. Verify multiple instantiations return the same object.
+- **Constructor injection**: `DbSessionManager(engine: Engine)` — the engine is provided at construction time and stored as an instance attribute. Construction guarantees `_engine` and `_SessionLocal` are set. There is no `set_engine()` method and no auto-initialization. Verify the engine is ready after construction.
 
-- **Auto initialization**: On first instantiation, the engine is created from `get_config().database_url` with echo controlled by `get_config().db_echo_log`. Verify the engine is ready after initialization.
+- **FastAPI integration**: In production, the lifespan creates `DbSessionManager(engine)` and stores it on `app.state.db_manager`. Controllers access it via `request.app.state.db_manager`. The lifespan checks `hasattr(app.state, 'db_manager')` to allow integration tests to pre-set the manager before `TestClient` starts. Verify the manager is accessible from request context.
 
-- **Custom engine for tests**: `set_engine(engine)` replaces the engine and session factory. Used by tests to inject SQLite in-memory engines. Verify that after `set_engine`, sessions come from the new engine.
+- **CLI integration**: CLI commands and dev_tools scripts use `cli_db_manager()` from `shared.infra.db.cli_db` which creates an engine from `get_config().database_url` and returns `DbSessionManager(engine)`. Each entry point creates its own manager instance. Verify CLI commands can obtain a working session.
 
 ### Session Types
 
@@ -61,7 +62,7 @@ Provide a centralized database session manager (singleton) that enforces consist
 |------|----------|-------|------|---------|
 | 2026-03-25 | Session pattern | Context manager with auto-commit/rollback | Manual session management everywhere | Prevents session leaks and ensures consistent transaction handling |
 | 2026-03-25 | Read-only enforcement | Dialect-specific SQL commands | Application-level read-only flag | Database-level enforcement catches bugs that app-level checks miss |
-| 2026-03-25 | Singleton | Module-level `db_session_manager` | Dependency injection | Simple, works well with FastAPI's dependency system |
+| 2026-04-10 | Session management | Constructor injection (DI) | Singleton | Mutable singleton caused non-deterministic xdist test failures from engine contamination across test categories |
 
 ## Not Included
 

@@ -36,12 +36,12 @@ _META_FIELDS = [
 ]
 
 
-def _get_contact_source_service() -> Generator[ContactSourceService, None, None]:
-    yield from create_service_dependency(ContactSourceService, DbSessionType.READ)
+def _get_contact_source_service(request: Request) -> Generator[ContactSourceService, None, None]:
+    yield from create_service_dependency(request, ContactSourceService, DbSessionType.READ)
 
 
-def _get_write_contact_source_service() -> Generator[ContactSourceService, None, None]:
-    yield from create_service_dependency(ContactSourceService, DbSessionType.WRITE)
+def _get_write_contact_source_service(request: Request) -> Generator[ContactSourceService, None, None]:
+    yield from create_service_dependency(request, ContactSourceService, DbSessionType.WRITE)
 
 
 @contact_sources_router.get(

@@ -20,7 +20,8 @@ from sqlalchemy import text
 from linkedout.cli_helpers import cli_logged
 from dev_tools.db.fixed_data import SYSTEM_USER_ID
 from shared.config import get_config
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
+from shared.infra.db.cli_db import cli_db_manager
+from shared.infra.db.db_session_manager import DbSessionType
 from shared.utilities.logger import get_logger
 from shared.utilities.metrics import record_metric
 from shared.utilities.operation_report import (
@@ -126,13 +127,14 @@ def update_embeddings(
     batch_size: int = 500,
 ) -> int:
     """Write embedding vectors back to ``crawled_profile``. Returns count updated."""
+    db_manager = cli_db_manager()
     updated = 0
     items = list(results.items())
     total = len(items)
 
     for i in range(0, total, batch_size):
         chunk = items[i:i + batch_size]
-        with db_session_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
+        with db_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
             for profile_id, embedding in chunk:
                 embedding_str = "[" + ",".join(str(v) for v in embedding) + "]"
                 session.execute(text(
@@ -155,7 +157,8 @@ def update_embeddings(
 
 def populate_search_vectors() -> int:
     """Populate ``search_vector`` (tsvector) for all enriched profiles."""
-    with db_session_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
+    db_manager = cli_db_manager()
+    with db_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
         result = session.execute(text(
             "UPDATE crawled_profile SET search_vector = "
             "to_tsvector('english', "
@@ -213,6 +216,7 @@ def _get_reports_dir() -> Path:
 @cli_logged("embed")
 def embed_command(provider_name: str | None, dry_run: bool, resume: bool, force: bool, batch_api: bool):
     """Generate embeddings for profile search."""
+    db_manager = cli_db_manager()
     start_time = time.time()
 
     # 1. Resolve provider
@@ -253,7 +257,7 @@ def embed_command(provider_name: str | None, dry_run: bool, resume: bool, force:
     if force:
         progress_path.unlink(missing_ok=True)
         progress = None
-        with db_session_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
+        with db_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
             result = session.execute(text(
                 f"UPDATE crawled_profile SET {column_name} = NULL "
                 f"WHERE {column_name} IS NOT NULL"
@@ -264,7 +268,7 @@ def embed_command(provider_name: str | None, dry_run: bool, resume: bool, force:
     # 4. Fetch profiles needing embeddings
     resume_id = progress.last_processed_id if progress else None
 
-    with db_session_manager.get_session(DbSessionType.READ, app_user_id=SYSTEM_USER_ID) as session:
+    with db_manager.get_session(DbSessionType.READ, app_user_id=SYSTEM_USER_ID) as session:
         profiles = fetch_profiles_needing_embeddings(session, column_name, after_id=resume_id)
 
     if not profiles:

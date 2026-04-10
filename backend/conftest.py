@@ -125,7 +125,6 @@ def compile_pgarray_as_sqlitejson(type_, compiler, **kw):
 load_dotenv(Path(__file__).parent / '.env.test', override=False)
 
 from common.entities.base_entity import Base
-from shared.infra.db.db_session_manager import db_session_manager
 from shared.utilities.logger import get_logger
 from tests.seed_db import SeedDb, TableName
 
@@ -238,32 +237,14 @@ def _shared_db_resources() -> Tuple[Engine, Dict[TableName, list[Any]]]:
     engine = _create_test_engine()
     Base.metadata.create_all(engine)
 
-    # Configure db_session_manager for seeding
-    original_engine = getattr(db_session_manager, '_engine', None)
-    db_session_manager.set_engine(engine)
-
-    # Seed with default configuration
+    # SeedDb uses its own sessionmaker from config.custom_engine — it doesn't need db_session_manager
     seeder = SeedDb()
     seed_config = SeedDb.SeedConfig()
     seed_config.custom_engine = engine
     seeder.init(config=seed_config)
     seeded_data = seeder.seed_data()
 
-    # Restore original engine if different
-    if original_engine is not None and original_engine is not engine:
-        db_session_manager.set_engine(original_engine)
-
     return engine, seeded_data
-
-
-@pytest.fixture(scope='session', autouse=True)
-def default_db_session_manager_setup(_shared_db_resources: Tuple[Engine, Dict[TableName, list[Any]]]):
-    """
-    Configures the global `db_session_manager` to use the shared in-memory database
-    engine for the entire test session. This fixture runs automatically once per session.
-    """
-    shared_engine, _ = _shared_db_resources
-    db_session_manager.set_engine(shared_engine)
 
 
 @pytest.fixture(scope='session')
@@ -350,16 +331,10 @@ def function_scoped_isolated_db_session(
     isolated_engine = _create_test_engine()
     Base.metadata.create_all(isolated_engine)
 
-    original_engine = getattr(db_session_manager, '_engine', None)
-    db_session_manager.set_engine(isolated_engine)
-
     seeder = SeedDb()
     seed_config.custom_engine = isolated_engine
     seeder.init(config=seed_config)
     seeded_data = seeder.seed_data()
-
-    if original_engine is not None:
-        db_session_manager.set_engine(original_engine)
 
     IsolatedSessionLocal = sessionmaker(bind=isolated_engine, autoflush=False, autocommit=False)
     session = IsolatedSessionLocal()
@@ -395,16 +370,10 @@ def class_scoped_isolated_db_session(
     isolated_engine = _create_test_engine()
     Base.metadata.create_all(isolated_engine)
 
-    original_engine = getattr(db_session_manager, '_engine', None)
-    db_session_manager.set_engine(isolated_engine)
-
     seeder = SeedDb()
     seed_config.custom_engine = isolated_engine
     seeder.init(config=seed_config)
     seeded_data = seeder.seed_data()
-
-    if original_engine is not None:
-        db_session_manager.set_engine(original_engine)
 
     ClassScopedSessionLocal = sessionmaker(bind=isolated_engine, autoflush=False, autocommit=False)
     session = ClassScopedSessionLocal()
@@ -476,7 +445,6 @@ def db_session(db_engine) -> Generator[Session, None, None]:
     - `class_scoped_isolated_db_session` for mutation tests
     """
     TestSessionLocal = sessionmaker(bind=db_engine, autoflush=False, autocommit=False)
-    db_session_manager.set_engine(db_engine)
     session = TestSessionLocal()
 
     yield session

@@ -24,7 +24,8 @@ from linkedout.crawled_profile.entities.crawled_profile_entity import CrawledPro
 from linkedout.import_job.entities.import_job_entity import ImportJobEntity
 from linkedout.cli_helpers import cli_logged
 from dev_tools.db.fixed_data import SYSTEM_USER_ID
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
+from shared.infra.db.cli_db import cli_db_manager
+from shared.infra.db.db_session_manager import DbSessionType
 from shared.utilities.logger import get_logger
 from shared.utilities.metrics import record_metric
 from shared.utilities.operation_report import OperationCounts, OperationReport
@@ -447,6 +448,7 @@ logger = get_logger(__name__, component="import", operation="import_contacts")
 @cli_logged("import_contacts")
 def import_contacts_command(contacts_dir: str, fmt: str, dry_run: bool):
     """Import Google contacts from CSV/vCard."""
+    db_manager = cli_db_manager()
     start_time = time.time()
 
     if contacts_dir:
@@ -484,7 +486,7 @@ def import_contacts_command(contacts_dir: str, fmt: str, dry_run: bool):
         return
 
     click.echo('\nBuilding match indexes...')
-    with db_session_manager.get_session(DbSessionType.READ, app_user_id=SYSTEM_USER_ID) as session:
+    with db_manager.get_session(DbSessionType.READ, app_user_id=SYSTEM_USER_ID) as session:
         email_index = build_email_index(session)
         name_index = build_name_index(session)
     click.echo(f'  Email index:  {len(email_index):>6} entries')
@@ -493,7 +495,7 @@ def import_contacts_command(contacts_dir: str, fmt: str, dry_run: bool):
     click.echo('\nMatching and merging contacts...')
     now = datetime.now(timezone.utc)
 
-    with db_session_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
+    with db_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
         prior_count = session.execute(text(
             "DELETE FROM contact_source WHERE source_type IN "
             "('google_contacts_job', 'contacts_phone', 'gmail_email_only')"

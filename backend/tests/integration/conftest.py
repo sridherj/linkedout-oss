@@ -47,7 +47,7 @@ load_dotenv(env_path / '.env', override=False)
 
 from common.entities.base_entity import Base
 from shared.config.config import backend_config
-from shared.infra.db.db_session_manager import db_session_manager
+from shared.infra.db.db_session_manager import DbSessionManager
 from shared.utilities.logger import get_logger
 from dev_tools.db import fixed_data
 
@@ -185,9 +185,6 @@ def integration_db_session(
 
     session = SessionLocal()
 
-    # Configure db_session_manager to use this engine
-    db_session_manager.set_engine(integration_db_engine)
-
     try:
         yield session
     finally:
@@ -266,11 +263,11 @@ def test_client(
     Yields:
         TestClient: FastAPI test client for HTTP requests.
     """
-    # Configure db_session_manager to use the test engine
-    db_session_manager.set_engine(integration_db_engine)
-
     # Import app after configuring database
     from main import app
+
+    # Pre-set db_manager so the lifespan's hasattr check skips creating one
+    app.state.db_manager = DbSessionManager(integration_db_engine)
 
     with TestClient(app) as client:
         yield client

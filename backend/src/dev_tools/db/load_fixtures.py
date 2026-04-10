@@ -14,7 +14,8 @@ from pathlib import Path
 import click
 from sqlalchemy import text
 
-from shared.infra.db.db_session_manager import DbSessionType, db_session_manager
+from shared.infra.db.cli_db import cli_db_manager
+from shared.infra.db.db_session_manager import DbSessionType
 from shared.utilities.logger import get_logger
 
 logger = get_logger(__name__)
@@ -66,6 +67,7 @@ def _load_json(filename: str) -> list[dict]:
 @click.option('--dry-run', is_flag=True, help='Report counts only, do not insert')
 def main(dry_run: bool):
     """Load JSON fixture data into the database."""
+    db_manager = cli_db_manager()
     for table_name, json_file, columns in FIXTURE_TABLES:
         rows = _load_json(json_file)
         if not rows:
@@ -84,7 +86,7 @@ def main(dry_run: bool):
             f'ON CONFLICT (id) DO NOTHING'
         )
 
-        with db_session_manager.get_session(DbSessionType.WRITE) as session:
+        with db_manager.get_session(DbSessionType.WRITE) as session:
             inserted = 0
             for row in rows:
                 params = {c: row.get(c) for c in columns}

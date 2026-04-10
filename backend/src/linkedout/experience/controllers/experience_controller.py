@@ -38,13 +38,14 @@ _META_FIELDS = [
 
 
 def _get_experience_service(
+    request: Request,
     app_user_id: str = Header(..., alias="X-App-User-Id"),
 ) -> Generator[ExperienceService, None, None]:
-    yield from create_service_dependency(ExperienceService, DbSessionType.READ, app_user_id=app_user_id)
+    yield from create_service_dependency(request, ExperienceService, DbSessionType.READ, app_user_id=app_user_id)
 
 
-def _get_write_experience_service() -> Generator[ExperienceService, None, None]:
-    yield from create_service_dependency(ExperienceService, DbSessionType.WRITE)
+def _get_write_experience_service(request: Request) -> Generator[ExperienceService, None, None]:
+    yield from create_service_dependency(request, ExperienceService, DbSessionType.WRITE)
 
 
 def _build_pagination_links(

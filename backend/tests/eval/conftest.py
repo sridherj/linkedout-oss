@@ -54,6 +54,13 @@ def db_session():
 @pytest.fixture(scope="session")
 def app_user_id(db_session):
     """Get the first real app_user_id that has connections."""
+    # Check if the connection table exists at all
+    table_exists = db_session.execute(
+        text("SELECT to_regclass('public.connection')")
+    ).scalar()
+    if not table_exists:
+        pytest.skip('No connection table — run LinkedIn CSV loader first')
+
     result = db_session.execute(text(
         "SELECT app_user_id FROM connection "
         "GROUP BY app_user_id "

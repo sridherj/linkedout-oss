@@ -21,7 +21,8 @@ from sqlalchemy import text
 from dev_tools.db.fixed_data import SYSTEM_USER_ID
 from linkedout.cli_helpers import cli_logged
 from shared.config import get_config
-from shared.infra.db.db_session_manager import db_session_manager, DbSessionType
+from shared.infra.db.cli_db import cli_db_manager
+from shared.infra.db.db_session_manager import DbSessionType
 from shared.utilities.logger import get_logger
 from shared.utilities.metrics import record_metric
 from shared.utilities.operation_report import OperationCounts, OperationReport
@@ -97,13 +98,16 @@ def _get_intersected_columns(session, table: str) -> list[str]:
     return [r[0] for r in rows]
 
 
-def _build_staging_upsert_sql(table: str, columns: list[str]) -> str:
+def _build_staging_upsert_sql(table: str, columns: list[str]) -> str | None:
     """Build a single SQL statement that upserts all rows from staging to public.
 
     Source is SELECT FROM _seed_staging.{table}, not parameterized VALUES.
     Uses IS DISTINCT FROM for null-safe change detection.
     RETURNING (xmax = 0) distinguishes inserts from updates.
+    Returns None if no columns overlap.
     """
+    if not columns:
+        return None
     col_list = ", ".join(columns)
     non_pk = [c for c in columns if c != "id"]
     set_clause = ", ".join(f"{c} = EXCLUDED.{c}" for c in non_pk)
@@ -225,6 +229,7 @@ def _write_report(
 @cli_logged('import_seed')
 def import_seed_command(seed_file: str | None, dry_run: bool):
     """Import seed company data from pg_dump into PostgreSQL."""
+    db_manager = cli_db_manager()
     start = time.time()
 
     # 1. Locate dump file, check pg_restore
@@ -242,7 +247,7 @@ def import_seed_command(seed_file: str | None, dry_run: bool):
     # 2. Restore to staging + upsert
     results: dict[str, dict] = {}
 
-    with db_session_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
+    with db_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
         db_url = _get_db_url()
         _restore_to_staging(session, db_url, dump_path)
 
@@ -266,6 +271,19 @@ def import_seed_command(seed_file: str | None, dry_run: bool):
                 staging_count = _count_staging_rows(session, table_name)
                 columns = _get_intersected_columns(session, table_name)
                 sql = _build_staging_upsert_sql(table_name, columns)
+                if sql is None:
+                    logger.warning(f"Skipping table '{table_name}': no overlapping columns between staging and public schemas")
+                    results[table_name] = {
+                        'inserted': 0,
+                        'updated': 0,
+                        'skipped': staging_count,
+                        'total': staging_count,
+                    }
+                    click.echo(
+                        f'  {table_name}: 0 inserted, '
+                        f'0 updated, {staging_count:,} skipped (no overlapping columns)'
+                    )
+                    continue
                 row = session.execute(text(sql)).fetchone()
                 assert row is not None, f"upsert CTE for {table_name} returned no rows"
                 inserted, updated = row[0], row[1]

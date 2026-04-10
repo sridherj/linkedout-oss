@@ -18,6 +18,7 @@ from urllib.parse import urlparse, urlunparse
 
 import psycopg2
 import psycopg2.extras
+import pytest
 
 # ---------------------------------------------------------------------------
 # Config
@@ -36,6 +37,24 @@ MIN_COMPANIES = 1000
 MIN_CONNECTIONS = 2000
 MIN_EMBEDDED = 2000
 MIN_WITH_AFFINITY = 100
+
+
+def _can_connect_to_demo_db() -> bool:
+    """Check if the demo smoke database exists and is connectable."""
+    try:
+        parsed = urlparse(DB_URL)
+        demo_url = urlunparse(parsed._replace(path=f"/{DEMO_DB}"))
+        conn = psycopg2.connect(demo_url)
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
+pytestmark = pytest.mark.skipif(
+    not _can_connect_to_demo_db(),
+    reason=f"Database '{DEMO_DB}' does not exist — run demo setup first",
+)
 
 
 def _replace_db(url: str, dbname: str) -> str:
