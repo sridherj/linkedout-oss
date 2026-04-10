@@ -15,6 +15,7 @@ linked_files:
   - backend/src/linkedout/commands/diagnostics.py
   - backend/src/linkedout/commands/version.py
   - backend/src/linkedout/commands/config.py
+  - backend/src/linkedout/commands/query_log.py
   - backend/src/linkedout/commands/report_issue.py
   - backend/src/linkedout/commands/start_backend.py
   - backend/src/linkedout/commands/stop_backend.py
@@ -27,13 +28,14 @@ linked_files:
   - backend/src/linkedout/commands/setup.py
   - backend/src/linkedout/commands/upgrade.py
   - backend/src/linkedout/commands/migrate.py
-version: 3
+version: 4
 last_verified: "2026-04-10"
 ---
 
 # CLI Commands
 
 **Created:** 2026-04-09 -- Written from scratch for LinkedOut OSS
+**Updated:** 2026-04-10 -- v4: diagnostics adds health_status/issues, config show implemented, log-query command, --repair uses CLI entry point
 
 ## Intent
 
@@ -111,6 +113,13 @@ Provide a user-facing CLI surface for all LinkedOut operations: setup, data impo
   - No `search_query:` prefix is applied — query embeddings must match document embeddings, which are generated without prefixes.
   - Verify: outputs valid JSON array of correct dimension (768 for local, 1536 for OpenAI); `--provider` choice constraint works; `--format raw` outputs space-separated values.
 
+### Query Logging
+
+- **log-query**: Log a completed network query to the daily JSONL history file. Called by AI skills after each `/linkedout` query execution. Takes a positional `TEXT` argument (the query string).
+  - Options: `--type <type>` (query type: `company_lookup`, `person_search`, `semantic_search`, `network_stats`, `general`; default: `general`), `--results <count>` (number of results returned; default: 0).
+  - Output: Appends a JSON line to `~/linkedout-data/queries/YYYY-MM-DD.jsonl` with fields: `timestamp` (ISO 8601), `query_text`, `query_type`, `result_count`. Prints a confirmation message to stderr.
+  - Verify: creates the `queries/` directory if it doesn't exist; appends (not overwrites) to existing daily files; invalid `--type` values are rejected by Click choice validation.
+
 ### System
 
 - **status**: Quick one-line system health check. Checks database connectivity (via `check_db_connection()`), queries profile/company counts, calculates embedding coverage percentage, checks backend server status via PID file and `/health` endpoint, and reports demo mode state.
@@ -119,10 +128,10 @@ Provide a user-facing CLI surface for all LinkedOut operations: setup, data impo
   - Output (JSON): structured object with `version`, `demo_mode`, `database_name`, `db_connected`, `profiles`, `companies`, `embedding_coverage_pct`, and `backend` sub-object.
   - Verify: demo mode indicator appears when active; backend status detects running/stopped server.
 
-- **diagnostics**: Comprehensive system health report for troubleshooting. Collects system info (OS, Python, PostgreSQL versions, disk space, data dir size), configuration (embedding provider/model, API key status), database stats (profile/company/connection counts, embedding coverage, schema version), and runs health checks (DB connection, embedding model, disk space, API keys). Saves a JSON report to `~/linkedout-data/reports/`.
-  - Options: `--repair` (auto-fix common issues, e.g., offer to run `linkedout embed` for profiles lacking embeddings), `--json` (output as JSON), `--output <path>` (write report to specific file).
-  - Output: Multi-section human-readable summary (System, Config, Database, Health Checks, Recommendations) or raw JSON.
-  - Verify: API key status shows configured/not-configured without revealing secrets; `--repair` offers to run appropriate fix commands.
+- **diagnostics**: Comprehensive system health report for troubleshooting. Collects system info (OS, Python, PostgreSQL versions, disk space, data dir size), configuration (embedding provider/model, API key status), database stats (profile/company/connection counts, embedding coverage, schema version), and runs health checks (DB connection, embedding model, disk space, API keys). Computes a `health_status` object containing a `badge` (HEALTHY | NEEDS_ATTENTION | ACTION_REQUIRED) and severity counts (`critical`, `warning`, `info`). Badge derivation: HEALTHY if 0 critical and 0 warning issues; NEEDS_ATTENTION if 0 critical but ≥1 warning; ACTION_REQUIRED if ≥1 critical. Derives an `issues` list from DB stats and health check results via `compute_issues()` (lives in `health_checks.py` as a shared utility), with categories: bootstrap (missing system records), setup (missing owner profile), embeddings (profiles without embeddings), enrichment (unenriched profiles), affinity (connections without scores), and any failed health check. Each issue has `severity` (CRITICAL|WARNING|INFO), `category`, `message`, and `action` (CLI command to fix). Saves a JSON report to `~/linkedout-data/reports/`.
+  - Options: `--repair` (auto-fix common issues by invoking the `linkedout` CLI entry point directly, e.g., `linkedout embed`; does NOT use `sys.executable -m linkedout.cli`), `--json` (output as JSON), `--output <path>` (write report to specific file).
+  - Output: Multi-section human-readable summary (System, Config, Database, Health Checks, Recommendations) or raw JSON. The `database` section of JSON output includes extended stats: `profiles_enriched`, `profiles_unenriched`, `enrichment_events_total`, `connections_with_affinity`, `connections_without_affinity`, `owner_profile_exists`, `system_tenant_exists`, `system_bu_exists`, `system_user_exists`, `seed_companies_loaded`, `funding_rounds_total` (in addition to original counts).
+  - Verify: API key status shows configured/not-configured without revealing secrets; `--repair` invokes the `linkedout` CLI entry point directly; `--json` output includes `health_status` object (`{badge, critical, warning, info}`) and `issues` array with severity-sorted actionable items.
 
 - **version**: Show version information. Displays ASCII art logo, version number, Python version, PostgreSQL version, install path, config path, and data directory.
   - Options: `--json` (output as JSON object from `get_version_info()`).
@@ -130,7 +139,9 @@ Provide a user-facing CLI surface for all LinkedOut operations: setup, data impo
 
 - **config**: Click subgroup for configuration management. Currently has two subcommands:
   - **config path**: Show the config file location (`~/.linkedout/config.yaml`).
-  - **config show**: Show current config with secrets redacted. Not yet implemented (exits with "coming in Phase 2").
+  - **config show**: Show current configuration with secrets redacted. Displays key-value pairs: `embedding_provider`, `embedding_model`, `database_url` (always shows `***`, never the real URL), `data_dir`, `demo_mode`, `backend_port`, `api_keys.openai` (shows "configured" or "not configured"), `api_keys.apify` (shows "configured" or "not configured").
+    - Options: `--json` (output as JSON object with the same fields).
+    - Verify: `database_url` is always `***`; API key values are never exposed, only "configured"/"not configured" status.
 
 - **report-issue**: Generate a diagnostic bundle for bug reports. Not yet implemented (exits with "coming in Phase 3").
   - Options: `--dry-run` (show the redacted report without filing an issue).

@@ -12,6 +12,7 @@ from shared.utilities.health_checks import (
     check_db_connection,
     check_disk_space,
     check_embedding_model,
+    compute_issues,
     get_db_stats,
 )
 
@@ -203,7 +204,8 @@ class TestGetDbStats:
         mock_session.execute.return_value.first = mock_first
 
         stats = get_db_stats(session=mock_session)
-        expected_keys = {
+        # Original 7 fields
+        original_keys = {
             'profiles_total',
             'profiles_with_embeddings',
             'profiles_without_embeddings',
@@ -212,7 +214,37 @@ class TestGetDbStats:
             'last_enrichment',
             'schema_version',
         }
-        assert expected_keys == set(stats.keys())
+        assert original_keys.issubset(set(stats.keys()))
+
+    def test_get_db_stats_backward_compatible(self):
+        """Original 7 fields are still present with correct defaults."""
+        mock_session = MagicMock()
+        mock_session.execute.return_value.scalar.return_value = 0
+        mock_session.execute.return_value.first.return_value = None
+
+        stats = get_db_stats(session=mock_session)
+        for key in ['profiles_total', 'profiles_with_embeddings',
+                     'profiles_without_embeddings', 'companies_total',
+                     'connections_total']:
+            assert key in stats
+        assert 'last_enrichment' in stats
+        assert 'schema_version' in stats
+
+    def test_get_db_stats_new_fields_present(self):
+        """All new fields are present in the returned dict."""
+        mock_session = MagicMock()
+        mock_session.execute.return_value.scalar.return_value = 0
+        mock_session.execute.return_value.first.return_value = None
+
+        stats = get_db_stats(session=mock_session)
+        new_keys = {
+            'profiles_enriched', 'profiles_unenriched', 'enrichment_events_total',
+            'connections_with_affinity', 'connections_without_affinity',
+            'owner_profile_exists',
+            'system_tenant_exists', 'system_bu_exists', 'system_user_exists',
+            'seed_companies_loaded', 'funding_rounds_total',
+        }
+        assert new_keys.issubset(set(stats.keys()))
 
     def test_returns_defaults_when_no_session_and_no_db(self):
         """Returns zero-valued dict when no session given and DB is unavailable."""
@@ -226,3 +258,71 @@ class TestGetDbStats:
             assert stats['connections_total'] == 0
             assert stats['last_enrichment'] is None
             assert stats['schema_version'] is None
+            # New fields default correctly
+            assert stats['profiles_enriched'] == 0
+            assert stats['connections_with_affinity'] == 0
+            assert stats['owner_profile_exists'] is False
+            assert stats['system_tenant_exists'] is False
+            assert stats['funding_rounds_total'] == 0
+
+
+class TestComputeIssues:
+    """Tests for compute_issues()."""
+
+    def _healthy_stats(self):
+        return {
+            'system_tenant_exists': True,
+            'system_bu_exists': True,
+            'system_user_exists': True,
+            'owner_profile_exists': True,
+            'profiles_total': 100,
+            'profiles_without_embeddings': 0,
+            'profiles_unenriched': 0,
+            'connections_without_affinity': 0,
+        }
+
+    def test_empty_on_healthy_system(self):
+        """All good -> empty issues list."""
+        issues = compute_issues(self._healthy_stats(), [])
+        assert issues == []
+
+    def test_critical_on_missing_tenant(self):
+        """system_tenant_exists: False -> CRITICAL issue."""
+        stats = self._healthy_stats()
+        stats['system_tenant_exists'] = False
+        issues = compute_issues(stats, [])
+        critical = [i for i in issues if i['severity'] == 'CRITICAL']
+        assert len(critical) == 1
+        assert 'tenant' in critical[0]['message'].lower()
+
+    def test_warning_on_missing_embeddings(self):
+        """Profiles without embeddings -> WARNING with count."""
+        stats = self._healthy_stats()
+        stats['profiles_without_embeddings'] = 42
+        issues = compute_issues(stats, [])
+        warnings = [i for i in issues if i['severity'] == 'WARNING']
+        assert any('42' in w['message'] for w in warnings)
+
+    def test_info_on_unenriched(self):
+        """Unenriched profiles -> INFO issue."""
+        stats = self._healthy_stats()
+        stats['profiles_unenriched'] = 10
+        issues = compute_issues(stats, [])
+        infos = [i for i in issues if i['severity'] == 'INFO']
+        assert any('10' in i['message'] for i in infos)
+
+    def test_critical_on_health_check_fail(self):
+        """Health check fail -> CRITICAL issue."""
+        stats = self._healthy_stats()
+        checks = [{'check': 'db_connection', 'status': 'fail', 'detail': 'connection refused'}]
+        issues = compute_issues(stats, checks)
+        critical = [i for i in issues if i['severity'] == 'CRITICAL']
+        assert any(i['category'] == 'db_connection' for i in critical)
+
+    def test_info_on_missing_affinity(self):
+        """Connections without affinity -> INFO issue."""
+        stats = self._healthy_stats()
+        stats['connections_without_affinity'] = 5
+        issues = compute_issues(stats, [])
+        infos = [i for i in issues if i['severity'] == 'INFO']
+        assert any('5' in i['message'] for i in infos)

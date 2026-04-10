@@ -55,17 +55,26 @@ def _get_data_dir() -> Path:
     )
 
 
-def check_db_connection(db_manager: 'DbSessionManager | None' = None) -> HealthCheckResult:
+def check_db_connection(
+    db_manager: 'DbSessionManager | None' = None,
+    session: Session | None = None,
+) -> HealthCheckResult:
     """Test PostgreSQL connectivity.
 
     Args:
         db_manager: An existing ``DbSessionManager``. When *None*, one is
             created internally via ``cli_db_manager()``.
+        session: An existing SQLAlchemy session. When provided, uses it
+            directly instead of creating one via ``db_manager``.
 
     Returns ``pass`` when a simple ``SELECT 1`` succeeds, ``fail`` on any
     connection or query error.
     """
     try:
+        if session is not None:
+            session.execute(text('SELECT 1'))
+            return HealthCheckResult(check='db_connection', status='pass')
+
         if db_manager is None:
             from shared.config import get_config
             settings = get_config()
@@ -79,8 +88,8 @@ def check_db_connection(db_manager: 'DbSessionManager | None' = None) -> HealthC
 
         from shared.infra.db.db_session_manager import DbSessionType
 
-        with db_manager.get_session(DbSessionType.READ) as session:
-            session.execute(text('SELECT 1'))
+        with db_manager.get_session(DbSessionType.READ) as sess:
+            sess.execute(text('SELECT 1'))
         return HealthCheckResult(check='db_connection', status='pass')
     except Exception as e:
         return HealthCheckResult(
@@ -216,6 +225,22 @@ def get_db_stats(
         'connections_total': 0,
         'last_enrichment': None,
         'schema_version': None,
+        # Enrichment
+        'profiles_enriched': 0,
+        'profiles_unenriched': 0,
+        'enrichment_events_total': 0,
+        # Affinity
+        'connections_with_affinity': 0,
+        'connections_without_affinity': 0,
+        # Owner profile
+        'owner_profile_exists': False,
+        # System records
+        'system_tenant_exists': False,
+        'system_bu_exists': False,
+        'system_user_exists': False,
+        # Seed data
+        'seed_companies_loaded': 0,
+        'funding_rounds_total': 0,
     }
 
     def _collect(db: Session) -> dict:
@@ -223,6 +248,10 @@ def get_db_stats(
         from linkedout.company.entities.company_entity import CompanyEntity
         from linkedout.connection.entities.connection_entity import ConnectionEntity
         from linkedout.enrichment_event.entities.enrichment_event_entity import EnrichmentEventEntity
+        from organization.entities.tenant_entity import TenantEntity
+        from organization.entities.bu_entity import BuEntity
+        from organization.entities.app_user_entity import AppUserEntity
+        from linkedout.funding.entities.funding_round_entity import FundingRoundEntity
 
         # Profile counts
         total = db.execute(
@@ -240,14 +269,70 @@ def get_db_stats(
         stats['profiles_with_embeddings'] = with_embeddings
         stats['profiles_without_embeddings'] = total - with_embeddings
 
+        # Enrichment counts
+        enriched = db.execute(
+            func.count(CrawledProfileEntity.id).select().where(
+                CrawledProfileEntity.has_enriched_data.is_(True),
+            ),
+        ).scalar() or 0
+        stats['profiles_enriched'] = enriched
+        stats['profiles_unenriched'] = total - enriched
+
+        stats['enrichment_events_total'] = db.execute(
+            func.count(EnrichmentEventEntity.id).select(),
+        ).scalar() or 0
+
         # Company count
         stats['companies_total'] = db.execute(
             func.count(CompanyEntity.id).select(),
         ).scalar() or 0
 
-        # Connection count
-        stats['connections_total'] = db.execute(
+        # Connection counts
+        conn_total = db.execute(
             func.count(ConnectionEntity.id).select(),
+        ).scalar() or 0
+        stats['connections_total'] = conn_total
+
+        with_affinity = db.execute(
+            func.count(ConnectionEntity.id).select().where(
+                ConnectionEntity.affinity_score.isnot(None),
+            ),
+        ).scalar() or 0
+        stats['connections_with_affinity'] = with_affinity
+        stats['connections_without_affinity'] = conn_total - with_affinity
+
+        # Owner profile
+        owner_count = db.execute(
+            func.count(CrawledProfileEntity.id).select().where(
+                CrawledProfileEntity.data_source == 'setup',
+            ),
+        ).scalar() or 0
+        stats['owner_profile_exists'] = owner_count > 0
+
+        # System records
+        stats['system_tenant_exists'] = (db.execute(
+            func.count(TenantEntity.id).select().where(
+                TenantEntity.id == 'tenant_sys_001',
+            ),
+        ).scalar() or 0) > 0
+
+        stats['system_bu_exists'] = (db.execute(
+            func.count(BuEntity.id).select().where(
+                BuEntity.id == 'bu_sys_001',
+            ),
+        ).scalar() or 0) > 0
+
+        stats['system_user_exists'] = (db.execute(
+            func.count(AppUserEntity.id).select().where(
+                AppUserEntity.id == 'usr_sys_001',
+            ),
+        ).scalar() or 0) > 0
+
+        # Seed data
+        stats['seed_companies_loaded'] = stats['companies_total']
+
+        stats['funding_rounds_total'] = db.execute(
+            func.count(FundingRoundEntity.id).select(),
         ).scalar() or 0
 
         # Last enrichment date
@@ -281,3 +366,62 @@ def get_db_stats(
             return _collect(db)
     except Exception:
         return stats
+
+
+def compute_issues(db_stats: dict, health_checks: list[dict]) -> list[dict]:
+    """Derive actionable issues from raw diagnostics data."""
+    issues = []
+
+    # System records
+    if not db_stats.get('system_tenant_exists'):
+        issues.append({
+            'severity': 'CRITICAL', 'category': 'bootstrap',
+            'message': 'System tenant record missing — CSV import and enrichment will fail',
+            'action': 'linkedout setup --demo  # or --full',
+        })
+
+    # Owner profile
+    if not db_stats.get('owner_profile_exists') and db_stats.get('profiles_total', 0) > 0:
+        issues.append({
+            'severity': 'WARNING', 'category': 'setup',
+            'message': 'Owner profile not configured — affinity scoring needs your profile as baseline',
+            'action': 'Run /linkedout-setup and provide your LinkedIn URL',
+        })
+
+    # Embeddings
+    without_emb = db_stats.get('profiles_without_embeddings', 0)
+    if without_emb > 0:
+        issues.append({
+            'severity': 'WARNING', 'category': 'embeddings',
+            'message': f'{without_emb:,} profiles without embeddings — semantic search won\'t find them',
+            'action': 'linkedout embed',
+        })
+
+    # Enrichment
+    unenriched = db_stats.get('profiles_unenriched', 0)
+    if unenriched > 0:
+        issues.append({
+            'severity': 'INFO', 'category': 'enrichment',
+            'message': f'{unenriched:,} profiles not enriched — only name/company/title available',
+            'action': 'linkedout enrich  # requires Apify key',
+        })
+
+    # Affinity
+    without_affinity = db_stats.get('connections_without_affinity', 0)
+    if without_affinity > 0:
+        issues.append({
+            'severity': 'INFO', 'category': 'affinity',
+            'message': f'{without_affinity:,} connections without affinity scores',
+            'action': 'linkedout compute-affinity',
+        })
+
+    # Health check failures
+    for check in health_checks:
+        if check['status'] == 'fail':
+            issues.append({
+                'severity': 'CRITICAL', 'category': check['check'],
+                'message': check.get('detail', f'{check["check"]} failed'),
+                'action': 'linkedout diagnostics --repair',
+            })
+
+    return issues

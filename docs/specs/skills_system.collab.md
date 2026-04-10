@@ -26,13 +26,14 @@ linked_files:
   - bin/generate-schema-ref
   - setup
   - backend/src/linkedout/setup/skill_install.py
-version: 2
-last_verified: "2026-04-09"
+version: 3
+last_verified: "2026-04-10"
 ---
 
 # Skills System
 
 **Created:** 2026-04-09 -- Written from scratch for LinkedOut OSS
+**Updated:** 2026-04-10 -- v3: Skills Catalog updated for Skills v2 plan (query logging, graceful degradation, setup-report/report/history rewrites, extension disclaimer, upgrade dirty-check)
 
 ## Intent
 
@@ -267,6 +268,16 @@ The primary skill. Handles natural language queries about the user's professiona
 
 **Output formatting:** Table format for lists, rich single-person summaries, "Why this person" explanations for semantic results. Always shows total result count and suggests 2-3 follow-up queries.
 
+**Query logging:** After each query execution and result formatting, the skill calls `linkedout log-query "<query_text>" --type <type> --results <count>` to record the query. Logs `query_text`, `query_type` (company_lookup, person_search, semantic_search, network_stats, general), and `result_count` to daily JSONL files at `~/linkedout-data/queries/YYYY-MM-DD.jsonl`. If the CLI command fails (LinkedOut not installed), logging is skipped silently -- logging failure never interrupts the user's query.
+
+**Graceful degradation:** The preamble handles degraded states:
+- If `agent-context.env` does not exist but `linkedout status --json` succeeds: warns "Running without agent-context.env" and continues with limited features.
+- If 0 profiles: "Your network is empty. Run `/linkedout-setup` to import your connections."
+- If profiles > 0 but 0 embeddings: "Semantic search unavailable -- run `linkedout embed` first. Structured queries still work."
+- If demo mode active: "Running in demo mode with sample data."
+
+**Config reference:** Uses `linkedout config show --json` to check embedding provider, with fallback to "local" if command unavailable.
+
 ### /linkedout-setup -- First-Time Setup
 
 Guides users through initial LinkedOut installation.
@@ -279,6 +290,8 @@ Guides users through initial LinkedOut installation.
 
 ### /linkedout-extension-setup -- Chrome Extension Setup
 
+**Experimental disclaimer:** Displays a prominent note at the top: "The Chrome extension is experimental and not thoroughly tested. Core LinkedOut functionality works without the extension."
+
 Six-step interactive flow for setting up the Chrome extension.
 
 **Tools required:** Bash, Read
@@ -287,7 +300,7 @@ Six-step interactive flow for setting up the Chrome extension.
 1. **Prerequisites check** -- Chrome >= 114 installed, backend config exists, database connected (3 sub-checks)
 2. **Download extension** -- detects version via `linkedout version`, downloads zip from GitHub Releases, extracts to `~/linkedout-data/extension/chrome/`, validates `manifest.json`
 3. **Sideloading instructions** -- step-by-step guide for `chrome://extensions` Developer mode + Load unpacked. **Waits for user confirmation.**
-4. **Start backend** -- `linkedout start-backend --background`, health check at `http://localhost:8001/health`, handles port conflicts (LinkedOut vs non-LinkedOut processes) and database connection errors
+4. **Start backend** -- `linkedout start-backend --background`, health check at backend URL, handles port conflicts (LinkedOut vs non-LinkedOut processes) and database connection errors. **Dynamic port detection:** Reads the configured backend port via `linkedout config show --json` instead of hardcoding `localhost:8001`. Falls back to 8001 if the config command is unavailable.
 5. **Verify connection** -- guides user to open a LinkedIn profile and check the side panel. **Waits for user confirmation.** Provides troubleshooting for "Backend unreachable", empty side panel, and LinkedIn CAPTCHA scenarios.
 6. **Summary** -- reports what was set up and how to use it
 
@@ -299,7 +312,11 @@ Guides users through upgrading LinkedOut to the latest version.
 
 **Tools required:** Bash, Read
 
+**Dirty-state check:** Before `git pull`, checks `git status --porcelain` for uncommitted changes. If changes exist, warns the user to stash or commit before proceeding.
+
 **Steps:** `git pull` -> `pip install -e "./backend[dev]"` -> `linkedout migrate` -> `linkedout status` + `linkedout diagnostics` -> version check with changelog reference.
+
+**Post-upgrade changelog:** After `git pull`, shows `git log --oneline HEAD@{1}..HEAD` to display what changed. If no commits were pulled, shows "Already up to date."
 
 **Note:** Marked as manual steps pending Phase 10 interactive upgrade flow.
 
@@ -309,48 +326,45 @@ Browses past network queries from JSONL log files.
 
 **Tools required:** Bash, Read
 
-**Data source:** Daily JSONL files at `~/linkedout-data/queries/YYYY-MM-DD.jsonl`. Each line contains: `timestamp`, `query_id`, `session_id`, `query_text`, `query_type` (company_lookup, person_search, semantic_search, network_stats, general), `result_count`, `duration_ms`, `model_used`, `is_refinement`.
+**Data source:** Daily JSONL files at `~/linkedout-data/queries/YYYY-MM-DD.jsonl` (populated by `/linkedout` skill's query logging).
 
-**Capabilities:**
+**Behavior:**
+- If no JSONL files exist: "No query history yet. Your queries are logged automatically when you use `/linkedout`. Try asking a question first!"
 - **Default view** -- last 7 days, grouped by session, most recent first. Shows initial query, turn count, total results.
-- **Date range filtering** -- parses natural language ("last month", "this week", "between March 1 and March 15")
+- **Date range filtering** -- parses natural language ("last month", "this week")
 - **Text search** -- case-insensitive substring match on `query_text`
-- **Session drill-down** -- detailed chronological view of all turns in a session
 
-**Implementation:** Uses inline Python one-liners to parse JSONL, group by `session_id`, and format output.
+**Note:** Query history depends on the `/linkedout` skill's post-query logging. If users run raw `psql` queries outside of `/linkedout`, those are not logged.
 
 ### /linkedout-report -- Usage Report
 
-Generates a comprehensive usage report with 6 sections.
+Generates a usage report with 4 sections. Degrades gracefully when data sources are empty.
 
 **Tools required:** Bash, Read
 
 **Sections:**
-1. **Query Activity** -- total queries, weekly/monthly counts, avg queries/day, top 3 most active days. Source: `~/linkedout-data/queries/*.jsonl`.
-2. **Top Searches** -- most frequently searched companies (top 5), most common keywords (top 5), query type distribution. Source: same JSONL files.
-3. **Network Stats** -- total connections, embedding coverage, company count, connections by Dunbar tier. Source: database via `linkedout status --json` or direct `psql` queries.
-4. **Network Growth** -- import history from `~/linkedout-data/reports/import-csv-*.json` files.
-5. **Cost Tracker** -- enrichment and embedding costs from `~/linkedout-data/metrics/daily/*.jsonl`.
-6. **Profile Freshness** -- enrichment recency distribution (30d/90d/180d buckets) from `crawled_profile.enriched_at`.
+1. **Network Overview** -- from `linkedout status --json` + `linkedout diagnostics --json`. Profile count, enrichment coverage, embedding coverage, connection count, affinity coverage, company count, funding rounds. Always works after setup.
+2. **Query Activity** -- from `~/linkedout-data/queries/*.jsonl`. If no files: "No query history yet -- start with `/linkedout`." If files exist: total queries, queries this week, most common query types, avg results per query, recent sessions.
+3. **Import History** -- from `~/linkedout-data/reports/import-csv-*.json`. If no files: "No imports recorded." If files exist: date, row count, breakdown.
+4. **System Health Snapshot** -- from `linkedout diagnostics --json`. Health status badge, severity counts, top issues.
 
-**Output modes:** Plain-text formatted report (default) or structured JSON (when user requests JSON output). Missing data sources are skipped with a brief note, never an error.
+**Removed from v2:** Cost tracking section (no data source exists), profile freshness by `enriched_at` (column doesn't exist on the entity; enrichment coverage from diagnostics is used instead).
 
 ### /linkedout-setup-report -- System Health
 
-Runs diagnostics and produces a scored health assessment.
+Runs `linkedout diagnostics --json` and presents a scored health assessment. The skill delegates all scoring and issue detection to the CLI -- it does not compute health scores locally.
 
-**Tools required:** Bash, Read, Write
+**Tools required:** Bash, Read
 
 **Steps:**
-1. **Run diagnostics** -- `linkedout diagnostics --json` and `linkedout status --json`
-2. **Compute health score** -- starts at 100, subtracts 20 per CRITICAL issue, 5 per WARNING, 1 per INFO. Floor at 0. Badges: `[HEALTHY]` (>=90, 0 issues), `[WARNING]` (>=70), `[CRITICAL]` (<70).
-3. **Generate recommendations** -- maps each issue to a specific CLI command, sorted by priority
-4. **Historical comparison** -- reads previous `setup-report-*.json` and computes deltas for profile count, embedding coverage, issue count, health score
-5. **Persist report** -- writes JSON to `~/linkedout-data/reports/setup-report-YYYYMMDD-HHMMSS.json`
+1. **Run diagnostics** -- `linkedout diagnostics --json` (primary data source), optionally `linkedout status --json` for backend status
+2. **Display health badge** -- from CLI's `health_status.badge`: `[HEALTHY]` (0 critical, 0 warning), `[NEEDS ATTENTION]` (0 critical, ≥1 warning), `[ACTION REQUIRED]` (≥1 critical)
+3. **Display network summary** -- profile count, enrichment coverage, embedding coverage, connection count, affinity coverage, company count, funding rounds
+4. **Display issues** -- sorted by severity (CRITICAL first), each with message and fix command from CLI's `issues` array
+5. **Historical comparison** -- reads previous `diagnostic-*.json` (not `setup-report-*`) from `~/linkedout-data/reports/` and computes deltas
+6. **Interactive repair** -- if CRITICAL issues found, offers to run each issue's `action` command
 
-**Output modes:** Summary (one-screen overview, default) or detailed (full diagnostics, all stats, system info, config summary).
-
-**Interactive repair:** If CRITICAL issues found, prompts user and runs `linkedout diagnostics --repair` on confirmation.
+**Key change from v2:** Health scoring, issue detection, and the `issues` data structure are now provided by the `diagnostics` CLI command (not computed in the skill). Report filenames are `diagnostic-*` (matching CLI output), not `setup-report-*`.
 
 ### /linkedout-dev -- Engineering Principles
 

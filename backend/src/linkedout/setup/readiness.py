@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -59,7 +58,7 @@ class ReadinessReport:
 def collect_readiness_data(db_url: str, data_dir: Path) -> dict:  # noqa: ARG001
     """Gather all counts from the database and config files.
 
-    Queries the database via CLI subprocess calls and inspects the
+    Queries the database via health check utilities and inspects the
     filesystem for configuration status. Returns a raw data dict
     that feeds into ``compute_coverage`` and ``detect_gaps``.
 
@@ -385,10 +384,9 @@ def _format_provider(provider: str) -> str:
 
 
 def _query_db_counts(log) -> dict:
-    """Query database for all readiness counts via CLI diagnostics.
+    """Query database for readiness counts via health_checks.
 
-    Uses ``linkedout diagnostics --json`` to get counts. If the command
-    is unavailable, falls back to individual queries.
+    Uses ``get_db_stats()`` directly instead of shelling out to the CLI.
     """
     counts = {
         "profiles_loaded": 0,
@@ -403,43 +401,18 @@ def _query_db_counts(log) -> dict:
         "connections_company_matched": 0,
         "seed_tables_populated": 0,
     }
-
-    result = subprocess.run(
-        ["linkedout", "diagnostics", "--json"],
-        capture_output=True,
-        text=True,
-    )
-
-    if result.returncode == 0:
-        try:
-            data = json.loads(result.stdout)
-            # Map diagnostics output to our counts
-            for key in counts:
-                if key in data:
-                    counts[key] = data[key]
-            # Compute derived fields if not present
-            if (
-                counts["profiles_without_embeddings"] == 0
-                and counts["profiles_loaded"] > 0
-            ):
-                counts["profiles_without_embeddings"] = (
-                    counts["profiles_loaded"] - counts["profiles_with_embeddings"]
-                )
-            if (
-                counts["connections_without_affinity"] == 0
-                and counts["connections_total"] > 0
-            ):
-                counts["connections_without_affinity"] = (
-                    counts["connections_total"] - counts["connections_with_affinity"]
-                )
-        except (json.JSONDecodeError, KeyError) as exc:
-            log.warning("Failed to parse diagnostics JSON: {}", exc)
-    else:
-        log.warning(
-            "diagnostics --json failed (exit {}), counts will be zero",
-            result.returncode,
-        )
-
+    try:
+        from shared.utilities.health_checks import get_db_stats
+        stats = get_db_stats()
+        counts['profiles_loaded'] = stats.get('profiles_total', 0)
+        counts['profiles_with_embeddings'] = stats.get('profiles_with_embeddings', 0)
+        counts['profiles_without_embeddings'] = stats.get('profiles_without_embeddings', 0)
+        counts['companies_loaded'] = stats.get('companies_total', 0)
+        counts['connections_total'] = stats.get('connections_total', 0)
+        counts['connections_with_affinity'] = stats.get('connections_with_affinity', 0)
+        counts['connections_without_affinity'] = stats.get('connections_without_affinity', 0)
+    except Exception as exc:
+        log.warning("Failed to collect DB stats: {}", exc)
     return counts
 
 
@@ -474,14 +447,13 @@ def _check_config(data_dir: Path, log) -> dict:
     }
 
 
-def _check_db_connected() -> bool:
+def _check_db_connected(session=None) -> bool:
     """Check if the database is reachable."""
-    result = subprocess.run(
-        ["linkedout", "diagnostics", "--ping"],
-        capture_output=True,
-        text=True,
-    )
-    return result.returncode == 0
+    try:
+        from shared.utilities.health_checks import check_db_connection
+        return check_db_connection(session=session).status == 'pass'
+    except Exception:
+        return False
 
 
 def _check_skills(log) -> dict:  # noqa: ARG001

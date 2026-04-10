@@ -25,25 +25,44 @@ If `agent-context.env` does not exist, tell the user:
 
 ## Upgrade Steps
 
-1. **Pull latest code:**
+1. **Check for uncommitted changes:**
+
+```bash
+cd $(git rev-parse --show-toplevel) && git status --porcelain
+```
+
+If there are uncommitted changes, warn the user:
+> You have uncommitted changes. Stash or commit them before upgrading: `git stash`
+
+Do not proceed until the working tree is clean.
+
+2. **Pull latest code:**
 
 ```bash
 cd $(git rev-parse --show-toplevel) && git pull origin main
 ```
 
-2. **Update dependencies:**
+3. **Show what changed:**
+
+```bash
+cd $(git rev-parse --show-toplevel) && git log --oneline HEAD@{1}..HEAD
+```
+
+If no commits were pulled: "Already up to date."
+
+4. **Update dependencies:**
 
 ```bash
 cd $(git rev-parse --show-toplevel)/backend && source .venv/bin/activate && uv pip install -r requirements.txt
 ```
 
-3. **Run database migrations:**
+5. **Run database migrations:**
 
 ```bash
 cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source {{AGENT_CONTEXT_PATH}} && {{CLI_PREFIX}} migrate
 ```
 
-4. **Verify system health:**
+6. **Verify system health:**
 
 ```bash
 cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source {{AGENT_CONTEXT_PATH}} && {{CLI_PREFIX}} status

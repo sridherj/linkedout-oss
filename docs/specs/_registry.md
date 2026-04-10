@@ -21,10 +21,10 @@
 | Search Sessions & History | [search_sessions.collab.md](search_sessions.collab.md) | backend/src/linkedout/search_session, backend/src/linkedout/search_tag | 1 | 2026-04-09 |
 | Search Conversation Flow | [search_conversation_flow.collab.md](search_conversation_flow.collab.md) | extension/entrypoints/sidepanel, backend/src/linkedout/intelligence/controllers | 1 | 2026-04-09 |
 | Chrome Extension | [chrome_extension.collab.md](chrome_extension.collab.md) | extension | 1 | 2026-04-09 |
-| CLI Commands | [cli_commands.collab.md](cli_commands.collab.md) | backend/src/linkedout | 1 | 2026-04-09 |
+| CLI Commands | [cli_commands.collab.md](cli_commands.collab.md) | backend/src/linkedout | 4 | 2026-04-10 |
 | Unit Tests | [unit_tests.collab.md](unit_tests.collab.md) | backend/tests/, backend/conftest.py | 1 | 2026-04-09 |
 | Integration Tests | [integration_tests.collab.md](integration_tests.collab.md) | backend/tests/integration | 1 | 2026-04-09 |
-| Skills System | [skills_system.collab.md](skills_system.collab.md) | skills | 1 | 2026-04-09 |
+| Skills System | [skills_system.collab.md](skills_system.collab.md) | skills | 3 | 2026-04-10 |
 | Demo Mode | [demo_mode.collab.md](demo_mode.collab.md) | backend/src/linkedout/demo | 1 | 2026-04-09 |
 | Seed Data | [seed_data.collab.md](seed_data.collab.md) | seed-data | 1 | 2026-04-09 |
 | AI Agent Infrastructure | [ai_agent_infrastructure.collab.md](ai_agent_infrastructure.collab.md) | backend/src/common/services, backend/src/common/entities | 2 | 2026-03-25 |
@@ -32,4 +32,4 @@
 | Example Domain (Project Mgmt) | [example_domain.collab.md](example_domain.collab.md) | backend/src/project_mgmt, backend/src/organization | 3 | 2026-03-27 |
 | Prompt Management | [prompt_management.collab.md](prompt_management.collab.md) | backend/src/utilities/prompt_manager | 1 | 2026-03-25 |
 | Reliability | [reliability.collab.md](reliability.collab.md) | backend/src/shared/infra/reliability | 1 | 2026-03-25 |
-| Onboarding Experience | [onboarding-experience.md](onboarding-experience.md) | backend/src/linkedout/setup, backend/src/linkedout/demo, backend/src/linkedout/commands | 2 | 2026-04-08 |
+| Onboarding Experience | [onboarding-experience.md](onboarding-experience.md) | backend/src/linkedout/setup, backend/src/linkedout/demo, backend/src/linkedout/commands | 5 | 2026-04-10 |

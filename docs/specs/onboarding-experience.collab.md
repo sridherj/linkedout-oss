@@ -19,7 +19,7 @@ linked_files:
   - src/linkedout/commands/demo_help.py
   - src/linkedout/commands/setup.py
 last_verified: 2026-04-10
-version: 4
+version: 5
 ---
 
 # Onboarding Experience
@@ -28,6 +28,7 @@ version: 4
 **Updated:** 2026-04-08 -- Added full setup prompt principles (WHY before HOW for steps 5-9)
 **Updated:** 2026-04-10 -- Added --demo/--full flags, pgvector template1 install, actionable pgvector error
 **Updated:** 2026-04-10 -- Added bootstrap behavior, degradation behavior, non-TTY handling, implementation conventions (v4)
+**Updated:** 2026-04-10 -- v5: Refined bootstrap guard clause, degradation wording, EOFError defaults, skill pre-config writes config/secrets files
 
 ## Intent
 
@@ -69,6 +70,8 @@ LinkedIn data). Users can transition from demo to full setup at any time via
   migrations succeed. These records are FK targets for `connection.tenant_id`,
   `connection.bu_id`, `connection.app_user_id`, `enrichment_event.tenant_id`, and all
   RLS-scoped operations. Without them, CSV import and enrichment fail with FK violations.
+  Bootstrap only runs if schema verification passes (tables must exist). Verify the records
+  exist after a fresh `linkedout setup` database step.
 
 - **Idempotent resume**: Re-running `linkedout setup` skips completed steps, printing
   a checkmark and "Already complete" for each. State is persisted in
@@ -316,16 +319,17 @@ LinkedIn data). Users can transition from demo to full setup at any time via
   immediately"). No change needed. Verify the WHY framing is preserved if the prompt
   text is modified.
 
-- **Without OpenAI key (local embeddings)**: If the user skips the OpenAI key at step 5,
-  LinkedOut uses the local nomic-embed-text-v1.5 model (768-dim vs OpenAI's 1536-dim).
-  Slightly lower embedding quality, ~0.2s per profile on CPU. The difference is marginal
-  under 5,000 profiles. No cost, no API dependency.
+- **Without OpenAI key (local embeddings)**: Search still works -- the local nomic model
+  produces 768-dim embeddings vs OpenAI's 1536-dim. Quality is slightly lower for nuanced
+  queries, and generation takes ~0.2s/profile on CPU vs near-instant with OpenAI Batch
+  API. For networks under 5K profiles, the difference is marginal.
 
-- **Without Apify key (no enrichment)**: If the user skips the Apify key at step 5,
-  profiles remain stubs (name, company, title, LinkedIn URL only). No work history,
-  education, or skills are enriched. Affinity scoring falls back to connection-level
-  signals only. Queries like "who has ML experience?" return incomplete results because
-  skill data is absent.
+- **Without Apify key (no enrichment)**: LinkedOut works, but with stub profiles from the
+  CSV export (name, current company, current title, LinkedIn URL). No work history,
+  education, skills, or certifications. Affinity scoring falls back to connection-level
+  signals only (recency, company overlap) -- career overlap and embedding similarity will
+  be zero. Queries like "who has ML experience?" depend on enriched profile data and will
+  return incomplete results.
 
 > Edge: These prompt principles apply to the full setup path only. Demo mode (D1-D5)
 > skips steps 5-9 entirely. If a user transitions from demo to full setup, they see
@@ -466,14 +470,15 @@ LinkedIn data). Users can transition from demo to full setup at any time via
   explicitly. `is_active` and `version` have `server_default` and are safe to omit.
 
 - **Skill pre-configuration**: The `/linkedout-setup` skill collects all user inputs
-  (API keys, CSV path, profile URL) conversationally before invoking `linkedout setup`.
-  The skill template never sources `agent-context.env` before setup completes — setup
-  creates that file. Inputs are passed via CLI flags or environment variables.
+  conversationally before invoking `linkedout setup`. It writes `config.yaml` and
+  `secrets.yaml` so the orchestrator's existing config-present checks skip interactive
+  prompts. `agent-context.env` is not sourced before setup -- setup creates it.
 
-- **EOFError handling in setup prompts**: Every `input()` and `getpass()` call wraps with
-  `try/except (EOFError, KeyboardInterrupt)` and defaults to the safe/conservative choice
-  (e.g., skip optional keys, use default tier). This enables non-interactive execution via
-  AI skills and CI pipelines. Pattern follows `demo_offer.py`.
+- **EOFError handling in setup prompts**: Every `input()` and `getpass()` call in setup
+  modules wraps with `try/except (EOFError, KeyboardInterrupt)` and defaults to the
+  safe/conservative choice (keep existing config, skip optional steps). This enables
+  non-interactive execution via AI skills and CI pipelines. The pattern follows
+  `demo_offer.py` which already implements this correctly.
 
 ## Decisions
 

@@ -26,8 +26,17 @@ cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && sour
 
 This sets `DATABASE_URL`, `LINKEDOUT_TENANT_ID`, `LINKEDOUT_BU_ID`, and `LINKEDOUT_USER_ID`.
 
-If the file does not exist, tell the user:
-> `agent-context.env` not found. Run `/linkedout-setup` to configure LinkedOut, or create `~/linkedout-data/config/agent-context.env` manually.
+If the file does not exist, check whether the system is still usable:
+
+```bash
+linkedout status --json 2>/dev/null
+```
+
+If `status --json` succeeds (database is configured via environment variables), continue with a note:
+> Running without `agent-context.env`. Some features may be limited. Run `/linkedout-setup` for full configuration.
+
+If `status --json` also fails, tell the user:
+> `agent-context.env` not found and database is not configured. Run `/linkedout-setup` to configure LinkedOut, or create `~/linkedout-data/config/agent-context.env` manually.
 
 2. **Check system health:**
 
@@ -38,7 +47,11 @@ linkedout status --json
 If the status check fails or reports errors, explain what's wrong and suggest:
 > Run `linkedout diagnostics` for a full system health report.
 
-If status shows 0 profiles, suggest running `/linkedout-setup` to import data.
+Interpret the status results and give contextual guidance:
+
+- **0 profiles:** "Your network is empty. Run `/linkedout-setup` to import your connections."
+- **0 embeddings but profiles > 0:** "Semantic search is unavailable — run `linkedout embed` first. Structured queries (by company, role, location) still work."
+- **Demo mode:** "Running in demo mode with sample data. Run `/linkedout-setup` to switch to your real network."
 
 ## Schema Reference
 
@@ -488,7 +501,7 @@ LIMIT 20;
 Use `embedding_nomic` (768-dimensional, nomic-embed-text-v1.5) for local embeddings, or `embedding_openai` (1536-dimensional, text-embedding-3-small) if the user's configured provider is OpenAI. Check the configured provider:
 
 ```bash
-linkedout config show | grep embedding_provider
+linkedout config show --json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['embedding_provider'])" 2>/dev/null || echo "local"
 ```
 
 ### Complex Intelligence
@@ -550,6 +563,20 @@ For semantic search results, include a "Why this person" explanation:
 
 > **Jane Smith** — VP Engineering at Stripe (similarity: 0.87)
 > Relevant because: headline mentions "ML infrastructure", experience at DeepMind and Google Brain, skills include "deep learning" and "distributed systems".
+
+## Query Logging
+
+After executing any query and formatting results, log it for history and reporting:
+
+```bash
+linkedout log-query "THE_USER_QUERY" --type QUERY_TYPE --results RESULT_COUNT
+```
+
+- Replace `THE_USER_QUERY` with the user's original question text (shell-escaped).
+- Replace `QUERY_TYPE` with one of: `company_lookup`, `person_search`, `semantic_search`, `network_stats`, `general`.
+- Replace `RESULT_COUNT` with the number of results returned.
+
+If the command fails (not installed, missing data dir), skip silently — never let logging interrupt the user's query.
 
 ## Follow-ups
 

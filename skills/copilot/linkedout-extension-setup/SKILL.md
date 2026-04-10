@@ -14,6 +14,9 @@ Set up the LinkedOut Chrome extension: check prerequisites, download the extensi
 
 This skill is **idempotent** — re-running it on an already-configured system skips completed steps.
 
+> **Note:** The Chrome extension is experimental and not thoroughly tested. You may encounter
+> rough edges. Core LinkedOut functionality (setup, queries, reports) works without the extension.
+
 ## Preamble
 
 Load credentials and activate the virtual environment:
@@ -264,6 +267,14 @@ If Chrome shows "Manifest file is missing or unreadable":
 
 Start the backend API server in the background.
 
+### Detect backend port
+
+```bash
+PORT=$(linkedout config show --json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('backend_port', 8001))" 2>/dev/null || echo 8001)
+```
+
+Use `$PORT` for all `localhost` URLs in the remaining steps.
+
 Tell the user:
 ```
 Starting the backend server...
@@ -277,30 +288,30 @@ cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && sour
 ### Check health
 
 ```bash
-curl -s http://localhost:8001/health
+curl -s http://localhost:$PORT/health
 ```
 
 ### Report results
 
 - **Success:**
   ```
-  Backend started on http://localhost:8001.
+  Backend started on http://localhost:$PORT.
   Health check passed.
   ```
 
 - **Port conflict (LinkedOut process detected):**
   If `start-backend` reports it restarted an existing LinkedOut process:
   ```
-  Port 8001 was already in use by a LinkedOut backend.
+  Port $PORT was already in use by a LinkedOut backend.
 
   Restarting...
-  Backend started on http://localhost:8001.
+  Backend started on http://localhost:$PORT.
   Health check passed.
   ```
 
 - **Port conflict (non-LinkedOut process):**
   ```
-  Port 8001 is already in use by another process.
+  Port $PORT is already in use by another process.
 
   LinkedOut will NOT stop an unknown process. Options:
     [1] Use a different port: linkedout start-backend --port 8002
@@ -372,10 +383,13 @@ The extension can't reach the backend server.
   3. If the backend is running but the extension still can't connect,
      check the backend URL in the extension options:
        Right-click the LinkedOut extension icon > Options
-       Verify "Backend URL" is set to http://localhost:8001
+       Verify "Backend URL" is set to http://localhost:$PORT
 
   4. If you started the backend on a different port (e.g., 8002),
      update the Backend URL in the extension options to match.
+
+  5. If your config uses a non-default port, verify it matches:
+       linkedout config show --json | python3 -c "import sys,json; print(json.load(sys.stdin).get('backend_port', 8001))"
 ```
 
 If the user reports the side panel is empty or nothing happens:
@@ -418,7 +432,7 @@ Extension setup complete.
 
 What was set up:
   - LinkedOut Chrome extension loaded from ~/linkedout-data/extension/chrome/
-  - Backend server running on http://localhost:8001
+  - Backend server running on http://localhost:$PORT
 
 How to use:
   - Visit any LinkedIn profile page — the side panel shows profile data

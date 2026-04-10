@@ -1,16 +1,15 @@
 ---
 name: linkedout-setup-report
 description: System health assessment with diagnostics, scoring, and repair suggestions
-version: 1.0.0
+version: 2.0.0
 tools:
   - Bash
   - Read
-  - Write
 ---
 
 # /linkedout-setup-report — System Health Report
 
-Assess LinkedOut system health by running diagnostics, computing a health score, generating prioritized recommendations, comparing against historical reports, and optionally repairing critical issues.
+Assess LinkedOut system health by running diagnostics and displaying actionable results.
 
 ## Preamble
 
@@ -23,203 +22,111 @@ If the file does not exist, tell the user:
 
 ## Step 1: Run Diagnostics
 
-Run both commands and capture their JSON output:
-
 ```bash
 {{CLI_PREFIX}} diagnostics --json
 ```
+
+Parse the JSON output. It contains:
+- `health_status` — object with `badge` (HEALTHY | NEEDS_ATTENTION | ACTION_REQUIRED), `critical`, `warning`, `info` counts
+- `issues` — array of objects with `severity`, `category`, `message`, `action`
+- `database` — stats including `profiles_total`, `profiles_with_embeddings`, `profiles_without_embeddings`, `profiles_enriched`, `companies_total`, `connections_total`, `connections_with_affinity`, `funding_rounds_total`
+- `system` — OS, Python, PostgreSQL version, disk info
+- `config` — embedding provider, API key status
+
+If the command fails, tell the user to run `/linkedout-setup` first.
+
+Optionally also run:
 
 ```bash
 {{CLI_PREFIX}} status --json
 ```
 
-Parse both JSON outputs. The diagnostics output contains `issues` (array of objects with `severity`, `message`, `category`, `details`) and detailed system checks. The status output contains quick network stats (`profile_count`, `company_count`, `embedding_count`, `connection_count`).
+This adds backend status (running/stopped, PID, port) to the report.
 
-If either command fails, report the error and suggest the user run `/linkedout-setup` first.
+## Step 2: Display Health Badge
 
-## Step 2: Compute Health Score
+Read `health_status.badge` and display:
 
-Start at 100 and subtract points per issue from the diagnostics output:
+- `HEALTHY`: `[HEALTHY] -- no issues found`
+- `NEEDS_ATTENTION`: `[NEEDS ATTENTION] -- N warnings`
+- `ACTION_REQUIRED`: `[ACTION REQUIRED] -- N critical, M warnings`
 
-- **CRITICAL** issue: -20 points each
-- **WARNING** issue: -5 points each
-- **INFO** issue: -1 point each
+## Step 3: Display Network Summary
 
-Floor at 0. Round to integer.
-
-Display the score using the health badge format:
-- Score >= 90 AND 0 issues: `[HEALTHY]`
-- Score >= 70: `[WARNING: N issue(s)]`
-- Score < 70: `[CRITICAL: N issue(s)]`
-
-Format: `System Health: [BADGE] score/100 -- N issue(s) found`
-
-## Step 3: Generate Recommendations
-
-For each issue from diagnostics, generate a prioritized recommendation:
-
-1. **Priority:** CRITICAL / WARNING / INFO (matches the issue severity)
-2. **What:** Describe the issue in plain language
-3. **Action:** Specific command to run. Common mappings:
-   - Missing embeddings -> `{{CLI_PREFIX}} embed --batch 100`
-   - Stale profiles -> `{{CLI_PREFIX}} enrich --stale`
-   - Missing config -> Run `/linkedout-setup`
-   - Database issues -> `{{CLI_PREFIX}} diagnostics --repair`
-   - Import needed -> `{{CLI_PREFIX}} import-connections <path>`
-4. **Impact:** What happens if the issue is ignored
-
-Sort recommendations by priority: CRITICAL first, then WARNING, then INFO.
-
-## Step 4: Historical Comparison
-
-Read the most recent `setup-report-*.json` from `{{DATA_DIR}}reports/`:
-
-```bash
-ls -t {{DATA_DIR}}reports/setup-report-*.json 2>/dev/null | head -1
-```
-
-If a previous report file exists, read it and compare key metrics:
-- Profile count change: "+47 profiles since last check"
-- Embedding coverage change: "embedding coverage up 3%"
-- Issue count change: "2 new issues since last check" or "1 issue resolved since last check"
-- Health score change: "health score improved from 78 to 92"
-
-Include the date of the previous report: "Since last check (Apr 5):"
-
-If no previous report exists, skip the comparison section entirely. Do not mention that comparison was attempted.
-
-## Step 5: Persist Report
-
-Write the full report as JSON to `{{DATA_DIR}}reports/setup-report-YYYYMMDD-HHMMSS.json` (use current date/time).
-
-Report JSON schema:
-
-```json
-{
-  "generated_at": "2026-04-08T14:23:00Z",
-  "health_score": 92,
-  "issue_count": 1,
-  "issues": [
-    {
-      "severity": "WARNING",
-      "message": "1,165 profiles missing embeddings",
-      "category": "embeddings",
-      "action": "linkedout embed --batch 100"
-    }
-  ],
-  "recommendations": [
-    {
-      "priority": "WARNING",
-      "what": "1,165 profiles missing embeddings",
-      "action": "linkedout embed --batch 100",
-      "impact": "Semantic search will not find these profiles"
-    }
-  ],
-  "stats": {
-    "profile_count": 4012,
-    "company_count": 1203,
-    "connection_count": 4012,
-    "embedding_count": 2847,
-    "embedding_coverage_pct": 70.9
-  },
-  "previous_report": "setup-report-20260405-091500.json",
-  "comparison": {
-    "profile_delta": 47,
-    "embedding_coverage_delta": 3.1,
-    "issue_delta": -1,
-    "score_delta": 5
-  }
-}
-```
-
-Create the reports directory if it does not exist:
-
-```bash
-mkdir -p {{DATA_DIR}}reports/
-```
-
-Write the JSON file using the Write tool or via Bash with Python.
-
-## Output Modes
-
-### Summary (default)
-
-Display a one-screen overview. Use this format:
+From the `database` section, display:
 
 ```
-System Health: [BADGE] score/100 -- N issue(s) found
+Network: X profiles | Y enriched | Z with embeddings (W%)
+Connections: X total | Y with affinity scores (W%)
+Companies: X | Funding rounds: Y
+```
 
-Network: X profiles | Y with embeddings (Z%)
-Companies: X | Connections: Y
+Use comma separators for numbers (e.g., 4,012). Percentages to one decimal (e.g., 70.9%).
 
-Since last check (date): +N profiles, embedding coverage up/down X%
+If the database is not connected, show:
 
-Recommendations:
-1. [SEVERITY] Issue description
-   Run: linkedout command --flags
+```
+Database: not connected
+```
 
-2. [SEVERITY] Issue description
-   Run: linkedout command --flags
+And suggest: `Check DATABASE_URL and PostgreSQL status, or run /linkedout-setup.`
 
-Report saved to: ~/linkedout-data/reports/setup-report-YYYYMMDD-HHMMSS.json
+## Step 4: Display Issues
+
+Show issues from the `issues` array, sorted by severity (CRITICAL first, then WARNING, then INFO):
+
+```
+Issues:
+  [CRITICAL] System tenant record missing -- CSV import and enrichment will fail
+     Fix: linkedout setup --demo  # or --full
+
+  [WARNING] 1,200 profiles without embeddings -- semantic search won't find them
+     Fix: linkedout embed
 ```
 
 If there are no issues, show:
 
 ```
-System Health: [HEALTHY] 100/100 -- no issues found
-
-Network: X profiles | Y with embeddings (Z%)
-Companies: X | Connections: Y
-
-No action needed. Your LinkedOut installation is healthy.
-
-Report saved to: ~/linkedout-data/reports/setup-report-YYYYMMDD-HHMMSS.json
+No issues found. Your LinkedOut installation is healthy.
 ```
 
-### Detailed (user asks for "detailed" or "full")
+## Step 5: Historical Comparison
 
-Everything from the summary PLUS:
-- Full diagnostics output (all sections from `linkedout diagnostics`)
-- All issues listed with complete details
-- Complete stats breakdown (every metric from status)
-- System info: Python version, OS, PostgreSQL version
-- Config summary: data directory, embedding provider, log level
+Find the most recent prior `diagnostic-*.json` in `{{DATA_DIR}}reports/`:
+
+```bash
+ls -t {{DATA_DIR}}reports/diagnostic-*.json 2>/dev/null | head -2
+```
+
+The second file (if it exists) is the previous report. The first is the one just saved by the diagnostics command.
+
+If a previous report exists, read it and compare:
+- Profile count change: "+47 profiles since last check"
+- Embedding coverage change: "embedding coverage up 3%"
+- Issue count change: "2 new issues" or "1 issue resolved"
+
+Include the date of the previous report: "Since last check (Apr 5):"
+
+If no previous report exists, skip this section entirely. Do not mention that comparison was attempted.
+
+## Step 6: Note Report Path
+
+The diagnostics command already saves the report to `{{DATA_DIR}}reports/diagnostic-YYYYMMDD-HHMMSS.json`. Note that path at the end:
+
+```
+Report saved to: ~/linkedout-data/reports/diagnostic-YYYYMMDD-HHMMSS.json
+```
 
 ## Interactive Repair
 
-If CRITICAL issues are found, prompt the user:
+If CRITICAL issues exist, prompt the user:
 
-> Found N critical issue(s). Want me to fix them?
+> Found N critical issue(s). Want me to help fix them?
 
-If the user says yes, run:
+If the user says yes, for each critical issue, run the suggested `action` command from the issue. Then re-run diagnostics to show the updated status.
 
-```bash
-{{CLI_PREFIX}} diagnostics --repair
-```
+If only WARNING or INFO issues are found, do not prompt for repair -- just show the recommendations.
 
-Report the results of the repair. Then re-run diagnostics to show the updated health score.
+## Output Format
 
-If only WARNING or INFO issues are found, do not prompt for repair — just show the recommendations.
-
-## Copy to GitHub Issue
-
-When the user asks to share the report or file an issue, format the output under this header:
-
-```
-## LinkedOut Diagnostic Report
-
-Generated: YYYY-MM-DD HH:MM:SS
-Health Score: XX/100
-
-[Full report content here -- plain text, no ANSI]
-```
-
-This section is designed to be pasted as-is into a GitHub issue body.
-
-## Important Notes
-
-- All output is plain text. No ANSI escape codes, no color, no Unicode box-drawing characters.
-- Numbers use comma separators (e.g., 4,012).
-- Percentages include one decimal place (e.g., 70.9%).
-- The report JSON file is the canonical record. The terminal output is a human-friendly view of the same data.
+All output is plain text. No ANSI escape codes, no color, no Unicode box-drawing characters.

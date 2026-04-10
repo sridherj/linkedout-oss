@@ -15,6 +15,57 @@ from linkedout.setup.readiness import (
 )
 
 
+class TestQueryDbCounts:
+    @patch("shared.utilities.health_checks.get_db_stats")
+    def test_query_db_counts_maps_from_health_checks(self, mock_get_stats):
+        """Verify field mapping from get_db_stats to readiness counts."""
+        from linkedout.setup.readiness import _query_db_counts
+        from unittest.mock import MagicMock
+
+        mock_get_stats.return_value = {
+            'profiles_total': 100,
+            'profiles_with_embeddings': 80,
+            'profiles_without_embeddings': 20,
+            'companies_total': 50,
+            'connections_total': 200,
+            'connections_with_affinity': 150,
+            'connections_without_affinity': 50,
+        }
+        log = MagicMock()
+        counts = _query_db_counts(log)
+
+        assert counts['profiles_loaded'] == 100
+        assert counts['profiles_with_embeddings'] == 80
+        assert counts['profiles_without_embeddings'] == 20
+        assert counts['companies_loaded'] == 50
+        assert counts['connections_total'] == 200
+        assert counts['connections_with_affinity'] == 150
+        assert counts['connections_without_affinity'] == 50
+
+    @patch("shared.utilities.health_checks.get_db_stats", side_effect=ImportError("no module"))
+    def test_query_db_counts_handles_import_error(self, mock_get_stats):
+        """Graceful fallback when health_checks import fails."""
+        from linkedout.setup.readiness import _query_db_counts
+        from unittest.mock import MagicMock
+
+        log = MagicMock()
+        counts = _query_db_counts(log)
+        assert counts['profiles_loaded'] == 0
+        assert counts['connections_total'] == 0
+
+    @patch("shared.utilities.health_checks.check_db_connection")
+    def test_check_db_connected_uses_health_check(self, mock_check):
+        """Direct call to check_db_connection, no subprocess."""
+        from linkedout.setup.readiness import _check_db_connected
+        from shared.utilities.health_checks import HealthCheckResult
+
+        mock_check.return_value = HealthCheckResult(check='db_connection', status='pass')
+        assert _check_db_connected() is True
+
+        mock_check.return_value = HealthCheckResult(check='db_connection', status='fail')
+        assert _check_db_connected() is False
+
+
 class TestCollectReadinessData:
     @patch("linkedout.setup.readiness._check_skills")
     @patch("linkedout.setup.readiness._check_config")

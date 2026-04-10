@@ -59,6 +59,11 @@ class _LazyLinkedOutCLI(CategoryHelpGroup):
         self.add_command(config_group)
         self.add_command(report_issue_command)
 
+        # --- Query History ---
+        from linkedout.commands.query_log import log_query_command
+
+        self.add_command(log_query_command)
+
         # --- Setup ---
         from linkedout.commands.setup import setup_command
 

@@ -6,11 +6,9 @@ description: Browse past network queries with conversation grouping and search
 
 # /linkedout-history — Query History
 
-Browse your past LinkedOut network queries. View sessions grouped by conversation, filter by date range, and search for specific queries.
+Browse your past LinkedOut network queries grouped by session.
 
 ## Preamble
-
-1. **Load context and activate virtual environment:**
 
 ```bash
 cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env
@@ -19,234 +17,60 @@ cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && sour
 If the file does not exist, tell the user:
 > `agent-context.env` not found. Run `/linkedout-setup` to configure LinkedOut.
 
-2. **Resolve data directory:**
-
-The default data directory is `~/linkedout-data/`. If `LINKEDOUT_DATA_DIR` is set in the environment (from `agent-context.env`), use that value instead.
-
-The query history lives in `{data_dir}/queries/` as daily JSONL files named `YYYY-MM-DD.jsonl`.
-
-## Reading Query History
-
-Read JSONL files from the queries directory:
+Set the data directory:
 
 ```bash
-ls ~/linkedout-data/queries/*.jsonl 2>/dev/null
+DATA_DIR="${LINKEDOUT_DATA_DIR:-$HOME/linkedout-data}"
+```
+
+## Check for History
+
+```bash
+ls "$DATA_DIR"/queries/*.jsonl 2>/dev/null | head -5
 ```
 
 If no `.jsonl` files exist or the directory is missing, display:
-> No query history found. Start querying with `/linkedout`.
+> No query history yet. Try: `/linkedout "who do I know at Google?"` — your queries are logged automatically.
 
-Each JSONL line contains a JSON object with these fields:
-- `timestamp` — ISO 8601 datetime (UTC)
-- `query_id` — unique ID (e.g., `q_abc123`)
-- `session_id` — groups related queries into a conversation (e.g., `s_xyz789`)
-- `query_text` — the user's natural language query
-- `query_type` — classification: `company_lookup`, `person_search`, `semantic_search`, `network_stats`, `general`
-- `result_count` — number of results returned
-- `duration_ms` — query execution time in milliseconds
-- `model_used` — LLM model used (may be empty)
-- `is_refinement` — `true` if this query refines a previous query in the same session
+Then stop — do not continue.
 
-## Parsing and Grouping
+## Display Sessions
 
-Use a Python one-liner or inline reasoning to:
+Read the JSONL files. Each line is a JSON object with fields: `timestamp`, `query_id`,
+`session_id`, `query_text`, `query_type`, `result_count`, `duration_ms`, `is_refinement`.
 
-1. Read all JSONL files matching the date range (default: last 7 days)
-2. Parse each line as JSON
-3. Group entries by `session_id` to form conversations
-4. For each session, determine:
-   - **Initial query:** the first `query_text` in the session (lowest timestamp, or the entry where `is_refinement` is `false`)
-   - **Turn count:** number of entries in the session
-   - **Session timestamp:** the timestamp of the first entry
-   - **Total results:** sum of `result_count` across all entries
-5. Sort sessions by most recent first (latest `timestamp` in the session)
+**Default:** show the last 7 days. Adjust based on user request:
+- "last month" / "last 30 days" → 30 days
+- "this week" → from Monday of current week
+- Specific date → read only that day's file
 
-Example Python one-liner to parse and group:
-
-```bash
-python3 -c "
-import json, sys, os
-from collections import defaultdict
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
-
-data_dir = os.environ.get('LINKEDOUT_DATA_DIR', os.path.expanduser('~/linkedout-data'))
-queries_dir = Path(data_dir) / 'queries'
-if not queries_dir.exists():
-    print('No query history found. Start querying with /linkedout.')
-    sys.exit(0)
-
-# Date range: last N days (default 7)
-days = int(sys.argv[1]) if len(sys.argv) > 1 else 7
-cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-
-sessions = defaultdict(list)
-for f in sorted(queries_dir.glob('*.jsonl')):
-    for line in open(f):
-        line = line.strip()
-        if not line:
-            continue
-        entry = json.loads(line)
-        ts = datetime.fromisoformat(entry['timestamp'])
-        if ts >= cutoff:
-            sessions[entry['session_id']].append(entry)
-
-if not sessions:
-    print('No queries in the last {} days. Try a wider date range.'.format(days))
-    sys.exit(0)
-
-# Sort sessions by most recent entry
-sorted_sessions = sorted(sessions.items(), key=lambda x: max(e['timestamp'] for e in x[1]), reverse=True)
-
-for sid, entries in sorted_sessions:
-    entries.sort(key=lambda e: e['timestamp'])
-    initial = entries[0]
-    ts = datetime.fromisoformat(initial['timestamp'])
-    ts_str = ts.strftime('%b %-d %H:%M')
-    total_results = sum(e.get('result_count', 0) for e in entries)
-    turn_count = len(entries)
-    query_preview = initial['query_text'][:60] + ('...' if len(initial['query_text']) > 60 else '')
-    print(f'--- Session: \"{query_preview}\" ({turn_count} turn{\"s\" if turn_count != 1 else \"\"}, {ts_str}) ---')
-    print(f'    Results: {total_results} total | Type: {initial.get(\"query_type\", \"general\")}')
-    if turn_count > 1:
-        for i, e in enumerate(entries):
-            prefix = '    ' + ('-> ' if e.get('is_refinement') else '   ')
-            ets = datetime.fromisoformat(e['timestamp']).strftime('%H:%M')
-            print(f'{prefix}[{ets}] {e[\"query_text\"][:70]} ({e.get(\"result_count\", 0)} results)')
-    print()
-" 7
-```
-
-## Default View (No Arguments)
-
-When the user invokes `/linkedout-history` with no arguments:
-
-1. Show the last 7 days of queries
-2. Group by session, most recent session first
-3. For each session, display:
+Group entries by `session_id`. For each session show:
 
 ```
---- Session: "who do I know at Stripe?" (3 turns, Apr 7 14:23) ---
-    Results: 47 total | Type: company_lookup
-    -> [14:23] who do I know at Stripe? (12 results)
-    -> [14:25] filter by engineering roles (8 results)
-    -> [14:27] anyone in SF? (5 results)
-
---- Session: "AI startups in my network" (1 turn, Apr 6 09:15) ---
-    Results: 23 total | Type: semantic_search
+--- "who do I know at Stripe?" (3 turns, Apr 7 14:23) ---
+    12 results | company_lookup
+    [14:25] filter by engineering roles (8 results)
+    [14:27] anyone in SF? (5 results)
 ```
 
-4. After the listing, show a summary line:
+- First line: initial query text (truncate at 60 chars), turn count, timestamp
+- Second line: result count of first query, query type
+- Subsequent lines: only if >1 turn — show refinements with time and result count
 
-```
-Showing N sessions (M total queries) from the last 7 days.
-```
-
-## Date Range Filtering
-
-When the user specifies a date range, parse their natural language and adjust the JSONL file selection:
-
-- **"last month"** — filter to 30 days ago through today
-- **"last 30 days"** — same as above
-- **"queries on April 5th"** — filter to just 2026-04-05.jsonl
-- **"this week"** — filter from Monday of current week
-- **"between March 1 and March 15"** — filter to that range
-
-Adjust the `days` parameter in the Python one-liner, or filter by specific date files. For single-day queries, read only that day's JSONL file:
-
-```bash
-cat ~/linkedout-data/queries/2026-04-05.jsonl 2>/dev/null
-```
+Sort sessions most-recent-first. End with a summary: `N sessions (M queries) in the last X days.`
 
 ## Text Search
 
-When the user asks to search their history (e.g., "find queries about Stripe", "queries mentioning AI startups"):
+When the user asks to search history (e.g., "find queries about Stripe"):
 
-1. Extract the search term from the user's request
-2. Filter JSONL entries where `query_text` contains the search term (case-insensitive substring match)
-3. Display matching entries grouped by session, same format as the default view
-
-Example Python one-liner for text search:
-
-```bash
-python3 -c "
-import json, sys, os
-from collections import defaultdict
-from datetime import datetime
-from pathlib import Path
-
-data_dir = os.environ.get('LINKEDOUT_DATA_DIR', os.path.expanduser('~/linkedout-data'))
-queries_dir = Path(data_dir) / 'queries'
-search_term = sys.argv[1].lower()
-
-sessions = defaultdict(list)
-for f in sorted(queries_dir.glob('*.jsonl')):
-    for line in open(f):
-        line = line.strip()
-        if not line:
-            continue
-        entry = json.loads(line)
-        if search_term in entry.get('query_text', '').lower():
-            sessions[entry['session_id']].append(entry)
-
-if not sessions:
-    print(f'No queries matching \"{sys.argv[1]}\" found.')
-    sys.exit(0)
-
-sorted_sessions = sorted(sessions.items(), key=lambda x: max(e['timestamp'] for e in x[1]), reverse=True)
-for sid, entries in sorted_sessions:
-    entries.sort(key=lambda e: e['timestamp'])
-    initial = entries[0]
-    ts = datetime.fromisoformat(initial['timestamp'])
-    ts_str = ts.strftime('%b %-d %H:%M')
-    total_results = sum(e.get('result_count', 0) for e in entries)
-    turn_count = len(entries)
-    query_preview = initial['query_text'][:60]
-    print(f'--- Session: \"{query_preview}\" ({turn_count} turn{\"s\" if turn_count != 1 else \"\"}, {ts_str}) ---')
-    for e in entries:
-        ets = datetime.fromisoformat(e['timestamp']).strftime('%H:%M')
-        marker = '* ' if search_term in e.get('query_text', '').lower() else '  '
-        print(f'    {marker}[{ets}] {e[\"query_text\"][:70]} ({e.get(\"result_count\", 0)} results)')
-    print()
-print(f'Found {sum(len(v) for v in sessions.values())} matching queries across {len(sessions)} sessions.')
-" "SEARCH_TERM"
-```
-
-Replace `"SEARCH_TERM"` with the actual term from the user's request.
-
-## Session Drill-Down
-
-When the user asks to see details of a specific session:
-
-1. Find the session by matching `session_id` or by the initial query text
-2. Display all entries in the session chronologically:
-
-```
-Session: "who do I know at Stripe?" (s_abc123)
-Started: Apr 7, 2026 14:23 UTC
-
-| # | Time  | Query                              | Type           | Results | Duration |
-|---|-------|------------------------------------|----------------|---------|----------|
-| 1 | 14:23 | who do I know at Stripe?           | company_lookup | 12      | 1.2s     |
-| 2 | 14:25 | filter by engineering roles         | company_lookup | 8       | 0.8s     |
-| 3 | 14:27 | anyone in SF?                      | company_lookup | 5       | 0.6s     |
-```
-
-## Output Formatting Rules
-
-- **Plain text only** — no ANSI escape codes, no Unicode box-drawing characters
-- **Markdown tables** for detailed views (pipe-and-dash format)
-- **Session headers** use the `--- Session: "..." ---` format for visual separation
-- Output must be copy-pasteable into GitHub issues, Slack messages, and documentation
-- Truncate long query text to 70 characters with `...`
-- Format durations as human-readable: `234ms`, `1.2s`, `1m 45s`
-- Format counts with commas: `4,012`
+1. Extract the search term
+2. Filter JSONL entries where `query_text` contains the term (case-insensitive)
+3. Display matching entries grouped by session, same format as above
+4. End with: `Found M matching queries across N sessions.`
 
 ## Follow-ups
 
-After displaying history, suggest relevant follow-ups:
-
-- "Want to re-run any of these queries with current data? Just tell me which one."
-- "Need a longer time range? Try: `/linkedout-history last 30 days`"
-- "Looking for something specific? Try: `/linkedout-history queries about [topic]`"
-- "For usage analytics and cost tracking, try `/linkedout-report`."
+After displaying, suggest one relevant follow-up based on context:
+- If few results: "Try a wider date range: `/linkedout-history last 30 days`"
+- If many results: "Search within: `/linkedout-history queries about [topic]`"
+- If specific session interests user: "Want to re-run any of these queries? Just tell me which one."

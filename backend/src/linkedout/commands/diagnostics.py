@@ -9,7 +9,6 @@ import os
 import platform
 import shutil
 import subprocess
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -126,12 +125,39 @@ def _collect_db_stats() -> dict:
 
 
 def _build_report() -> dict:
+    from shared.utilities.health_checks import compute_issues
+
+    db_stats = _collect_db_stats()
+    health_checks = _collect_health_checks()
+
+    issues = compute_issues(db_stats, health_checks)
+
+    # Count by severity
+    counts = {'CRITICAL': 0, 'WARNING': 0, 'INFO': 0}
+    for issue in issues:
+        counts[issue['severity']] = counts.get(issue['severity'], 0) + 1
+
+    # Badge logic
+    if counts['CRITICAL'] > 0:
+        badge = 'ACTION_REQUIRED'
+    elif counts['WARNING'] > 0:
+        badge = 'NEEDS_ATTENTION'
+    else:
+        badge = 'HEALTHY'
+
     return {
         'generated_at': datetime.now(timezone.utc).isoformat(),
         'system': _collect_system_info(),
         'config': _collect_config_info(),
-        'database': _collect_db_stats(),
-        'health_checks': _collect_health_checks(),
+        'database': db_stats,
+        'health_checks': health_checks,
+        'health_status': {
+            'badge': badge,
+            'critical': counts['CRITICAL'],
+            'warning': counts['WARNING'],
+            'info': counts['INFO'],
+        },
+        'issues': issues,
     }
 
 
@@ -220,7 +246,7 @@ def _run_repair(report: dict) -> None:
         if click.confirm(f'\n{without_emb:,} profiles lack embeddings. Run `linkedout embed` now?'):
             click.echo('Running: linkedout embed')
             try:
-                subprocess.run([sys.executable, '-m', 'linkedout.cli', 'embed'], check=False)
+                subprocess.run(['linkedout', 'embed'], check=False)
             except Exception as e:
                 click.echo(f'  Failed: {e}', err=True)
 
