@@ -11,7 +11,6 @@ corrupting existing data.
 from __future__ import annotations
 
 import subprocess
-import sys
 import time
 from pathlib import Path
 
@@ -44,7 +43,7 @@ def check_user_profile_exists(db_url: str) -> bool:  # noqa: ARG001
     log = get_setup_logger("affinity")
 
     result = subprocess.run(
-        [sys.executable, "-m", "linkedout.commands", "compute-affinity", "--dry-run"],
+        ["linkedout", "compute-affinity", "--dry-run"],
         capture_output=True,
         text=True,
     )
@@ -83,7 +82,7 @@ def run_affinity_computation() -> OperationReport:
     print("  Computing affinity scores...")
 
     result = subprocess.run(
-        [sys.executable, "-m", "linkedout.commands", "compute-affinity"],
+        ["linkedout", "compute-affinity"],
         capture_output=True,
         text=True,
     )
@@ -173,7 +172,7 @@ def setup_affinity(data_dir: Path, db_url: str) -> OperationReport:  # noqa: ARG
     """
     start = time.monotonic()
 
-    print("Step 11 of 14: Affinity Computation\n")
+    print("Step 12 of 15: Affinity Computation\n")
 
     # Pre-check: user profile must exist
     if not check_user_profile_exists(db_url):

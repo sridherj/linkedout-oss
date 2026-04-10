@@ -57,6 +57,9 @@ logs/
 htmlcov/
 .mypy_cache/
 
+# ---------- E2E test fixtures (real PII — never commit) ----------
+tests/e2e/fixtures/
+
 # ---------- Seed data files (published as GitHub Release assets) ----------
 seed-data/*.sqlite
 seed-data/*.db
@@ -72,17 +75,11 @@ seed-data/seed-manifest.json
 .claude/hooks/
 
 # ---------- Private second-brain symlinks (machine-specific) ----------
+backend/.claude/
 backend/src/.claude/
 
-# ---------- Claude session telemetry (auto-generated, never commit) ----------
-plan_and_progress/sessions/
-.claude/skills/plan_and_progress/sessions/
+# ---------- Claude session artifacts (auto-generated, never commit) ----------
+**/plan_and_progress/
 
 # ---------- Demo seed generation (maintainer-only, not shipped) ----------
 scripts/generate-demo-dump.py
-
-# ---------- Internal private project docs (not for OSS) ----------
-docs/execution/
-docs/plan/
-docs/writeup/
-

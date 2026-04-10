@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import hashlib
 import subprocess
-import sys
 import time
 from pathlib import Path
 
@@ -23,7 +22,7 @@ from shared.utilities.operation_report import OperationCounts, OperationReport
 # ── Prompt text (exact wording from setup-flow-ux.md) ────────────────
 
 _PROMPT_SEED_TIER = """\
-Step 9 of 14: Seed Data
+Step 10 of 15: Seed Data
 
 LinkedOut ships pre-curated company data so queries like "who do I
 know at Series B AI startups?" work immediately, even before you
@@ -64,7 +63,7 @@ def download_seed(full: bool = False) -> OperationReport:
     tier = "full" if full else "core"
     print(f"  Downloading {tier} seed data...")
 
-    cmd = [sys.executable, "-m", "linkedout.commands", "download-seed"]
+    cmd = ["linkedout", "download-seed"]
     if full:
         cmd.append("--full")
 
@@ -115,7 +114,7 @@ def import_seed() -> OperationReport:
     print("  Importing seed data into database...")
 
     result = subprocess.run(
-        [sys.executable, "-m", "linkedout.commands", "import-seed"],
+        ["linkedout", "import-seed"],
         capture_output=True,
         text=True,
     )
@@ -217,7 +216,10 @@ def setup_seed_data(data_dir: Path) -> OperationReport:
     start = time.monotonic()
 
     # Step 1: Prompt for tier
-    choice = input(_PROMPT_SEED_TIER).strip().lower()
+    try:
+        choice = input(_PROMPT_SEED_TIER).strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        choice = ""  # default to core
     full = choice == "full"
 
     # Step 2: Download

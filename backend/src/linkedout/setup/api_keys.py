@@ -26,7 +26,7 @@ from shared.utilities.operation_report import OperationCounts, OperationReport
 # ── Prompt text (exact wording from setup-flow-ux.md) ────────────────
 
 _PROMPT_EMBEDDING_PROVIDER = """\
-Step 5 of 14: API Key Collection
+Step 5 of 15: API Key Collection
 
 LinkedOut uses vector embeddings for semantic search ("who do I know
 in climate tech?"). Choose an embedding provider:
@@ -95,7 +95,10 @@ def prompt_embedding_provider() -> str:
         ``"openai"`` or ``"local"``.
     """
     while True:
-        choice = input(_PROMPT_EMBEDDING_PROVIDER).strip()
+        try:
+            choice = input(_PROMPT_EMBEDDING_PROVIDER).strip()
+        except (EOFError, KeyboardInterrupt):
+            choice = ""  # default to openai
         if choice in ('', '1'):
             return 'openai'
         if choice == '2':
@@ -110,7 +113,11 @@ def collect_openai_key() -> str | None:
     ``None`` if the user switches to local embeddings.
     """
     while True:
-        key = getpass.getpass(_PROMPT_OPENAI_KEY)
+        try:
+            key = getpass.getpass(_PROMPT_OPENAI_KEY)
+        except (EOFError, KeyboardInterrupt):
+            print("\n  No key entered. Switching to local embeddings.")
+            return None
         if not key.strip():
             print("  No key entered. Switching to local embeddings.")
             return None
@@ -122,7 +129,10 @@ def collect_openai_key() -> str | None:
 
         # Validation failed — offer retry or switch
         error_msg = "validation failed"
-        choice = input(_MSG_OPENAI_KEY_INVALID.format(error=error_msg)).strip()
+        try:
+            choice = input(_MSG_OPENAI_KEY_INVALID.format(error=error_msg)).strip()
+        except (EOFError, KeyboardInterrupt):
+            choice = "2"  # default to switching to local
         if choice == '2':
             return None
         # Default to retry (choice '1' or anything else)
@@ -168,7 +178,10 @@ def collect_apify_key() -> str | None:
     Returns:
         The Apify key string, or ``None`` if the user skips.
     """
-    key = getpass.getpass(_PROMPT_APIFY_KEY)
+    try:
+        key = getpass.getpass(_PROMPT_APIFY_KEY)
+    except (EOFError, KeyboardInterrupt):
+        key = ""  # default to skip
     if not key.strip():
         print("  Skipping Apify key. You can add it later in ~/linkedout-data/config/secrets.yaml.")
         return None
@@ -328,10 +341,13 @@ def collect_api_keys(data_dir: Path) -> OperationReport:
     # Step 1: Embedding provider choice
     existing_provider = existing_config.get('embedding_provider')
     if existing_provider:
-        change = input(
-            f"  Embedding provider is currently set to '{existing_provider}'.\n"
-            f"  Change it? [y/N] "
-        ).strip().lower()
+        try:
+            change = input(
+                f"  Embedding provider is currently set to '{existing_provider}'.\n"
+                f"  Change it? [y/N] "
+            ).strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            change = ""  # default to keep existing
         if change in ('y', 'yes'):
             provider = prompt_embedding_provider()
         else:
@@ -350,10 +366,13 @@ def collect_api_keys(data_dir: Path) -> OperationReport:
     if provider == 'openai':
         existing_openai = existing_secrets.get('openai_api_key')
         if existing_openai:
-            change = input(
-                "  An OpenAI API key is already configured.\n"
-                "  Replace it? [y/N] "
-            ).strip().lower()
+            try:
+                change = input(
+                    "  An OpenAI API key is already configured.\n"
+                    "  Replace it? [y/N] "
+                ).strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                change = ""  # default to keep existing
             if change in ('y', 'yes'):
                 openai_key = collect_openai_key()
             else:
@@ -378,10 +397,13 @@ def collect_api_keys(data_dir: Path) -> OperationReport:
     # Step 3: Apify key (optional)
     existing_apify = existing_secrets.get('apify_api_key')
     if existing_apify:
-        change = input(
-            "  An Apify API key is already configured.\n"
-            "  Replace it? [y/N] "
-        ).strip().lower()
+        try:
+            change = input(
+                "  An Apify API key is already configured.\n"
+                "  Replace it? [y/N] "
+            ).strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            change = ""  # default to keep existing
         if change in ('y', 'yes'):
             apify_key = collect_apify_key()
         else:

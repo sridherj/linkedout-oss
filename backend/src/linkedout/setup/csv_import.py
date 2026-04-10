@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-import sys
 import time
 from pathlib import Path
 
@@ -24,7 +23,7 @@ from shared.utilities.operation_report import OperationCounts, OperationReport
 # ── Prompt text (exact wording from setup-flow-ux.md) ────────────────
 
 _PROMPT_EXPORT_GUIDANCE = """\
-Step 7 of 14: LinkedIn CSV Import
+Step 7 of 15: LinkedIn CSV Import
 
 To import your connections, you need a CSV export from LinkedIn.
 
@@ -108,30 +107,43 @@ def prompt_csv_path(auto_detected: Path | None) -> Path | None:
         modified = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).strftime("%Y-%m-%d")
         size_str = f"{size_mb:.1f} MB" if size_mb >= 1.0 else f"{stat.st_size / 1024:.0f} KB"
 
-        choice = input(_MSG_FILE_FOUND.format(
-            path=_display_path(auto_detected),
-            size=size_str,
-            modified=modified,
-        )).strip().lower()
+        try:
+            choice = input(_MSG_FILE_FOUND.format(
+                path=_display_path(auto_detected),
+                size=size_str,
+                modified=modified,
+            )).strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            choice = ""  # default to yes (use detected file)
 
         if choice in ("", "y", "yes"):
             return auto_detected
         # User said no — fall through to manual entry
 
     # No auto-detect or user declined
-    choice = input(_MSG_FILE_NOT_FOUND).strip()
+    try:
+        choice = input(_MSG_FILE_NOT_FOUND).strip()
+    except (EOFError, KeyboardInterrupt):
+        choice = "2"  # default to skip
     if choice == "2":
         print(_MSG_SKIP)
         return None
 
     # Manual entry (choice '1' or default)
     while True:
-        path_str = input(_MSG_ENTER_PATH).strip()
+        try:
+            path_str = input(_MSG_ENTER_PATH).strip()
+        except (EOFError, KeyboardInterrupt):
+            print(_MSG_SKIP)
+            return None
         path = Path(path_str).expanduser().resolve()
         if path.is_file() and path.suffix.lower() == ".csv":
             return path
         print(f"  File not found or not a CSV: {path_str}")
-        retry = input("  Try again? [Y/n] ").strip().lower()
+        try:
+            retry = input("  Try again? [Y/n] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            retry = "n"  # default to stop retrying
         if retry in ("n", "no"):
             print(_MSG_SKIP)
             return None
@@ -186,7 +198,7 @@ def run_csv_import(csv_path: Path) -> OperationReport:
     print(f"  Importing connections from {_display_path(csv_path)}...")
 
     result = subprocess.run(
-        [sys.executable, "-m", "linkedout.commands", "import-connections", str(csv_path)],
+        ["linkedout", "import-connections", str(csv_path)],
         capture_output=True,
         text=True,
     )

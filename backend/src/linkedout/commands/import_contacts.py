@@ -456,25 +456,37 @@ def import_contacts_command(contacts_dir: str, fmt: str, dry_run: bool):
     else:
         gmail_path = Path.home() / 'Downloads'
 
-    # Parse all 3 sources
+    # Parse all 3 sources (each file is optional)
     google_job_path = gmail_path / 'contacts_from_google_job.csv'
     phone_path = gmail_path / 'contacts_with_phone.csv'
     email_only_path = gmail_path / 'gmail_contacts_email_id_only.csv'
 
-    for p in [google_job_path, phone_path, email_only_path]:
-        if not p.exists():
-            click.echo(f'ERROR: File not found: {p}', err=True)
-            raise SystemExit(1)
+    found_any = any(p.exists() for p in [google_job_path, phone_path, email_only_path])
+    if not found_any:
+        click.echo(f'No contact files found in {gmail_path}. Nothing to import.')
+        return
 
     click.echo('Parsing contact sources...')
-    google_job = parse_google_job_contacts(google_job_path)
-    click.echo(f'  Google Job:   {len(google_job):>6} contacts')
+    google_job: list[ParsedContact] = []
+    if google_job_path.exists():
+        google_job = parse_google_job_contacts(google_job_path)
+        click.echo(f'  Google Job:   {len(google_job):>6} contacts')
+    else:
+        click.echo(f'  Google Job:   (skipped — {google_job_path.name} not found)')
 
-    phone = parse_phone_contacts(phone_path)
-    click.echo(f'  Phone:        {len(phone):>6} contacts')
+    phone: list[ParsedContact] = []
+    if phone_path.exists():
+        phone = parse_phone_contacts(phone_path)
+        click.echo(f'  Phone:        {len(phone):>6} contacts')
+    else:
+        click.echo(f'  Phone:        (skipped — {phone_path.name} not found)')
 
-    email_only = parse_email_only_contacts(email_only_path)
-    click.echo(f'  Email-Only:   {len(email_only):>6} contacts')
+    email_only: list[ParsedContact] = []
+    if email_only_path.exists():
+        email_only = parse_email_only_contacts(email_only_path)
+        click.echo(f'  Email-Only:   {len(email_only):>6} contacts')
+    else:
+        click.echo(f'  Email-Only:   (skipped — {email_only_path.name} not found)')
 
     all_contacts = google_job + phone + email_only
     deduped = dedup_contacts(all_contacts)

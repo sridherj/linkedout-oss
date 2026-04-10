@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from linkedout.connection.entities.connection_entity import ConnectionEntity
 from linkedout.crawled_profile.entities.crawled_profile_entity import CrawledProfileEntity
-from dev_tools.db.fixed_data import SYSTEM_USER_ID
+from dev_tools.db.fixed_data import SYSTEM_BU, SYSTEM_TENANT, SYSTEM_USER_ID
 from shared.infra.db.cli_db import cli_db_manager
 from shared.infra.db.db_session_manager import DbSessionType
 from shared.utils.date_parsing import parse_linkedin_csv_date
@@ -30,10 +30,9 @@ from linkedout.cli_helpers import cli_logged
 
 logger = get_logger(__name__, component="import")
 
-# SJ's system user IDs
-APP_USER_ID = 'usr_sys_001'
-TENANT_ID = 'tenant_sys_001'
-BU_ID = 'bu_sys_001'
+APP_USER_ID = SYSTEM_USER_ID
+TENANT_ID = SYSTEM_TENANT['id']
+BU_ID = SYSTEM_BU['id']
 
 # LinkedIn CSV preamble: 3 lines of notes before the actual CSV header
 PREAMBLE_LINES = 3
@@ -127,22 +126,25 @@ def load_csv_batch(
             connected_at = parse_linkedin_csv_date(connected_on) if connected_on else None
 
             # Match or create stub profile
+            pending_counter = None
+            pending_url_entry = None  # (url, profile_id) to cache after commit
+
             if norm_url and norm_url in url_index:
                 profile_id = url_index[norm_url]
-                counts['matched'] += 1
+                pending_counter = 'matched'
             elif norm_url:
                 stub = create_stub_profile(first_name, last_name, norm_url, company, position, now)
                 session.add(stub)
                 session.flush()
                 profile_id = stub.id
-                url_index[norm_url] = profile_id
-                counts['unenriched'] += 1
+                pending_url_entry = (norm_url, profile_id)
+                pending_counter = 'unenriched'
             else:
                 stub = create_stub_profile(first_name, last_name, None, company, position, now)
                 session.add(stub)
                 session.flush()
                 profile_id = stub.id
-                counts['no_url'] += 1
+                pending_counter = 'no_url'
 
             source_details = json.dumps({
                 'first_name': first_name,
@@ -166,6 +168,11 @@ def load_csv_batch(
             )
             session.add(connection)
             savepoint.commit()
+
+            # Commit succeeded — now safe to update counters and index
+            counts[pending_counter] += 1
+            if pending_url_entry:
+                url_index[pending_url_entry[0]] = pending_url_entry[1]
 
         except Exception as e:
             savepoint.rollback()

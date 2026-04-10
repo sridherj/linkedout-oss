@@ -12,7 +12,6 @@ fixing, so re-running is always safe.
 from __future__ import annotations
 
 import subprocess
-import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -131,7 +130,10 @@ def prompt_repair(action: RepairAction) -> bool:
         parts.append(f"  Estimated cost: {action.estimated_cost}")
     print("\n".join(parts))
 
-    choice = input(f"  {prompt_suffix} ").strip().lower()
+    try:
+        choice = input(f"  {prompt_suffix} ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        choice = ""  # follows default_accept behavior
 
     if action.default_accept:
         return choice not in ("n", "no")
@@ -157,7 +159,7 @@ def execute_repair(action: RepairAction) -> OperationReport:
     print(f"\n  Running: {action.command}")
 
     # Split command into parts for subprocess
-    cmd_parts = [sys.executable, "-m", "linkedout.commands"]
+    cmd_parts = ["linkedout"]
     cmd_parts.extend(action.command.replace("linkedout ", "").split())
 
     result = subprocess.run(cmd_parts, capture_output=True, text=True)
@@ -217,7 +219,7 @@ def run_auto_repair(
         print("\n  No repairable gaps found.")
         return report
 
-    print(f"\nStep 14 of 14: Gap Detection & Auto-Repair\n")
+    print(f"\nStep 15 of 15: Gap Detection & Auto-Repair\n")
 
     repairs_run = 0
     repairs_failed = 0

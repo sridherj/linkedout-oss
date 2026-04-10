@@ -107,7 +107,7 @@ The RLS tests (`test_rls_isolation.py`) verify that PostgreSQL Row-Level Securit
 
 ### Separate Test Directories
 
-- **Top-level tests**: `/data/workspace/linkedout-oss/tests/` contains installation tests (`tests/installation/`) and skills tests (`tests/skills/`). These are separate from backend tests and have their own conftest with PostgreSQL availability checks.
+- **Top-level tests**: `./tests/` contains installation tests (`tests/installation/`) and skills tests (`tests/skills/`). These are separate from backend tests and have their own conftest with PostgreSQL availability checks.
 
 - **Live LLM tests**: `backend/tests/live_llm/` contains tests that make real LLM calls, marked with `@pytest.mark.live_llm`. These require API keys.
 

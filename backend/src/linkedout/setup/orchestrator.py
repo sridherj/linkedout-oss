@@ -38,10 +38,10 @@ _LINKEDOUT_VERSION = "0.1.0"
 # Steps that must re-run when the LinkedOut version changes
 _VERSION_SENSITIVE_STEPS = frozenset({"database", "python_env", "skills"})
 
-# Steps skipped when the user accepts the demo path (steps 5-11)
+# Steps skipped when the user accepts the demo path (steps 5-12)
 DEMO_SKIPPABLE_STEPS = frozenset({
     "api_keys", "user_profile", "csv_import", "contacts_import",
-    "seed_data", "embeddings", "affinity",
+    "enrichment", "seed_data", "embeddings", "affinity",
 })
 
 # Number of infrastructure steps common to both paths
@@ -300,6 +300,7 @@ def _build_step_registry() -> list[SetupStep]:
     from linkedout.setup.csv_import import setup_csv_import
     from linkedout.setup.database import setup_database
     from linkedout.setup.embeddings import setup_embeddings
+    from linkedout.setup.enrichment import setup_enrichment
     from linkedout.setup.prerequisites import run_all_checks
     from linkedout.setup.python_env import setup_python_env
     from linkedout.setup.readiness import generate_readiness_report
@@ -372,9 +373,17 @@ def _build_step_registry() -> list[SetupStep]:
             dependencies=["csv_import"],
         ),
         SetupStep(
+            name="enrichment",
+            display_name="Profile Enrichment",
+            number=9,
+            function=setup_enrichment,
+            can_skip=True,
+            dependencies=["csv_import"],
+        ),
+        SetupStep(
             name="seed_data",
             display_name="Seed Data",
-            number=9,
+            number=10,
             function=setup_seed_data,
             can_skip=True,
             dependencies=["contacts_import"],
@@ -382,7 +391,7 @@ def _build_step_registry() -> list[SetupStep]:
         SetupStep(
             name="embeddings",
             display_name="Embedding Generation",
-            number=10,
+            number=11,
             function=setup_embeddings,
             can_skip=True,
             dependencies=["seed_data"],
@@ -390,7 +399,7 @@ def _build_step_registry() -> list[SetupStep]:
         SetupStep(
             name="affinity",
             display_name="Affinity Computation",
-            number=11,
+            number=12,
             function=setup_affinity,
             can_skip=True,
             dependencies=["embeddings"],
@@ -398,7 +407,7 @@ def _build_step_registry() -> list[SetupStep]:
         SetupStep(
             name="skills",
             display_name="Skill Installation",
-            number=12,
+            number=13,
             function=setup_skills,
             can_skip=True,
             dependencies=["affinity"],
@@ -406,7 +415,7 @@ def _build_step_registry() -> list[SetupStep]:
         SetupStep(
             name="readiness",
             display_name="Readiness Check",
-            number=13,
+            number=14,
             function=generate_readiness_report,
             can_skip=False,
             always_run=True,
@@ -415,7 +424,7 @@ def _build_step_registry() -> list[SetupStep]:
         SetupStep(
             name="auto_repair",
             display_name="Gap Detection",
-            number=14,
+            number=15,
             function=run_auto_repair,
             can_skip=False,
             always_run=True,
@@ -496,6 +505,14 @@ def _dispatch_step(step: SetupStep, context: SetupContext) -> OperationReport | 
     if name in ("csv_import", "contacts_import", "seed_data"):
         return fn(data_dir=context.data_dir)
 
+    if name == "enrichment":
+        if context.db_url is None:
+            raise RuntimeError(
+                "Cannot run enrichment step: database URL is not set. "
+                "The database step must complete first."
+            )
+        return fn(data_dir=context.data_dir, db_url=context.db_url)
+
     if name == "embeddings":
         if context.db_url is None:
             raise RuntimeError(
@@ -557,8 +574,8 @@ def run_setup(
     1. Loads persisted state (or starts fresh on first run).
     2. Runs infrastructure steps 1-4 (common to both paths).
     3. After step 4, presents the demo offer (fresh installs only).
-    4. If demo accepted: runs D1-D5, marks steps 5-11 as demo-skipped.
-    5. If demo declined: continues with steps 5-14 as normal.
+    4. If demo accepted: runs D1-D5, marks steps 5-12 as demo-skipped.
+    5. If demo declined: continues with steps 5-15 as normal.
     6. On re-run in demo mode: offers transition to full setup.
     7. Saves state after each successful step (atomic writes).
 
@@ -622,7 +639,8 @@ def run_setup(
         # User is in demo mode — offer transition
         from linkedout.setup.demo_offer import offer_transition
 
-        if offer_transition():
+        # --full flag (demo_choice=False) auto-accepts the transition
+        if demo_choice is False or offer_transition():
             # Accept transition: clear demo-skipped, switch to real DB
             _clear_demo_state(state, data_dir)
             is_demo = False
@@ -636,7 +654,7 @@ def run_setup(
     # ── Determine step numbering ──────────────────────────────────
     # On a fresh install (no steps beyond step 4 complete), we show
     # "Step N of 4" for the infra steps. Once the user decides, we
-    # either run demo D1-D5 or switch to "Step N of 14".
+    # either run demo D1-D5 or switch to "Step N of 15".
     demo_eligible = _is_demo_eligible(state, data_dir)
     total_display = _INFRA_STEP_COUNT if demo_eligible else len(steps)
 
@@ -754,11 +772,11 @@ def run_setup(
                 else:
                     # Demo failed — offer to continue with full setup
                     print("\n  Demo setup encountered errors.")
-                    print("  Continuing with full setup (steps 5-14)...\n")
+                    print("  Continuing with full setup (steps 5-15)...\n")
                     total_display = len(steps)
                     # Fall through to continue the normal step loop
             else:
-                # Demo declined — switch to 14-step numbering
+                # Demo declined — switch to full step numbering
                 total_display = len(steps)
 
     log.info("Setup complete")
@@ -808,8 +826,8 @@ def _is_demo_eligible(state: SetupState, data_dir: Path) -> bool:
     # Check if any steps beyond step 4 are complete
     post_infra_steps = {
         "api_keys", "user_profile", "csv_import", "contacts_import",
-        "seed_data", "embeddings", "affinity", "skills", "readiness",
-        "auto_repair",
+        "enrichment", "seed_data", "embeddings", "affinity", "skills",
+        "readiness", "auto_repair",
     }
     for step_name in post_infra_steps:
         completed = state.steps_completed.get(step_name)
@@ -827,7 +845,7 @@ def _clear_demo_state(state: SetupState, data_dir: Path) -> None:
     from linkedout.demo import set_demo_mode
     from linkedout.setup.database import generate_agent_context_env
 
-    # Clear demo-skipped markers so steps 5-11 will re-run
+    # Clear demo-skipped markers so steps 5-12 will re-run
     for step_name in DEMO_SKIPPABLE_STEPS:
         if state.steps_completed.get(step_name) == "demo-skipped":
             del state.steps_completed[step_name]

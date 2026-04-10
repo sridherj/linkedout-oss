@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for database setup module."""
 import stat
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import yaml
 
@@ -129,20 +129,154 @@ class TestReadExistingDatabaseUrl:
         assert result is None
 
 
+class TestBootstrapSystemRecords:
+    @patch('sqlalchemy.create_engine')
+    def test_inserts_three_records_in_fk_order(self, mock_create_engine):
+        """Verify 3 INSERTs run in order: tenant -> bu -> app_user."""
+        from linkedout.setup.database import bootstrap_system_records
+
+        mock_engine = MagicMock()
+        mock_create_engine.return_value = mock_engine
+        mock_conn = MagicMock()
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+
+        # Each execute returns a result with rowcount=1 (new insert)
+        mock_result = MagicMock()
+        mock_result.rowcount = 1
+        mock_conn.execute.return_value = mock_result
+
+        mock_engine.begin.return_value = mock_conn
+
+        report = bootstrap_system_records('postgresql://test@localhost/test')
+
+        # 3 statements executed in single transaction
+        assert mock_conn.execute.call_count == 3
+        assert report.counts.succeeded == 3
+        assert report.counts.failed == 0
+
+        # Verify FK order: tenant first, bu second, app_user third
+        calls = mock_conn.execute.call_args_list
+        stmt_texts = [str(call[0][0]) for call in calls]
+        assert 'INSERT INTO tenant' in stmt_texts[0]
+        assert 'INSERT INTO bu' in stmt_texts[1]
+        assert 'INSERT INTO app_user' in stmt_texts[2]
+
+    @patch('sqlalchemy.create_engine')
+    def test_idempotent_on_conflict_do_nothing(self, mock_create_engine):
+        """Verify ON CONFLICT DO NOTHING makes bootstrap idempotent."""
+        from linkedout.setup.database import bootstrap_system_records
+
+        mock_engine = MagicMock()
+        mock_create_engine.return_value = mock_engine
+        mock_conn = MagicMock()
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+
+        # rowcount=0 means ON CONFLICT DO NOTHING fired (already existed)
+        mock_result = MagicMock()
+        mock_result.rowcount = 0
+        mock_conn.execute.return_value = mock_result
+
+        mock_engine.begin.return_value = mock_conn
+
+        report = bootstrap_system_records('postgresql://test@localhost/test')
+
+        # Still reports success (idempotent — 0 inserts is fine)
+        assert report.counts.succeeded == 3
+        assert report.counts.failed == 0
+
+    @patch('sqlalchemy.create_engine')
+    def test_reports_failure_on_exception(self, mock_create_engine):
+        """Verify bootstrap reports failure if DB raises an exception."""
+        from linkedout.setup.database import bootstrap_system_records
+
+        mock_engine = MagicMock()
+        mock_create_engine.return_value = mock_engine
+        mock_conn = MagicMock()
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+        mock_conn.execute.side_effect = Exception('FK violation')
+
+        mock_engine.begin.return_value = mock_conn
+
+        report = bootstrap_system_records('postgresql://test@localhost/test')
+
+        assert report.counts.failed == 3
+        assert report.counts.succeeded == 0
+
+    @patch('sqlalchemy.create_engine')
+    def test_uses_fixed_data_constants(self, mock_create_engine):
+        """Verify bootstrap uses constants from fixed_data, not hardcoded values."""
+        from linkedout.setup.database import bootstrap_system_records
+        from dev_tools.db.fixed_data import SYSTEM_APP_USER, SYSTEM_BU, SYSTEM_TENANT
+
+        mock_engine = MagicMock()
+        mock_create_engine.return_value = mock_engine
+        mock_conn = MagicMock()
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+
+        mock_result = MagicMock()
+        mock_result.rowcount = 1
+        mock_conn.execute.return_value = mock_result
+        mock_engine.begin.return_value = mock_conn
+
+        bootstrap_system_records('postgresql://test@localhost/test')
+
+        # Verify the bound params contain the correct IDs from fixed_data
+        calls = mock_conn.execute.call_args_list
+        # First call: tenant
+        tenant_stmt = calls[0][0][0]
+        compiled = tenant_stmt.compile()
+        assert compiled.params['id'] == SYSTEM_TENANT['id']
+        # Second call: bu
+        bu_stmt = calls[1][0][0]
+        compiled = bu_stmt.compile()
+        assert compiled.params['id'] == SYSTEM_BU['id']
+        assert compiled.params['tenant_id'] == SYSTEM_BU['tenant_id']
+        # Third call: app_user
+        user_stmt = calls[2][0][0]
+        compiled = user_stmt.compile()
+        assert compiled.params['id'] == SYSTEM_APP_USER['id']
+
+    @patch('sqlalchemy.create_engine')
+    def test_disposes_engine_even_on_failure(self, mock_create_engine):
+        """Verify engine.dispose() is called even when bootstrap fails."""
+        from linkedout.setup.database import bootstrap_system_records
+
+        mock_engine = MagicMock()
+        mock_create_engine.return_value = mock_engine
+        mock_conn = MagicMock()
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+        mock_conn.execute.side_effect = Exception('connection error')
+        mock_engine.begin.return_value = mock_conn
+
+        bootstrap_system_records('postgresql://test@localhost/test')
+
+        mock_engine.dispose.assert_called_once()
+
+
 class TestSetupDatabaseIdempotency:
     @patch('linkedout.setup.database.generate_agent_context_env')
+    @patch('linkedout.setup.database.bootstrap_system_records')
     @patch('linkedout.setup.database.verify_schema', return_value=[])
     @patch('linkedout.setup.database.run_migrations')
     @patch('linkedout.setup.database.write_config_yaml')
     @patch('linkedout.setup.database.set_db_password')
     def test_skips_password_when_config_exists(
-        self, mock_set_pw, mock_write, mock_migrate, mock_verify, mock_agent, tmp_path
+        self, mock_set_pw, _mock_write, mock_migrate, _mock_verify, mock_bootstrap, mock_agent, tmp_path
     ):
         from shared.utilities.operation_report import OperationCounts, OperationReport
 
         mock_migrate.return_value = OperationReport(
             operation='db-migration',
             counts=OperationCounts(total=0, succeeded=0),
+        )
+        mock_bootstrap.return_value = OperationReport(
+            operation='bootstrap-system-records',
+            counts=OperationCounts(total=3, succeeded=3),
         )
         mock_agent.return_value = tmp_path / 'agent-context.env'
 

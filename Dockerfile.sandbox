@@ -22,27 +22,49 @@ RUN apt-get update -qq && \
       build-essential && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# ── Non-root user (Claude Code refuses bypassPermissions as root) ─
+RUN usermod -l sandbox -d /home/sandbox -m ubuntu && \
+    groupmod -n sandbox ubuntu && \
+    echo 'sandbox ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/sandbox
+
 # ── Claude Code (native installer — no Node.js needed) ──────────
-ENV PATH="/root/.local/bin:${PATH}"
+USER sandbox
+ENV PATH="/home/sandbox/.local/bin:${PATH}"
 RUN curl -fsSL https://claude.ai/install.sh | bash
 
 # ── Claude credentials + onboarding (baked at build time) ────────
 ARG CLAUDE_CREDENTIALS_JSON
-RUN mkdir -p /root/.claude && \
-    echo "$CLAUDE_CREDENTIALS_JSON" > /root/.claude/.credentials.json && \
-    chmod 600 /root/.claude/.credentials.json && \
-    python3 -c "import json,pathlib;p=pathlib.Path('/root/.claude.json');d=json.loads(p.read_text()) if p.exists() else {};d['hasCompletedOnboarding']=True;d['lastOnboardingVersion']='2.1.97';p.write_text(json.dumps(d,indent=2))"
+RUN mkdir -p /home/sandbox/.claude && \
+    echo "$CLAUDE_CREDENTIALS_JSON" > /home/sandbox/.claude/.credentials.json && \
+    chmod 600 /home/sandbox/.claude/.credentials.json && \
+    python3 -c "import json,pathlib;p=pathlib.Path('/home/sandbox/.claude.json');d=json.loads(p.read_text()) if p.exists() else {};d['hasCompletedOnboarding']=True;d['lastOnboardingVersion']='2.1.97';d.setdefault('projects',{})['/linkedout-oss']={'hasTrustDialogAccepted':True};p.write_text(json.dumps(d,indent=2))"
+
+# ── Claude Code headless config ─────────────────────────────────
+RUN echo '{ \
+      "skipDangerousModePermissionPrompt": true, \
+      "effortLevel": "medium", \
+      "permissions": { \
+        "allow": ["Bash(*)", "Read", "Edit", "Write", "Glob", "Grep"], \
+        "defaultMode": "bypassPermissions" \
+      } \
+    }' > /home/sandbox/.claude/settings.json
 
 # ── Clone the repo and install skills ────────────────────────────
+USER root
 ARG CACHE_BUST=1
-RUN git clone https://github.com/sridherj/linkedout-oss.git /linkedout-oss
+RUN git clone https://github.com/sridherj/linkedout-oss.git /linkedout-oss && \
+    chown -R sandbox:sandbox /linkedout-oss
 
 WORKDIR /linkedout-oss
 
 # Copy local setup script (may not be on GitHub yet)
 COPY setup /linkedout-oss/setup
+RUN chown sandbox:sandbox /linkedout-oss/setup
+
+USER sandbox
 
 # ── Entrypoint (prints banner, drops to shell) ───────────────────
+USER root
 RUN printf '#!/usr/bin/env bash\n\
 set -e\n\
 echo ""\n\
@@ -64,6 +86,7 @@ echo ""\n\
 echo "  Each docker run is a clean slate."\n\
 echo "============================================"\n\
 echo ""\n\
-exec bash -l\n' > /entrypoint.sh && chmod +x /entrypoint.sh
+if [ $# -gt 0 ]; then exec "$@"; else exec bash -l; fi\n' > /entrypoint.sh && chmod +x /entrypoint.sh
 
+USER sandbox
 ENTRYPOINT ["/entrypoint.sh"]

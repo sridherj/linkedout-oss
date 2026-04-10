@@ -28,7 +28,7 @@ _LINKEDIN_URL_RE = re.compile(
 # ── Prompt text (exact wording from setup-flow-ux.md) ────────────────
 
 _PROMPT_LINKEDIN_URL = """\
-Step 6 of 14: User Profile
+Step 6 of 15: User Profile
 
 Your LinkedIn profile is the anchor for affinity scoring \u2014 it
 determines how "close" each connection is to you based on career
@@ -53,9 +53,15 @@ def prompt_linkedin_url() -> str:
     Returns:
         The validated LinkedIn profile URL.
     """
-    url = input(_PROMPT_LINKEDIN_URL).strip()
+    try:
+        url = input(_PROMPT_LINKEDIN_URL).strip()
+    except (EOFError, KeyboardInterrupt):
+        return ""
     while not validate_linkedin_url(url):
-        url = input(_MSG_INVALID_URL).strip()
+        try:
+            url = input(_MSG_INVALID_URL).strip()
+        except (EOFError, KeyboardInterrupt):
+            return ""
     return url
 
 
@@ -136,8 +142,9 @@ def create_user_profile(public_id: str, linkedin_url: str, db_url: str) -> str:
             profile_id = Nanoid.make_nanoid_with_prefix('cp')
             session.execute(
                 text(
-                    "INSERT INTO crawled_profile (id, linkedin_url, public_identifier, data_source) "
-                    "VALUES (:id, :url, :pid, 'setup')"
+                    "INSERT INTO crawled_profile "
+                    "(id, linkedin_url, public_identifier, data_source, created_at, updated_at) "
+                    "VALUES (:id, :url, :pid, 'setup', NOW(), NOW())"
                 ),
                 {'id': profile_id, 'url': linkedin_url, 'pid': public_id},
             )
@@ -172,10 +179,13 @@ def setup_user_profile(data_dir: Path, db_url: str) -> OperationReport:
     # Check for existing owner profile
     existing_id = _find_existing_owner_profile(db_url)
     if existing_id:
-        change = input(
-            f"  An owner profile already exists (ID: {existing_id}).\n"
-            "  Update it? [y/N] "
-        ).strip().lower()
+        try:
+            change = input(
+                f"  An owner profile already exists (ID: {existing_id}).\n"
+                "  Update it? [y/N] "
+            ).strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            change = ""  # default to keep existing
         if change not in ('y', 'yes'):
             print("  Keeping existing profile.")
             skipped += 1
@@ -188,7 +198,16 @@ def setup_user_profile(data_dir: Path, db_url: str) -> OperationReport:
 
     # Prompt for LinkedIn URL
     url = prompt_linkedin_url()
-    # prompt_linkedin_url already validates — public_id is guaranteed non-None
+    if not url:
+        print("  No LinkedIn URL provided. Skipping profile setup.")
+        skipped += 1
+        duration_ms = (time.monotonic() - start) * 1000
+        return OperationReport(
+            operation='user-profile-setup',
+            duration_ms=duration_ms,
+            counts=OperationCounts(total=1, skipped=1),
+            next_steps=["Provide LinkedIn URL: linkedout setup-user-profile --url <url>"],
+        )
     public_id = validate_linkedin_url(url)
     assert public_id is not None  # validated by prompt_linkedin_url loop
 

@@ -11,7 +11,7 @@
 
 ### Tables Touched by Pipeline Code
 
-The pipeline code lives in `~/workspace/second-brain/agents/pipeline/` and operates against the PostgreSQL database `linkedin_intel`. Below is every table referenced in the three core files (`db.py`, `company_ops.py`, `enrichment/helpers.py`).
+The pipeline code lives in `<prior-project>/agents/pipeline/` and operates against the PostgreSQL database `linkedin_intel`. Below is every table referenced in the three core files (`db.py`, `company_ops.py`, `enrichment/helpers.py`).
 
 | Table | Used By | Operations |
 |-------|---------|------------|
@@ -608,14 +608,14 @@ Pipeline infrastructure tables (`pipeline_state`, `raw_feed_items`, `extracted_c
 
 | File | Location |
 |---|---|
-| `db.py` | `~/workspace/second-brain/agents/pipeline/db.py` |
-| `company_ops.py` | `~/workspace/second-brain/agents/pipeline/company_ops.py` |
-| `enrichment/helpers.py` | `~/workspace/second-brain/agents/pipeline/enrichment/helpers.py` |
-| `schema.sql` | `~/workspace/second-brain/linkedin-intel/db/schema.sql` |
-| `startup_extensions.sql` | `~/workspace/second-brain/linkedin-intel/db/startup_extensions.sql` |
-| `pipeline_tables.sql` | `~/workspace/second-brain/linkedin-intel/db/pipeline_tables.sql` |
-| `company_entity.py` | `/data/workspace/linkedout/src/linkedout/company/entities/company_entity.py` |
-| `linkedout_data_model.collab.md` | `/data/workspace/linkedout/docs/specs/linkedout_data_model.collab.md` |
-| `taskos-startup-pipeline.md` | `~/workspace/second-brain/.claude/agents/taskos-startup-pipeline.md` |
-| `taskos-startup-enrich.md` | `~/workspace/second-brain/.claude/agents/taskos-startup-enrich.md` |
-| `taskos-startup-discover.md` | `~/workspace/second-brain/.claude/agents/taskos-startup-discover.md` |
+| `db.py` | `<prior-project>/agents/pipeline/db.py` |
+| `company_ops.py` | `<prior-project>/agents/pipeline/company_ops.py` |
+| `enrichment/helpers.py` | `<prior-project>/agents/pipeline/enrichment/helpers.py` |
+| `schema.sql` | `<prior-project>/linkedin-intel/db/schema.sql` |
+| `startup_extensions.sql` | `<prior-project>/linkedin-intel/db/startup_extensions.sql` |
+| `pipeline_tables.sql` | `<prior-project>/linkedin-intel/db/pipeline_tables.sql` |
+| `company_entity.py` | `./src/linkedout/company/entities/company_entity.py` |
+| `linkedout_data_model.collab.md` | `./docs/specs/linkedout_data_model.collab.md` |
+| `taskos-startup-pipeline.md` | `<prior-project>/.claude/agents/taskos-startup-pipeline.md` |
+| `taskos-startup-enrich.md` | `<prior-project>/.claude/agents/taskos-startup-enrich.md` |
+| `taskos-startup-discover.md` | `<prior-project>/.claude/agents/taskos-startup-discover.md` |

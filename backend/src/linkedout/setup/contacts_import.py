@@ -12,7 +12,6 @@ All operations are idempotent:
 from __future__ import annotations
 
 import subprocess
-import sys
 import time
 from pathlib import Path
 
@@ -22,7 +21,7 @@ from shared.utilities.operation_report import OperationCounts, OperationReport
 # ── Prompt text (exact wording from setup-flow-ux.md) ────────────────
 
 _PROMPT_OPT_IN = """\
-Step 8 of 14: Contacts Import (optional)
+Step 8 of 15: Contacts Import (optional)
 
 You can import your personal contacts (Google or iCloud) to
 enrich your network with phone numbers and email addresses.
@@ -65,7 +64,10 @@ def prompt_contacts_import() -> bool:
     Returns:
         ``True`` if the user wants to import, ``False`` otherwise.
     """
-    choice = input(_PROMPT_OPT_IN).strip().lower()
+    try:
+        choice = input(_PROMPT_OPT_IN).strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        choice = ""  # default to no (skip contacts import)
     return choice in ("y", "yes")
 
 
@@ -76,7 +78,10 @@ def prompt_contacts_format() -> str:
         ``"google"`` or ``"icloud"``.
     """
     while True:
-        choice = input(_PROMPT_FORMAT).strip()
+        try:
+            choice = input(_PROMPT_FORMAT).strip()
+        except (EOFError, KeyboardInterrupt):
+            return "google"  # default to google
         if choice == "1":
             return "google"
         if choice == "2":
@@ -153,7 +158,7 @@ def run_contacts_import(path: Path, format: str) -> OperationReport:
 
     result = subprocess.run(
         [
-            sys.executable, "-m", "linkedout.commands",
+            "linkedout",
             "import-contacts", str(path),
             "--format", format,
         ],
@@ -218,7 +223,10 @@ def setup_contacts_import(data_dir: Path) -> OperationReport:
 
     # Step 3: Auto-detect or prompt for file
     prompt_text = _PROMPT_GOOGLE_PATH if format == "google" else _PROMPT_ICLOUD_PATH
-    user_input = input(prompt_text).strip()
+    try:
+        user_input = input(prompt_text).strip()
+    except (EOFError, KeyboardInterrupt):
+        user_input = ""  # default to auto-detect
 
     if user_input:
         contacts_path = Path(user_input).expanduser().resolve()

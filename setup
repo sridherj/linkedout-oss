@@ -8,6 +8,7 @@
 #
 # Usage:
 #   ./setup           # check prerequisites, install skills
+#   ./setup --auto    # auto-install missing prerequisites
 #   ./setup --check   # verify skills are installed (exit 0/1)
 #
 # After running this script, open Claude Code in this repo and invoke
@@ -95,6 +96,15 @@ install_for_host() {
   [ $already -gt 0 ] && parts="${parts:+$parts, }$already already linked"
   echo "    ${parts:-nothing to link}"
 }
+
+# ── Parse flags ──────────────────────────────────────────────────
+AUTO_INSTALL=false
+for arg in "$@"; do
+  case "$arg" in
+    --auto) AUTO_INSTALL=true ;;
+    --check) ;; # handled below
+  esac
+done
 
 # ── Check mode ────────────────────────────────────────────────────
 if [ "${1:-}" = "--check" ]; then
@@ -234,15 +244,61 @@ check_prerequisites() {
   if [ ${#missing[@]} -gt 0 ]; then
     echo ""
     echo -e "${YELLOW}Missing prerequisites:${NC} ${missing[*]}"
-    echo ""
-    echo -e "${BOLD}Install with:${NC}"
-    echo ""
 
     # Check if PGDG repo is needed
     local needs_pgdg=false
     for cmd in "${install_cmds[@]}"; do
       [[ "$cmd" == "pgdg_repo" ]] && needs_pgdg=true
     done
+
+    # Build one-shot install command
+    local one_shot=""
+    for cmd in "${install_cmds[@]}"; do
+      if [[ "$cmd" == curl* ]]; then
+        one_shot="${one_shot}${cmd}; "
+      fi
+    done
+    if [ "$os" = "linux" ]; then
+      if $needs_pgdg; then
+        one_shot="${one_shot}sudo install -d /usr/share/postgresql-common/pgdg && sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc && echo \"deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt \$(. /etc/os-release && echo \$VERSION_CODENAME)-pgdg main\" | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null; "
+      fi
+      local apt_pkgs_one=""
+      for cmd in "${install_cmds[@]}"; do
+        [[ "$cmd" == curl* || "$cmd" == "pgdg_repo" ]] && continue
+        apt_pkgs_one="$apt_pkgs_one ${cmd#sudo apt-get install -y }"
+      done
+      [ -n "$apt_pkgs_one" ] && one_shot="${one_shot}sudo apt-get update -qq && sudo apt-get install -y$apt_pkgs_one; sudo service postgresql start 2>/dev/null; "
+    elif [ "$os" = "macos" ]; then
+      local brew_pkgs_one=""
+      for cmd in "${install_cmds[@]}"; do
+        [[ "$cmd" == curl* ]] && continue
+        brew_pkgs_one="$brew_pkgs_one ${cmd#brew install }"
+      done
+      [ -n "$brew_pkgs_one" ] && one_shot="${one_shot}brew install$brew_pkgs_one; brew services start postgresql 2>/dev/null; "
+    fi
+
+    # ── Auto-install mode: run the commands directly ──────────
+    if $AUTO_INSTALL; then
+      echo ""
+      echo -e "${BOLD}Auto-installing prerequisites...${NC}"
+      echo ""
+      one_shot="${one_shot}source \$HOME/.local/bin/env 2>/dev/null || true"
+      if eval "$one_shot"; then
+        echo ""
+        echo -e "${GREEN}Prerequisites installed.${NC} Continuing setup..."
+        echo ""
+        return 0
+      else
+        echo ""
+        echo -e "${RED}Auto-install failed.${NC} Install manually and re-run ./setup."
+        return 1
+      fi
+    fi
+
+    # ── Manual mode: print instructions ───────────────────────
+    echo ""
+    echo -e "${BOLD}Install with:${NC}"
+    echo ""
 
     # Print standalone installers (curl-based) first
     for cmd in "${install_cmds[@]}"; do
@@ -288,31 +344,6 @@ check_prerequisites() {
     echo ""
     echo "Then re-run ./setup, or run it all in one shot:"
     echo ""
-    # Build one-shot command
-    local one_shot=""
-    for cmd in "${install_cmds[@]}"; do
-      if [[ "$cmd" == curl* ]]; then
-        one_shot="${one_shot}${cmd}; "
-      fi
-    done
-    if [ "$os" = "linux" ]; then
-      if $needs_pgdg; then
-        one_shot="${one_shot}sudo install -d /usr/share/postgresql-common/pgdg && sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc && echo \"deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt \$(. /etc/os-release && echo \$VERSION_CODENAME)-pgdg main\" | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null; "
-      fi
-      local apt_pkgs_one=""
-      for cmd in "${install_cmds[@]}"; do
-        [[ "$cmd" == curl* || "$cmd" == "pgdg_repo" ]] && continue
-        apt_pkgs_one="$apt_pkgs_one ${cmd#sudo apt-get install -y }"
-      done
-      [ -n "$apt_pkgs_one" ] && one_shot="${one_shot}sudo apt-get update -qq && sudo apt-get install -y$apt_pkgs_one; sudo service postgresql start 2>/dev/null; "
-    elif [ "$os" = "macos" ]; then
-      local brew_pkgs_one=""
-      for cmd in "${install_cmds[@]}"; do
-        [[ "$cmd" == curl* ]] && continue
-        brew_pkgs_one="$brew_pkgs_one ${cmd#brew install }"
-      done
-      [ -n "$brew_pkgs_one" ] && one_shot="${one_shot}brew install$brew_pkgs_one; brew services start postgresql 2>/dev/null; "
-    fi
     one_shot="${one_shot}source \$HOME/.local/bin/env 2>/dev/null; ./setup"
     echo "  $one_shot"
     echo ""

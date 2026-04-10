@@ -26,31 +26,88 @@ Before running anything, ask the user which path they'd like:
 
 Wait for their answer before proceeding.
 
-## Step 2: Run setup
+## Step 2: Demo path
 
-Activate the virtual environment and run setup with the appropriate flag:
-
-**If they chose demo (or quick start):**
-```bash
-cd $(git rev-parse --show-toplevel)/backend && uv venv .venv && source .venv/bin/activate && uv pip install -r requirements.txt && source ~/linkedout-data/config/agent-context.env && linkedout setup --demo
-```
-
-**If they chose full setup:**
-```bash
-cd $(git rev-parse --show-toplevel)/backend && uv venv .venv && source .venv/bin/activate && uv pip install -r requirements.txt && source ~/linkedout-data/config/agent-context.env && linkedout setup --full
-```
-
-The `--demo` / `--full` flag skips the interactive prompt. Do NOT run `linkedout setup` without a flag — the interactive prompt doesn't work well in this context.
-
-The setup flow is idempotent — re-running resumes from where it left off.
-
-## After Setup
-
-Verify everything is working:
+If they chose demo (or quick start), run setup directly — no config collection needed:
 
 ```bash
-cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source ~/linkedout-data/config/agent-context.env && linkedout status
+cd $(git rev-parse --show-toplevel)/backend && \
+  uv venv .venv && source .venv/bin/activate && \
+  uv pip install -r requirements.txt && \
+  linkedout setup --demo
 ```
+
+- Do NOT source `agent-context.env` before setup — setup creates it
+- Demo path needs no API keys
+- After setup completes, skip to Step 5 (Verify)
+
+## Step 3: Full setup — collect ALL inputs FIRST
+
+If they chose full setup, **collect all configuration conversationally before running any commands**:
+
+1. **Embedding provider** — Ask: openai (recommended, ~$0.01 per 1K profiles) or local (free, ~275 MB download, slower)?
+2. **OpenAI API key** — If they chose openai, ask for their key (from https://platform.openai.com/api-keys)
+3. **Apify API key** — Optional. For profile enrichment. Ask if they have one, skip if not.
+4. **LinkedIn profile URL** — Their own profile (e.g., https://linkedin.com/in/yourname)
+5. **Connections.csv path** — Ask if they've exported from LinkedIn. If yes, get the path. If not, explain how to export and offer to skip for now.
+
+Then write the config file:
+
+```bash
+mkdir -p ~/linkedout-data/config/
+cat > ~/linkedout-data/config/secrets.yaml << 'EOF'
+openai_api_key: "sk-..."
+# apify_api_key: "apify_api_..."  # uncomment if provided
+EOF
+chmod 600 ~/linkedout-data/config/secrets.yaml
+```
+
+Then run setup:
+
+```bash
+cd $(git rev-parse --show-toplevel)/backend && \
+  uv venv .venv && source .venv/bin/activate && \
+  uv pip install -r requirements.txt && \
+  linkedout setup --full
+```
+
+- Do NOT source `agent-context.env` before setup — setup creates it
+
+## Step 4: After setup — run data steps
+
+After `linkedout setup --full` completes, source agent-context.env and run data import steps with the collected inputs:
+
+```bash
+source ~/linkedout-data/config/agent-context.env
+```
+
+If a LinkedIn URL was provided:
+```bash
+linkedout setup-user-profile --url "https://linkedin.com/in/..."
+```
+
+If a Connections.csv path was provided:
+```bash
+linkedout import-connections ~/Downloads/Connections.csv
+```
+
+## Step 5: Verify
+
+Source agent-context.env (if not already sourced) and check status:
+
+```bash
+cd $(git rev-parse --show-toplevel)/backend && \
+  source .venv/bin/activate && \
+  source ~/linkedout-data/config/agent-context.env && \
+  linkedout status
+```
+
+## Critical Rules
+
+- **NEVER** use raw SQL to insert data — always use CLI commands
+- **NEVER** source `agent-context.env` before setup completes — setup creates it
+- **NEVER** run `linkedout setup` without `--demo` or `--full` — the interactive prompt doesn't work in this context
+- If setup hangs on a prompt, it's a bug — report it
 
 ## Data Paths
 

@@ -9,7 +9,6 @@ are processed, and interruptions can be resumed.
 from __future__ import annotations
 
 import subprocess
-import sys
 import time
 from pathlib import Path
 
@@ -19,7 +18,7 @@ from shared.utilities.operation_report import OperationCounts, OperationReport
 # ── Prompt text (exact wording from setup-flow-ux.md) ────────────────
 
 _PROMPT_OPENAI = """\
-Step 10 of 14: Embedding Generation
+Step 11 of 15: Embedding Generation
 
   Profiles needing embeddings: {count:,}
   Provider: OpenAI (text-embedding-3-small, Batch API)
@@ -29,7 +28,7 @@ Step 10 of 14: Embedding Generation
   Generate embeddings now? [Y/n] """
 
 _PROMPT_LOCAL = """\
-Step 10 of 14: Embedding Generation
+Step 11 of 15: Embedding Generation
 
   Profiles needing embeddings: {count:,}
   Provider: Local (nomic-embed-text-v1.5, 768 dimensions)
@@ -56,7 +55,7 @@ def count_profiles_needing_embeddings(db_url: str) -> int:  # noqa: ARG001
     log = get_setup_logger("embeddings")
 
     result = subprocess.run(
-        [sys.executable, "-m", "linkedout.commands", "embed", "--dry-run"],
+        ["linkedout", "embed", "--dry-run"],
         capture_output=True,
         text=True,
     )
@@ -168,7 +167,7 @@ def run_embeddings(provider: str) -> OperationReport:
 
     print(f"  Generating embeddings with {provider} provider...")
 
-    cmd = [sys.executable, "-m", "linkedout.commands", "embed", "--provider", provider]
+    cmd = ["linkedout", "embed", "--provider", provider]
 
     result = subprocess.run(cmd, capture_output=True, text=True)
     duration_ms = (time.monotonic() - start) * 1000
@@ -236,7 +235,7 @@ def setup_embeddings(data_dir: Path, db_url: str) -> OperationReport:  # noqa: A
     count = count_profiles_needing_embeddings(db_url)
 
     if count == 0:
-        print("Step 10 of 14: Embedding Generation\n")
+        print("Step 11 of 15: Embedding Generation\n")
         print("  All profiles already have embeddings. Nothing to do.")
         duration_ms = (time.monotonic() - start) * 1000
         return OperationReport(
@@ -262,7 +261,10 @@ def setup_embeddings(data_dir: Path, db_url: str) -> OperationReport:  # noqa: A
             time_estimate=time_estimate,
         )
 
-    choice = input(prompt).strip().lower()
+    try:
+        choice = input(prompt).strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        choice = ""  # default to yes (generate embeddings)
     if choice in ("n", "no"):
         print("\n  Skipping embedding generation.")
         print("  You can run it later: linkedout embed")

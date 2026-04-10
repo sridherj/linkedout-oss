@@ -92,6 +92,43 @@ class TestCreateUserProfile:
         mock_session.commit.assert_called_once()
 
     @patch('linkedout.setup.user_profile.get_setup_logger')
+    def test_new_profile_insert_includes_timestamps(self, _mock_logger):
+        """Regression: raw SQL INSERT must include created_at and updated_at (NOW()).
+
+        Without these, Python-side defaults won't fire for raw SQL, leaving
+        NULL timestamps that violate NOT NULL constraints.
+        """
+        mock_session = MagicMock()
+        mock_result = MagicMock()
+        mock_result.fetchone.return_value = None  # no existing profile
+        mock_session.execute.return_value = mock_result
+
+        with patch('linkedout.setup.user_profile.create_engine') as mock_create_engine, \
+             patch('linkedout.setup.user_profile.Session') as mock_session_cls, \
+             patch('shared.common.nanoids.Nanoid.make_nanoid_with_prefix', return_value='cp_ts_test'):
+            mock_create_engine.return_value = MagicMock()
+            mock_session_cls.return_value.__enter__ = MagicMock(return_value=mock_session)
+            mock_session_cls.return_value.__exit__ = MagicMock(return_value=False)
+
+            create_user_profile(
+                'johndoe',
+                'https://linkedin.com/in/johndoe',
+                'postgresql://test@localhost/test',
+            )
+
+        # The INSERT is the second execute call (first is SELECT)
+        insert_call = mock_session.execute.call_args_list[1]
+        insert_sql = str(insert_call[0][0])
+
+        # Verify the INSERT SQL includes timestamp columns with NOW()
+        assert 'created_at' in insert_sql, \
+            'INSERT must include created_at for raw SQL (Python-side defaults dont fire)'
+        assert 'updated_at' in insert_sql, \
+            'INSERT must include updated_at for raw SQL (Python-side defaults dont fire)'
+        assert 'NOW()' in insert_sql, \
+            'Timestamps must use NOW() in raw SQL INSERTs'
+
+    @patch('linkedout.setup.user_profile.get_setup_logger')
     def test_updates_existing_profile(self, _mock_logger):
         mock_session = MagicMock()
         # First query: existing profile found

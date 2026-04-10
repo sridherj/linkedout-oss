@@ -15,7 +15,6 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import sys
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -406,7 +405,7 @@ def _query_db_counts(log) -> dict:
     }
 
     result = subprocess.run(
-        [sys.executable, "-m", "linkedout.commands", "diagnostics", "--json"],
+        ["linkedout", "diagnostics", "--json"],
         capture_output=True,
         text=True,
     )
@@ -478,7 +477,7 @@ def _check_config(data_dir: Path, log) -> dict:
 def _check_db_connected() -> bool:
     """Check if the database is reachable."""
     result = subprocess.run(
-        [sys.executable, "-m", "linkedout.commands", "diagnostics", "--ping"],
+        ["linkedout", "diagnostics", "--ping"],
         capture_output=True,
         text=True,
     )

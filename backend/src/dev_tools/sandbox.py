@@ -27,7 +27,9 @@ CLAUDE_CREDENTIALS = Path.home() / '.claude' / '.credentials.json'
 @click.command()
 @click.option('--no-build', is_flag=True, help='Skip Docker build, reuse existing image.')
 @click.option('--no-claude', is_flag=True, help='Build without Claude Code credentials.')
-def sandbox(no_build: bool, no_claude: bool):
+@click.option('--dev', is_flag=True, help='Copy local tracked files into the container (gitignore-aware).')
+@click.option('--detach', is_flag=True, help='Start container detached, print container ID.')
+def sandbox(no_build: bool, no_claude: bool, dev: bool, detach: bool):
     """Launch a fresh-install Docker sandbox."""
     if not DOCKERFILE.exists():
         click.echo(f'Dockerfile not found: {DOCKERFILE}', err=True)
@@ -82,14 +84,70 @@ def sandbox(no_build: bool, no_claude: bool):
     timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
     logfile = log_dir / f'session-{timestamp}.log'
 
-    docker_cmd = f'docker run -it --rm {IMAGE_NAME}'
+    # Build docker run arguments
+    run_args = ['docker', 'run', '--rm']
 
-    click.echo('Launching sandbox...')
-    click.echo(f'Session log: {logfile}')
-    click.echo('')
+    # A4: Always mount /tmp/linkedout-oss for session log access from host
+    run_args += ['-v', '/tmp/linkedout-oss:/tmp/linkedout-oss']
 
-    # macOS and Linux have different script(1) syntax
-    if platform.system() == 'Darwin':
-        os.execvp('script', ['script', '-a', '-q', str(logfile), 'bash', '-c', docker_cmd])
+    # Pass through HF_TOKEN to avoid HuggingFace rate limits on model downloads
+    hf_token = os.environ.get('HF_TOKEN')
+    if hf_token:
+        run_args += ['-e', f'HF_TOKEN={hf_token}']
+
+    if dev or detach:
+        # Start detached so we can copy files before entering the shell
+        run_args += ['-d', IMAGE_NAME, 'sleep', 'infinity']
+        click.echo(f'Launching sandbox ({("detached" if detach else "interactive")})...')
+        result = subprocess.run(run_args, capture_output=True, text=True, check=False)
+        if result.returncode != 0:
+            click.echo(f'Docker run failed: {result.stderr.strip()}', err=True)
+            raise SystemExit(result.returncode)
+        container_id = result.stdout.strip()
+
+        # A2: Dev mode — copy tracked files into the container (gitignore-aware)
+        # Uses git archive to avoid leaking host artifacts (.venv, __pycache__, .claude/)
+        if dev:
+            click.echo('Dev mode: copying tracked files into container...')
+            archive = subprocess.Popen(
+                ['git', '-C', str(REPO_ROOT), 'archive', 'HEAD'],
+                stdout=subprocess.PIPE,
+            )
+            untar = subprocess.run(
+                ['docker', 'exec', '-i', container_id, 'tar', 'xf', '-', '-C', '/linkedout-oss'],
+                stdin=archive.stdout, check=False,
+            )
+            archive.wait()
+            if archive.returncode != 0 or untar.returncode != 0:
+                click.echo('Warning: failed to copy tracked files into container', err=True)
+
+        if detach:
+            click.echo(container_id)
+        else:
+            # Interactive: exec into the detached container, clean up on exit
+            click.echo(f'Session log: {logfile}')
+            click.echo('')
+            exec_cmd = f'docker exec -it {container_id} bash'
+            script_cmd = ['script', '-a', '-q', str(logfile)]
+            if platform.system() == 'Darwin':
+                script_cmd += ['bash', '-c', exec_cmd]
+            else:
+                script_cmd += ['-c', exec_cmd]
+            try:
+                subprocess.run(script_cmd, check=False)
+            finally:
+                subprocess.run(['docker', 'rm', '-f', container_id],
+                               capture_output=True, check=False)
     else:
-        os.execvp('script', ['script', '-a', '-q', str(logfile), '-c', docker_cmd])
+        # Standard interactive mode (no dev, no detach)
+        run_args += ['-it', IMAGE_NAME]
+        docker_cmd = ' '.join(run_args)
+
+        click.echo('Launching sandbox...')
+        click.echo(f'Session log: {logfile}')
+        click.echo('')
+
+        if platform.system() == 'Darwin':
+            os.execvp('script', ['script', '-a', '-q', str(logfile), 'bash', '-c', docker_cmd])
+        else:
+            os.execvp('script', ['script', '-a', '-q', str(logfile), '-c', docker_cmd])

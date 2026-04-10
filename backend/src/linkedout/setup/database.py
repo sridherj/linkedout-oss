@@ -261,6 +261,78 @@ def verify_schema(database_url: str) -> list[str]:
     return missing
 
 
+def bootstrap_system_records(database_url: str) -> OperationReport:
+    """Insert system tenant, BU, and app_user records if they don't exist.
+
+    These records are FK targets for connection and enrichment_event rows.
+    Must be called after migrations succeed and schema is verified.
+
+    Args:
+        database_url: PostgreSQL connection string.
+
+    Returns:
+        OperationReport with bootstrap counts.
+    """
+    from dev_tools.db.fixed_data import SYSTEM_APP_USER, SYSTEM_BU, SYSTEM_TENANT
+
+    log = get_setup_logger('database')
+    start = time.monotonic()
+
+    from sqlalchemy import create_engine, text
+
+    engine = create_engine(database_url)
+
+    # FK order: tenant -> bu -> app_user
+    stmts = [
+        text(
+            "INSERT INTO tenant (id, name, created_at, updated_at) "
+            "VALUES (:id, :name, NOW(), NOW()) "
+            "ON CONFLICT (id) DO NOTHING"
+        ).bindparams(id=SYSTEM_TENANT['id'], name=SYSTEM_TENANT['name']),
+        text(
+            "INSERT INTO bu (id, tenant_id, name, created_at, updated_at) "
+            "VALUES (:id, :tenant_id, :name, NOW(), NOW()) "
+            "ON CONFLICT (id) DO NOTHING"
+        ).bindparams(id=SYSTEM_BU['id'], tenant_id=SYSTEM_BU['tenant_id'], name=SYSTEM_BU['name']),
+        text(
+            "INSERT INTO app_user (id, email, name, auth_provider_id, created_at, updated_at) "
+            "VALUES (:id, :email, :name, :auth_provider_id, NOW(), NOW()) "
+            "ON CONFLICT (id) DO NOTHING"
+        ).bindparams(
+            id=SYSTEM_APP_USER['id'],
+            email=SYSTEM_APP_USER['email'],
+            name=SYSTEM_APP_USER['name'],
+            auth_provider_id=SYSTEM_APP_USER['auth_provider_id'],
+        ),
+    ]
+
+    inserted = 0
+    try:
+        with engine.begin() as conn:
+            for stmt in stmts:
+                result = conn.execute(stmt)
+                inserted += result.rowcount
+        log.info('Bootstrap: {} system records inserted (0 = already existed)', inserted)
+    except Exception as e:
+        log.error('Bootstrap failed: {}', e)
+        duration_ms = (time.monotonic() - start) * 1000
+        return OperationReport(
+            operation='bootstrap-system-records',
+            duration_ms=duration_ms,
+            counts=OperationCounts(total=3, failed=3),
+            next_steps=['Check bootstrap errors and re-run /linkedout-setup'],
+        )
+    finally:
+        engine.dispose()
+
+    duration_ms = (time.monotonic() - start) * 1000
+    return OperationReport(
+        operation='bootstrap-system-records',
+        duration_ms=duration_ms,
+        counts=OperationCounts(total=3, succeeded=3),
+    )
+
+
 def generate_agent_context_env(database_url: str, data_dir: Path) -> Path:
     """Generate agent-context.env for Claude/AI agent DB access.
 
@@ -300,7 +372,8 @@ def setup_database(data_dir: Path) -> OperationReport:
     3. Write config.yaml
     4. Run Alembic migrations
     5. Verify schema
-    6. Generate agent-context.env
+    6. Bootstrap system records (tenant, BU, app_user)
+    7. Generate agent-context.env
 
     Args:
         data_dir: Root data directory (e.g., ``~/linkedout-data``).
@@ -312,7 +385,7 @@ def setup_database(data_dir: Path) -> OperationReport:
     start = time.monotonic()
     succeeded = 0
     failed = 0
-    total_steps = 5
+    total_steps = 6
     next_steps: list[str] = []
 
     # Check if config.yaml already exists with a database_url
@@ -361,7 +434,19 @@ def setup_database(data_dir: Path) -> OperationReport:
     else:
         succeeded += 1
 
-    # Step 6: Generate agent-context.env (always)
+    # Step 6: Bootstrap system records (only if schema is intact)
+    if not missing:
+        bootstrap_report = bootstrap_system_records(database_url)
+        if bootstrap_report.counts.failed > 0:
+            failed += 1
+            next_steps.extend(bootstrap_report.next_steps)
+        else:
+            succeeded += 1
+    else:
+        log.warning('Skipping bootstrap — schema verification failed')
+        failed += 1
+
+    # Step 7: Generate agent-context.env (always)
     try:
         generate_agent_context_env(database_url, data_dir)
         succeeded += 1
@@ -376,7 +461,7 @@ def setup_database(data_dir: Path) -> OperationReport:
         operation='db-setup',
         duration_ms=duration_ms,
         counts=OperationCounts(
-            total=total_steps + 1,  # +1 for agent-context.env
+            total=total_steps + 1,  # +1 for agent-context.env (Step 7)
             succeeded=succeeded,
             failed=failed,
             skipped=0,

@@ -312,7 +312,7 @@ def setup_skills(
     agent_context = data_dir / "config" / "agent-context.env"
 
     if not auto_accept:
-        print("Step 12 of 14: Skill Installation\n")
+        print("Step 13 of 15: Skill Installation\n")
 
     # Detect platforms
     platforms = detect_platforms()
@@ -336,7 +336,10 @@ def setup_skills(
 
     # Ask for confirmation (skip in demo/auto_accept mode)
     if not auto_accept:
-        choice = input("  Install LinkedOut skills for these platforms? [Y/n] ").strip().lower()
+        try:
+            choice = input("  Install LinkedOut skills for these platforms? [Y/n] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            choice = ""  # default to yes (install skills)
         if choice in ("n", "no"):
             print("\n  Skipping skill installation.")
             duration_ms = (time.monotonic() - start) * 1000

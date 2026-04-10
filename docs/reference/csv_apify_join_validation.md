@@ -3,7 +3,7 @@
 **Date:** 2026-03-27
 
 ## Input Files
-- LinkedIn CSV: `~/workspace/second-brain/data/linkedin_connections.csv`
+- LinkedIn CSV: `<prior-project>/data/linkedin_connections.csv`
 - Apify JSON 1: `linkedin_profile_data_1.json` (833MB)
 - Apify JSON 2: `linkedin_profile_data_2.json` (124MB)
 
