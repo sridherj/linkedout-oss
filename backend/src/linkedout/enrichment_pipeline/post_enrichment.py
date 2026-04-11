@@ -17,6 +17,7 @@ from linkedout.crawled_profile.schemas.crawled_profile_api_schema import (
 from linkedout.crawled_profile.services.profile_enrichment_service import ProfileEnrichmentService
 from linkedout.enrichment_event.entities.enrichment_event_entity import EnrichmentEventEntity
 from linkedout.role_alias.repositories.role_alias_repository import RoleAliasRepository
+from shared.utils.apify_archive import append_apify_archive
 from shared.utils.company_matcher import CompanyMatcher
 from shared.utils.company_resolver import resolve_company
 from shared.utils.date_parsing import parse_month_name
@@ -59,14 +60,19 @@ class PostEnrichmentService:
         apify_data: dict,
         enrichment_event_id: str,
         linkedin_url: str,
+        source: str = 'enrichment',
     ) -> None:
         """Process a single Apify profile result.
 
+        0. Archive raw response to JSONL (fire-and-forget)
         1. Race-condition re-check (cache)
         2. Update/create crawled profile
         3. Delegate structured rows + embedding + search_vector to enrich()
         4. Update enrichment event to completed
         """
+        # 0. Archive raw Apify response before any DB work
+        append_apify_archive(linkedin_url, apify_data, source=source)
+
         # 1. Race condition guard — re-check cache
         profile = self._session.execute(
             select(CrawledProfileEntity).where(

@@ -4,9 +4,12 @@
 These tests call the Apify actor directly and validate real data is returned.
 Run with: precommit-tests --suite live_services
 """
+import json
+
 import pytest
 
 from linkedout.enrichment_pipeline.apify_client import LinkedOutApifyClient, get_platform_apify_key
+from shared.utils.apify_archive import append_apify_archive
 
 SJ_LINKEDIN_URL = 'https://www.linkedin.com/in/sridher-jeyachandran'
 
@@ -38,3 +41,23 @@ def test_apify_enriches_sridher_profile():
     # Validate experiences are returned (enrichment pipeline depends on this)
     experiences = result.get('experience', []) or []
     assert len(experiences) > 0, "Expected at least one experience entry"
+
+
+@pytest.mark.live_services
+def test_apify_response_archives_to_jsonl(tmp_path):
+    """Real Apify data round-trips cleanly through the JSONL archive."""
+    api_key = get_platform_apify_key()
+    client = LinkedOutApifyClient(api_key=api_key)
+
+    result = client.enrich_profile_sync(SJ_LINKEDIN_URL)
+    assert result is not None, "Apify returned no data — cannot test archive"
+
+    append_apify_archive(SJ_LINKEDIN_URL, result, source='live_test', data_dir=tmp_path)
+
+    archive = tmp_path / 'crawled' / 'apify-responses.jsonl'
+    assert archive.exists()
+
+    line = json.loads(archive.read_text().strip())
+    assert line['linkedin_url'] == SJ_LINKEDIN_URL
+    assert line['source'] == 'live_test'
+    assert line['data']['firstName'] == 'Sridher'

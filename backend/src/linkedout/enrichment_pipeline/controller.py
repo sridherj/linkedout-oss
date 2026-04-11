@@ -229,7 +229,7 @@ class _EnrichmentTriggerService:
                 # 3. Delegate to PostEnrichmentService
                 embedding_provider = get_embedding_provider()
                 service = PostEnrichmentService(self._session, embedding_provider)
-                service.process_enrichment_result(result, enrichment_event_id, linkedin_url)
+                service.process_enrichment_result(result, enrichment_event_id, linkedin_url, source='api_enrichment')
                 return
 
             except Exception:

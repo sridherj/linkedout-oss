@@ -186,7 +186,7 @@ def run_enrichment(db_url: str, max_profiles: int = _DEFAULT_MAX_PROFILES) -> Op
                 session.add(event)
                 session.flush()
 
-                service.process_enrichment_result(result, event.id, linkedin_url)
+                service.process_enrichment_result(result, event.id, linkedin_url, source='setup_enrichment')
 
             enriched += 1
             print(" done")

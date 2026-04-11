@@ -10,8 +10,9 @@ linked_files:
   - backend/src/organization/enrichment_config/
   - backend/src/utilities/llm_manager/embedding_factory.py
   - backend/src/shared/config/settings.py
-version: 1
-last_verified: "2026-04-09"
+  - backend/src/shared/utils/apify_archive.py
+version: 2
+last_verified: "2026-04-11"
 ---
 
 # LinkedOut Enrichment Pipeline
@@ -47,6 +48,8 @@ Enrich LinkedIn connection profiles by crawling full profile data via Apify, the
 - **Async multi-profile support**: An alternative path starts an async Apify run for multiple URLs and polls for completion with configurable timeout (run_poll_timeout_seconds default 300s, run_poll_interval_seconds default 5s). Results are fetched from the dataset after completion. Verify polling respects timeout and handles FAILED/ABORTED/TIMED-OUT statuses.
 
 ### Post-Enrichment Processing
+
+- **JSONL archive of raw Apify responses**: Before any database writes, PostEnrichmentService appends the raw Apify response to `{data_dir}/crawled/apify-responses.jsonl` as a single JSON line with metadata envelope (`archived_at`, `linkedin_url`, `source`, `data`). Archive writes are fire-and-forget — failures are logged but do not block enrichment. This ensures crawled data survives database loss. Verify archive file is appended on each enrichment.
 
 - **Two-phase processing**: PostEnrichmentService handles Apify response mapping and delegates structured row creation to ProfileEnrichmentService.enrich(). The post-enrichment service maps Apify JSON to CrawledProfile columns, then the enrichment service handles experience/education/skill rows, search_vector, and embedding.
 
