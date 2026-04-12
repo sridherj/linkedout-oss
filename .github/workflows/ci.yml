@@ -50,8 +50,8 @@ jobs:
       postgres:
         image: pgvector/pgvector:pg16
         env:
-          POSTGRES_USER: linkedout_test
-          POSTGRES_PASSWORD: linkedout_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
           POSTGRES_DB: linkedout_test
         ports:
           - 5432:5432
@@ -65,6 +65,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Set up test database
+        run: |
+          psql postgresql://postgres:postgres@localhost:5432/linkedout_test -c "
+            CREATE EXTENSION IF NOT EXISTS vector;
+            CREATE EXTENSION IF NOT EXISTS pg_trgm;
+            CREATE USER linkedout_test WITH PASSWORD 'linkedout_test';
+            ALTER DATABASE linkedout_test OWNER TO linkedout_test;
+            GRANT ALL ON SCHEMA public TO linkedout_test;
+          "
       - name: Install dependencies
         run: |
           pip install uv
@@ -75,10 +84,6 @@ jobs:
           DATABASE_URL: postgresql://linkedout_test:linkedout_test@localhost:5432/linkedout_test
           LINKEDOUT_ENVIRONMENT: integration_test
         run: cd backend && alembic upgrade head
-      - name: Remove superuser (so RLS policies apply)
-        env:
-          DATABASE_URL: postgresql://linkedout_test:linkedout_test@localhost:5432/linkedout_test
-        run: psql $DATABASE_URL -c "ALTER ROLE linkedout_test NOSUPERUSER;"
       - name: Run integration tests
         env:
           DATABASE_URL: postgresql://linkedout_test:linkedout_test@localhost:5432/linkedout_test

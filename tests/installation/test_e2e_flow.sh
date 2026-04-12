@@ -175,7 +175,8 @@ STATUS_OUTPUT=$(linkedout status --json 2>/dev/null) && STATUS_EXIT=0 || STATUS_
 assert_exit_code "linkedout status --json" 0 "$STATUS_EXIT"
 
 # Verify status JSON has expected fields
-assert_json_field "status has version" "$STATUS_OUTPUT" "['version']" "0.1.0"
+EXPECTED_VERSION=$(cat "$REPO_ROOT/VERSION")
+assert_json_field "status has version" "$STATUS_OUTPUT" "['version']" "$EXPECTED_VERSION"
 assert_json_field "status shows db connected" "$STATUS_OUTPUT" "['db_connected']" "True"
 
 # ── Step 2: Import Connections ────────────────────────────────────

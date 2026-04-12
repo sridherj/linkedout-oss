@@ -8,12 +8,11 @@ permissions:
   contents: write  # needed for creating GitHub Releases
 
 jobs:
-  # TODO: re-enable CI gate once tests are green
-  # test:
-  #   uses: ./.github/workflows/ci.yml
+  test:
+    uses: ./.github/workflows/ci.yml
 
   release:
-    # needs: test  # re-enable when CI passes
+    needs: test
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -87,4 +86,10 @@ jobs:
           for f in ${{ steps.assets.outputs.files }}; do
             ARGS+=("$f")
           done
-          gh release create "${ARGS[@]}"
+          if ! gh release create "${ARGS[@]}" 2>/dev/null; then
+            echo "Release $TAG already exists — updating notes and uploading assets"
+            gh release edit "$TAG" --notes-file release_notes.txt
+            for f in ${{ steps.assets.outputs.files }}; do
+              gh release upload "$TAG" "$f" --clobber
+            done
+          fi
