@@ -47,7 +47,7 @@ If they chose full setup, **collect all configuration conversationally before ru
 
 1. **Embedding provider** — Ask: openai (recommended, ~$0.01 per 1K profiles) or local (free, ~275 MB download, slower)?
 2. **OpenAI API key** — If they chose openai, ask for their key (from https://platform.openai.com/api-keys)
-3. **Apify API key** — Optional. For profile enrichment. Ask if they have one, skip if not.
+3. **Apify API key(s)** — Optional. Apify pulls full work history, education, and skills from LinkedIn profiles — data that the basic Connections.csv export doesn't include. Get a free API key at https://console.apify.com (each account gets $5/month free credit, enough for ~1,250 profiles). You can provide one key now and add more later for round-robin rotation across accounts. Ask if they have one, skip if not.
 4. **LinkedIn profile URL** — Their own profile (e.g., https://linkedin.com/in/yourname)
 5. **Connections.csv path** — Ask if they've exported from LinkedIn. If yes, get the path. If not, explain how to export and offer to skip for now.
 
@@ -57,7 +57,8 @@ Then write the config file:
 mkdir -p ~/linkedout-data/config/
 cat > ~/linkedout-data/config/secrets.yaml << 'EOF'
 openai_api_key: "sk-..."
-# apify_api_key: "apify_api_..."  # uncomment if provided
+# apify_api_key: "apify_api_..."       # uncomment if provided
+# apify_api_keys: "key1,key2,key3"    # or multiple keys for round-robin rotation
 EOF
 chmod 600 ~/linkedout-data/config/secrets.yaml
 ```

@@ -68,16 +68,17 @@ _MSG_OPENAI_KEY_INVALID = """\
 _PROMPT_APIFY_KEY = """\
 Apify API key (optional)
 
-Apify enriches LinkedIn profiles with data beyond what the
-Voyager API provides (full work history, education details,
-skills). The Chrome extension crawls profiles directly via
-LinkedIn's API \u2014 Apify is used only for deeper enrichment.
+Apify pulls full work history, education, and skills from
+LinkedIn profiles \u2014 data that the basic Connections.csv
+export doesn't include. Get a free key at:
+  https://console.apify.com
 
-Cost: ~$4 per 1,000 profiles. Apify gives $5 free credit
-per account per month \u2014 enough for ~1,250 profiles.
+Cost: ~$4 per 1,000 profiles. Each Apify account gets $5
+free credit per month \u2014 enough for ~1,250 profiles.
 
-Skip this if you are not planning to use the Chrome extension.
-You can always add this key later in ~/linkedout-data/config/secrets.yaml.
+You can add one key now and more later for round-robin
+rotation across accounts (edit secrets.yaml to add
+apify_api_keys: "key1,key2,key3").
 
 Enter Apify API key (or press Enter to skip): """
 
