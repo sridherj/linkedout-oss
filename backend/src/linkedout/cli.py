@@ -32,6 +32,11 @@ class _LazyLinkedOutCLI(CategoryHelpGroup):
         self.add_command(download_seed_command)
         self.add_command(import_seed_command)
 
+        # --- Enrichment ---
+        from linkedout.commands.enrich import enrich_command
+
+        self.add_command(enrich_command)
+
         # --- Processing ---
         from linkedout.commands.compute_affinity import compute_affinity_command
         from linkedout.commands.embed import embed_command

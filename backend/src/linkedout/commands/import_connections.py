@@ -25,6 +25,7 @@ from shared.utils.date_parsing import parse_linkedin_csv_date
 from shared.utils.linkedin_url import normalize_linkedin_url
 from shared.utilities.logger import get_logger
 from shared.utilities.metrics import record_metric
+from shared.config import get_config
 from shared.utilities.operation_report import OperationCounts, OperationReport
 from linkedout.cli_helpers import cli_logged
 
@@ -272,6 +273,19 @@ def import_connections_command(csv_file: str, fmt: str, dry_run: bool, batch_siz
 
     # Generate operation report
     imported = totals['matched'] + totals['unenriched'] + totals['no_url']
+
+    cfg = get_config()
+    next_steps = []
+    if totals['unenriched'] > 0:
+        cost_per = cfg.enrichment.cost_per_profile_usd
+        cost = totals['unenriched'] * cost_per
+        next_steps.append(
+            f'Run `linkedout enrich` to fetch full profiles via Apify '
+            f'(~${cost:.2f} for {totals["unenriched"]:,} profiles)'
+        )
+    next_steps.append('Run `linkedout embed` to generate embeddings for semantic search')
+    next_steps.append('Run `linkedout compute-affinity` to calculate affinity scores')
+
     report = OperationReport(
         operation='import-connections',
         duration_ms=duration_ms,
@@ -281,16 +295,13 @@ def import_connections_command(csv_file: str, fmt: str, dry_run: bool, batch_siz
             skipped=0,
             failed=totals['errors'],
         ),
-        next_steps=[
-            'Run `linkedout compute-affinity` to calculate affinity scores',
-            'Run `linkedout embed` to generate embeddings',
-        ],
+        next_steps=next_steps,
     )
     report_path = report.save()
 
     click.echo('\nNext steps:')
-    click.echo('  -> Run `linkedout compute-affinity` to calculate affinity scores')
-    click.echo('  -> Run `linkedout embed` to generate embeddings')
+    for step in next_steps:
+        click.echo(f'  -> {step}')
 
     try:
         display = '~/' + str(report_path.relative_to(Path.home()))

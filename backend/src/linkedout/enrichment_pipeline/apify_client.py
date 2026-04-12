@@ -7,7 +7,6 @@ across Apify accounts. Configure via settings:
   - Multiple keys: APIFY_API_KEYS=key1,key2,key3  (comma-separated)
   - Or as a YAML list in secrets.yaml under apify_api_keys.
 """
-import itertools
 import os
 import time
 from typing import Optional
@@ -30,26 +29,98 @@ APIFY_LINKEDIN_ACTOR_ID = 'LpVuK3Zozwuipa5bp'
 # Scraper mode is tied to Actor behavior — not user-configurable.
 ACTOR_SCRAPER_MODE = 'Profile details no email ($4 per 1k)'
 
-# Module-level key cycle for true round-robin across calls
-_key_cycle = None
+# ---------------------------------------------------------------------------
+# Apify error hierarchy
+# ---------------------------------------------------------------------------
+
+class ApifyError(Exception):
+    """Base class for Apify-specific errors."""
+
+    def __init__(self, message: str, status_code: int | None = None):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class ApifyCreditExhaustedError(ApifyError):
+    """HTTP 402 — account has no credits remaining."""
+
+
+class ApifyRateLimitError(ApifyError):
+    """HTTP 429 — rate limit hit, retry after backoff."""
+
+
+class ApifyAuthError(ApifyError):
+    """HTTP 401/403 — invalid or revoked API key."""
+
+
+class AllKeysExhaustedError(ApifyError):
+    """All configured Apify keys are exhausted or invalid."""
+
+
+# ---------------------------------------------------------------------------
+# Per-key health tracking
+# ---------------------------------------------------------------------------
+
+class KeyHealthTracker:
+    """Tracks which Apify keys are healthy, exhausted, or rate-limited."""
+
+    def __init__(self, keys: list[str]):
+        self._keys = keys
+        self._exhausted: set[int] = set()   # indices of 402'd keys
+        self._invalid: set[int] = set()     # indices of 401/403'd keys
+        self._current = 0
+
+    def next_key(self) -> str:
+        """Return the next healthy key, or raise AllKeysExhaustedError."""
+        total = len(self._keys)
+        checked = 0
+        while checked < total:
+            idx = self._current % total
+            self._current += 1
+            if idx not in self._exhausted and idx not in self._invalid:
+                return self._keys[idx]
+            checked += 1
+        raise AllKeysExhaustedError("All Apify keys are exhausted or invalid")
+
+    def mark_exhausted(self, key: str) -> None:
+        idx = self._keys.index(key)
+        self._exhausted.add(idx)
+
+    def mark_invalid(self, key: str) -> None:
+        idx = self._keys.index(key)
+        self._invalid.add(idx)
+
+    def healthy_count(self) -> int:
+        return len(self._keys) - len(self._exhausted) - len(self._invalid)
+
+    def summary(self) -> str:
+        """Human-readable status of all keys for error reporting."""
+        lines = []
+        for i, key in enumerate(self._keys):
+            hint = f"…{key[-4:]}"
+            if i in self._exhausted:
+                lines.append(f"  Key {i+1} ({hint}): credits exhausted (HTTP 402)")
+            elif i in self._invalid:
+                lines.append(f"  Key {i+1} ({hint}): invalid or revoked (HTTP 401/403)")
+            else:
+                lines.append(f"  Key {i+1} ({hint}): healthy")
+        return "\n".join(lines)
+
+
+# Module-level key tracker for true round-robin across calls
+_key_tracker: KeyHealthTracker | None = None
 
 
 def get_platform_apify_key() -> str:
-    """Round-robin across configured Apify API keys.
-
-    Key resolution order:
-      1. apify_api_keys list (round-robin if multiple)
-      2. apify_api_key (single key fallback)
-    """
-    global _key_cycle
-    if _key_cycle is None:
+    """Round-robin across configured Apify API keys, skipping exhausted/invalid ones."""
+    global _key_tracker
+    if _key_tracker is None:
         cfg = get_config()
         keys = cfg.get_apify_api_keys()
         if keys:
             logger.info(f'Apify key rotation: {len(keys)} keys loaded')
-            _key_cycle = itertools.cycle(keys)
         elif cfg.apify_api_key:
-            _key_cycle = itertools.cycle([cfg.apify_api_key])
+            keys = [cfg.apify_api_key]
         else:
             raise ValueError(
                 'APIFY_API_KEY is not configured.\n'
@@ -57,13 +128,19 @@ def get_platform_apify_key() -> str:
                 'for round-robin rotation.\n'
                 'Configure in secrets.yaml, .env, or environment variables.'
             )
-    return next(_key_cycle)
+        _key_tracker = KeyHealthTracker(keys)
+    return _key_tracker.next_key()
+
+
+def get_key_tracker() -> KeyHealthTracker | None:
+    """Return the current key tracker (for CLI health status reporting)."""
+    return _key_tracker
 
 
 def reset_key_cycle() -> None:
-    """Reset key cycle — useful for testing."""
-    global _key_cycle
-    _key_cycle = None
+    """Reset key tracker — useful for testing."""
+    global _key_tracker
+    _key_tracker = None
 
 
 def get_byok_apify_key(app_user_id: str, db_session: Session) -> str:
@@ -105,7 +182,24 @@ class LinkedOutApifyClient:
         )
         if not resp.ok:
             logger.error(f'Apify sync call failed: {resp.status_code} {resp.text[:200]}')
-            return None
+            if resp.status_code == 402:
+                raise ApifyCreditExhaustedError(
+                    f'Apify credits exhausted (HTTP 402)', status_code=402
+                )
+            elif resp.status_code == 429:
+                raise ApifyRateLimitError(
+                    f'Apify rate limit hit (HTTP 429)', status_code=429
+                )
+            elif resp.status_code in (401, 403):
+                raise ApifyAuthError(
+                    f'Apify authentication failed (HTTP {resp.status_code})',
+                    status_code=resp.status_code,
+                )
+            else:
+                raise ApifyError(
+                    f'Apify call failed: HTTP {resp.status_code}',
+                    status_code=resp.status_code,
+                )
         items = resp.json()
         if items and len(items) > 0:
             return items[0]

@@ -67,7 +67,7 @@ Commands:
   Import:       import-connections, import-contacts, import-seed
   Seed Data:    download-seed
   Demo:         download-demo, restore-demo, reset-demo, use-real-db
-  Intelligence: compute-affinity, embed
+  Intelligence: enrich, compute-affinity, embed
   System:       status, diagnostics, version, config, report-issue
   Server:       start-backend
   Database:     reset-db

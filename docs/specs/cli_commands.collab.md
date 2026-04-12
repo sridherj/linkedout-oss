@@ -8,6 +8,7 @@ linked_files:
   - backend/src/linkedout/commands/import_contacts.py
   - backend/src/linkedout/commands/import_seed.py
   - backend/src/linkedout/commands/download_seed.py
+  - backend/src/linkedout/commands/enrich.py
   - backend/src/linkedout/commands/compute_affinity.py
   - backend/src/linkedout/commands/embed.py
   - backend/src/linkedout/commands/embed_query.py
@@ -28,14 +29,14 @@ linked_files:
   - backend/src/linkedout/commands/setup.py
   - backend/src/linkedout/commands/upgrade.py
   - backend/src/linkedout/commands/migrate.py
-version: 4
-last_verified: "2026-04-10"
+version: 5
+last_verified: "2026-04-12"
 ---
 
 # CLI Commands
 
 **Created:** 2026-04-09 -- Written from scratch for LinkedOut OSS
-**Updated:** 2026-04-10 -- v4: diagnostics adds health_status/issues, config show implemented, log-query command, --repair uses CLI entry point
+**Updated:** 2026-04-12 -- v5: enrich command for Apify-based profile enrichment with key rotation, progress reporting, and cost estimation
 
 ## Intent
 
@@ -59,7 +60,7 @@ Provide a user-facing CLI surface for all LinkedOut operations: setup, data impo
 
 - **Exit codes**: Commands propagate non-zero exit codes via `raise SystemExit(1)` or `sys.exit(1)` on failure. Verify failed commands exit non-zero.
 
-- **Operation reports**: Write commands (import-connections, import-contacts, import-seed, download-seed, compute-affinity, embed) generate JSON operation reports via `OperationReport` and save them to `~/linkedout-data/reports/`. Each report includes operation name, duration, counts (total/succeeded/skipped/failed), and suggested next steps.
+- **Operation reports**: Write commands (import-connections, import-contacts, import-seed, download-seed, compute-affinity, embed, enrich) generate JSON operation reports via `OperationReport` and save them to `~/linkedout-data/reports/`. Each report includes operation name, duration, counts (total/succeeded/skipped/failed), and suggested next steps.
 
 ### Setup
 
@@ -99,6 +100,13 @@ Provide a user-facing CLI surface for all LinkedOut operations: setup, data impo
   - Output: Per-user update counts, total connections updated, and operation report.
   - Suggested next steps: `linkedout status`.
   - Verify: scores are written to connection rows; `--dry-run` makes no DB writes.
+
+- **enrich**: Enrich unenriched LinkedIn profiles via Apify. Queries `crawled_profile` rows where `has_enriched_data = false` and `linkedin_url IS NOT NULL`, calls the Apify LinkedIn scraper for each profile, and processes the results into relational data via `PostEnrichmentService`. Creates an `EnrichmentEventEntity` per profile to track the enrichment lifecycle. Uses `SYSTEM_USER_ID` for RLS bypass. Supports Ctrl+C for graceful interruption with partial summary.
+  - Options: `--limit N` (max profiles to enrich; default: all unenriched), `--dry-run` (count unenriched profiles, estimate cost, exit without calling Apify).
+  - Output: Progress lines every 25 profiles showing `[count/total] pct% | $cost spent | elapsed | ~remaining`. Final summary with total enriched, cost, and duration.
+  - Error handling: Missing Apify key shows setup instructions (`APIFY_API_KEY`, `APIFY_API_KEYS`, `secrets.yaml`) and exits with code 1. Credit exhaustion (HTTP 402) raises `ApifyCreditExhaustedError`; the `KeyHealthTracker` marks the key as exhausted and rotates to the next healthy key. When all keys are exhausted, `AllKeysExhaustedError` is raised and enrichment stops with a partial summary. Individual profile failures are logged and counted but do not halt the batch.
+  - Suggested next steps: `linkedout embed`, `linkedout compute-affinity`.
+  - Verify: `--dry-run` makes no DB writes and shows correct count/cost; `--limit` restricts the number of profiles enriched; interrupted runs show partial progress; operation report is saved to `~/linkedout-data/reports/`.
 
 - **embed**: Generate vector embeddings for profile search. Queries enriched `crawled_profile` rows lacking embeddings in the target column, builds text representations from profile fields (name, headline, about, company, position, experiences), generates embeddings via the configured provider (OpenAI or local nomic), and writes vectors to the correct pgvector column (`embedding_openai` or `embedding_nomic`). Also populates `search_vector` (tsvector) for full-text search. Resumable via progress file checkpointing; safe to Ctrl+C and resume.
   - Options: `--provider {openai,local}` (default: from config), `--dry-run` (report profile counts and cost estimate), `--resume/--no-resume` (resume from last checkpoint, default: true), `--force` (clear existing embeddings and re-embed all), `--batch` (use OpenAI Batch API, 50% cheaper but slower; OpenAI provider only).
