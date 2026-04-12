@@ -592,17 +592,17 @@ class TestStepOrdering:
     """Tests for step ordering and context mutation."""
 
     @patch("linkedout.setup.orchestrator.init_setup_logging", return_value="corr-id")
-    def test_step_registry_has_14_steps(self, mock_logging):
-        """All 14 setup steps are registered."""
+    def test_step_registry_has_15_steps(self, mock_logging):
+        """All 15 setup steps are registered."""
         steps = _build_step_registry()
-        assert len(steps) == 14
+        assert len(steps) == 15
 
     @patch("linkedout.setup.orchestrator.init_setup_logging", return_value="corr-id")
-    def test_steps_numbered_1_to_14(self, mock_logging):
-        """Steps are numbered sequentially 1-14."""
+    def test_steps_numbered_1_to_15(self, mock_logging):
+        """Steps are numbered sequentially 1-15."""
         steps = _build_step_registry()
         numbers = [s.number for s in steps]
-        assert numbers == list(range(1, 15))
+        assert numbers == list(range(1, 16))
 
     @patch("linkedout.setup.orchestrator.init_setup_logging", return_value="corr-id")
     def test_step_names_match_spec(self, mock_logging):
@@ -618,6 +618,7 @@ class TestStepOrdering:
             "user_profile",
             "csv_import",
             "contacts_import",
+            "enrichment",
             "seed_data",
             "embeddings",
             "affinity",
@@ -629,10 +630,10 @@ class TestStepOrdering:
 
     @patch("linkedout.setup.orchestrator.init_setup_logging", return_value="corr-id")
     def test_readiness_and_auto_repair_always_run(self, mock_logging):
-        """Steps 13 and 14 have always_run=True."""
+        """Steps 14 and 15 have always_run=True."""
         steps = _build_step_registry()
-        readiness = steps[12]
-        auto_repair = steps[13]
+        readiness = steps[13]
+        auto_repair = steps[14]
         assert readiness.always_run is True
         assert auto_repair.always_run is True
 

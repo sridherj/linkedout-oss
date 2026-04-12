@@ -128,7 +128,7 @@ def install_dependencies(repo_root: Path) -> OperationReport:
         return OperationReport(
             operation='python-env-install',
             duration_ms=duration_ms,
-            counts=OperationCounts(total=3, succeeded=2, failed=1),
+            counts=OperationCounts(total=2, succeeded=1, failed=1),
             next_steps=['Check backend/pyproject.toml and try: .venv/bin/pip install -e backend/'],
         )
 
@@ -138,7 +138,7 @@ def install_dependencies(repo_root: Path) -> OperationReport:
     return OperationReport(
         operation='python-env-install',
         duration_ms=duration_ms,
-        counts=OperationCounts(total=3, succeeded=3),
+        counts=OperationCounts(total=2, succeeded=2),
     )
 
 

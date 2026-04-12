@@ -42,6 +42,15 @@ def reports_dir(tmp_path):
     return rdir
 
 
+@pytest.fixture
+def patch_db(integration_db_engine):
+    """Patch cli_db_manager so embed_command uses the test schema."""
+    from shared.infra.db.db_session_manager import DbSessionManager
+    test_manager = DbSessionManager(integration_db_engine)
+    with patch('linkedout.commands.embed.cli_db_manager', return_value=test_manager):
+        yield
+
+
 def _mock_openai_provider(vectors=None):
     """Create a mock OpenAI embedding provider."""
     prov = MagicMock()
@@ -131,7 +140,7 @@ class TestEmbedOpenAIE2E:
     """Create profiles, run embed with mocked OpenAI, verify column populated."""
 
     def test_embed_openai(
-        self, runner, integration_db_session, progress_dir, reports_dir, monkeypatch
+        self, runner, integration_db_session, progress_dir, reports_dir, monkeypatch, patch_db
     ):
         # Arrange
         ids = _create_test_profiles(integration_db_session, count=3)
@@ -168,7 +177,7 @@ class TestEmbedLocalE2E:
     """Create profiles, run embed with mocked local model, verify column populated."""
 
     def test_embed_local(
-        self, runner, integration_db_session, progress_dir, reports_dir, monkeypatch
+        self, runner, integration_db_session, progress_dir, reports_dir, monkeypatch, patch_db
     ):
         # Arrange — clear any openai embeddings from prior tests
         integration_db_session.execute(text(
@@ -198,7 +207,7 @@ class TestEmbedDryRun:
     """--dry-run reports counts without modifying DB."""
 
     def test_dry_run_no_db_writes(
-        self, runner, integration_db_session, progress_dir, monkeypatch
+        self, runner, integration_db_session, progress_dir, monkeypatch, patch_db
     ):
         # Arrange — clear embeddings
         integration_db_session.execute(text(
@@ -229,7 +238,7 @@ class TestEmbedForce:
     """--force re-embeds profiles that already have embeddings."""
 
     def test_force_reembeds(
-        self, runner, integration_db_session, progress_dir, reports_dir, monkeypatch
+        self, runner, integration_db_session, progress_dir, reports_dir, monkeypatch, patch_db
     ):
         # Arrange — ensure profiles exist with embeddings
         ids = _create_test_profiles(integration_db_session, count=2)
@@ -265,7 +274,7 @@ class TestEmbedResume:
     """Embed 50% of profiles, save progress, embed again — verify no duplicates."""
 
     def test_resume_continues_from_checkpoint(
-        self, runner, integration_db_session, progress_dir, reports_dir, monkeypatch
+        self, runner, integration_db_session, progress_dir, reports_dir, monkeypatch, patch_db
     ):
         # Arrange — create 6 profiles, clear embeddings
         integration_db_session.execute(text(
@@ -303,7 +312,7 @@ class TestEmbedIdempotent:
     """Run embed twice on fully-embedded DB, second run is a no-op."""
 
     def test_second_run_is_noop(
-        self, runner, integration_db_session, progress_dir, reports_dir, monkeypatch
+        self, runner, integration_db_session, progress_dir, reports_dir, monkeypatch, patch_db
     ):
         monkeypatch.setenv("LINKEDOUT_REPORTS_DIR", str(reports_dir))
         progress_file = progress_dir / "embedding_progress.json"
@@ -328,7 +337,7 @@ class TestEmbedProviderSwitch:
     """Embed with OpenAI, switch to local, embed again — both columns have values."""
 
     def test_both_columns_populated(
-        self, runner, integration_db_session, progress_dir, reports_dir, monkeypatch
+        self, runner, integration_db_session, progress_dir, reports_dir, monkeypatch, patch_db
     ):
         # Arrange — clear all embeddings
         integration_db_session.execute(text(
@@ -368,7 +377,7 @@ class TestEmbedZeroProfiles:
     """Run embed on empty DB — clean exit with message."""
 
     def test_empty_db_clean_exit(
-        self, runner, integration_db_session, progress_dir, monkeypatch
+        self, runner, integration_db_session, progress_dir, monkeypatch, patch_db
     ):
         # Arrange — ensure no profiles match (clear enriched data flag)
         integration_db_session.execute(text(
@@ -399,7 +408,7 @@ class TestReportArtifact:
     """Verify the report JSON is written to the reports directory."""
 
     def test_report_file_created(
-        self, runner, integration_db_session, progress_dir, reports_dir, monkeypatch
+        self, runner, integration_db_session, progress_dir, reports_dir, monkeypatch, patch_db
     ):
         # Arrange
         integration_db_session.execute(text(

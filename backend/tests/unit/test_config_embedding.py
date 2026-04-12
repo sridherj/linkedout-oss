@@ -46,6 +46,7 @@ class TestEmbeddingConfigEnvOverride:
     def test_openai_without_api_key_warns(self, monkeypatch, caplog, tmp_path):
         """OpenAI provider without API key should warn, not error."""
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("LINKEDOUT_EMBEDDING__PROVIDER", raising=False)
         # Ensure no secrets.yaml, config.yaml, or .env interferes
         monkeypatch.setenv("LINKEDOUT_DATA_DIR", str(tmp_path))
         # Point env_file to a nonexistent path so .env keys don't leak in

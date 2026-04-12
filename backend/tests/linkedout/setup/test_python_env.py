@@ -66,31 +66,21 @@ class TestInstallDependencies:
         report = install_dependencies(fake_repo)
 
         assert report.counts.failed == 0
-        assert report.counts.succeeded == 3  # uv install, requirements, editable
-        assert mock_run.call_count == 3
+        assert report.counts.succeeded == 2  # requirements, editable
+        assert mock_run.call_count == 2
 
+    @patch('linkedout.setup.python_env.shutil.which', return_value=None)
     @patch('linkedout.setup.python_env.subprocess.run')
-    def test_falls_back_to_pip_when_uv_fails(self, mock_run, fake_repo):
-        # Call 1: pip install uv → fails
-        # Call 2 (fallback): pip install -r requirements.txt → succeeds
-        # Call 3 (fallback): pip install -e backend/ → succeeds
-        call_count = 0
-
-        def side_effect(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                # pip install uv fails
-                return MagicMock(returncode=1, stdout='', stderr='uv not available')
-            # All subsequent pip calls succeed
-            return MagicMock(returncode=0, stdout='', stderr='')
-
-        mock_run.side_effect = side_effect
+    def test_falls_back_to_pip_when_uv_fails(self, mock_run, mock_which, fake_repo):
+        # shutil.which('uv') returns None → falls back to _install_via_pip()
+        # _install_via_pip makes 2 subprocess calls (requirements + editable)
+        mock_run.return_value = MagicMock(returncode=0, stdout='', stderr='')
 
         report = install_dependencies(fake_repo)
         # Should succeed via pip fallback (2 pip calls)
         assert report.counts.succeeded == 2
         assert report.counts.failed == 0
+        assert mock_run.call_count == 2
 
     @patch('linkedout.setup.python_env.subprocess.run')
     def test_reports_failure_on_requirements_install_error(self, mock_run, fake_repo):

@@ -111,7 +111,7 @@ class TestDemoSkippableSteps:
 
     def test_contains_expected_steps(self):
         expected = {"api_keys", "user_profile", "csv_import", "contacts_import",
-                    "seed_data", "embeddings", "affinity"}
+                    "enrichment", "seed_data", "embeddings", "affinity"}
         assert DEMO_SKIPPABLE_STEPS == expected
 
     def test_does_not_contain_infra_steps(self):

@@ -38,28 +38,33 @@ def pgvector_available(integration_db_engine):
 
 @pytest.fixture(scope='session')
 def vector_column_ready(integration_db_engine, integration_db_session, pgvector_available, intelligence_test_data):
-    """Alter embedding column to vector type if pgvector is available.
+    """Ensure pgvector is available and search_path includes public for vector types.
 
-    Depends on intelligence_test_data to ensure tables are seeded before ALTER.
-    Also sets search_path on the session to include public for vector type visibility.
+    The embedding columns (embedding_openai, embedding_nomic) are already
+    Vector() type from the entity definition via Base.metadata.create_all().
     """
     if not pgvector_available:
         return False
     try:
-        # Use the same session so the ALTER TABLE doesn't deadlock with ACCESS SHARE
-        # locks held by prior tests in the same session transaction.  Within one
-        # transaction PostgreSQL always grants your own lock-upgrade requests.
         integration_db_session.execute(text(f"SET search_path TO {_TEST_SCHEMA}, public"))
-        integration_db_session.execute(text(
-            "ALTER TABLE crawled_profile "
-            "ALTER COLUMN embedding TYPE vector(1536) "
-            "USING embedding::vector(1536)"
-        ))
         integration_db_session.commit()
         return True
     except Exception:
         integration_db_session.rollback()
         return False
+
+
+@pytest.fixture(autouse=True, scope='session')
+def _use_openai_embedding_provider():
+    """Force openai provider so embedding column tests use embedding_openai."""
+    import os
+    old = os.environ.get("LINKEDOUT_EMBEDDING__PROVIDER")
+    os.environ["LINKEDOUT_EMBEDDING__PROVIDER"] = "openai"
+    yield
+    if old is None:
+        os.environ.pop("LINKEDOUT_EMBEDDING__PROVIDER", None)
+    else:
+        os.environ["LINKEDOUT_EMBEDDING__PROVIDER"] = old
 
 
 @pytest.fixture(scope='session')

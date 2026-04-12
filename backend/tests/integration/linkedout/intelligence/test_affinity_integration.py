@@ -222,14 +222,14 @@ class TestEmbeddingSimilaritySignal:
         user_vec = rng.standard_normal(1536).astype(np.float32)
         user_emb_str = '[' + ','.join(str(float(v)) for v in user_vec) + ']'
         session.execute(text(
-            "UPDATE crawled_profile SET embedding = CAST(:emb AS vector) WHERE id = :pid"
+            "UPDATE crawled_profile SET embedding_openai = CAST(:emb AS vector) WHERE id = :pid"
         ), {'emb': user_emb_str, 'pid': profiles_a[0].id})
 
         # Create a similar embedding for connections_a[1] (add small noise)
         conn_vec = user_vec + rng.standard_normal(1536).astype(np.float32) * 0.1
         conn_emb_str = '[' + ','.join(str(float(v)) for v in conn_vec) + ']'
         session.execute(text(
-            "UPDATE crawled_profile SET embedding = CAST(:emb AS vector) WHERE id = :pid"
+            "UPDATE crawled_profile SET embedding_openai = CAST(:emb AS vector) WHERE id = :pid"
         ), {'emb': conn_emb_str, 'pid': profiles_a[1].id})
 
         session.flush()
@@ -278,13 +278,13 @@ class TestEmbeddingSimilaritySignal:
         known_vec = [0.1] * 1536
         emb_str = '[' + ','.join(str(v) for v in known_vec) + ']'
         session.execute(text(
-            "UPDATE crawled_profile SET embedding = CAST(:emb AS vector) WHERE id = :pid"
+            "UPDATE crawled_profile SET embedding_openai = CAST(:emb AS vector) WHERE id = :pid"
         ), {'emb': emb_str, 'pid': profiles_a[3].id})
         session.flush()
 
         # Read it back and verify cosine distance with itself is 0 (similarity = 1)
         row = session.execute(text(
-            "SELECT 1 - (embedding <=> CAST(:emb AS vector)) AS sim "
+            "SELECT 1 - (embedding_openai <=> CAST(:emb AS vector)) AS sim "
             "FROM crawled_profile WHERE id = :pid"
         ), {'emb': emb_str, 'pid': profiles_a[3].id}).fetchone()
 
