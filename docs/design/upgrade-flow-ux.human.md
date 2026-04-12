@@ -9,6 +9,8 @@
 
 ## 1. Update Notification
 
+> **Implemented:** CLI result_callback integration (SP01). After every CLI command, if an update is available and not snoozed, a single-line banner appears.
+
 A non-blocking, single-line notification shown when a LinkedOut skill is invoked and a newer version is available. The notification appears after the skill's normal output, never before or during it.
 
 ### When shown
@@ -22,7 +24,6 @@ A non-blocking, single-line notification shown when a LinkedOut skill is invoked
 - The installed version matches or exceeds the latest release.
 - The GitHub API check fails (network error, rate limit, malformed response).
 - The user has snoozed this specific version and the snooze period has not expired.
-- `auto_upgrade: true` is set in config (auto-upgrade runs instead — see Section 7).
 
 ### Notification text
 
@@ -39,6 +40,8 @@ Format: `LinkedOut v{latest} available (you have v{current}). Run /linkedout-upg
 ---
 
 ## 2. Snooze Confirmation
+
+> **Implemented:** Explicit `--snooze` flag added to `linkedout upgrade` (SP03). Complements the existing automatic snooze escalation.
 
 When the user sees an update notification but does not run `/linkedout-upgrade`, the notification reappears on subsequent skill invocations with escalating backoff.
 
@@ -580,71 +583,7 @@ This text is not shown during the upgrade itself — it is included in the UX do
 
 ## 7. Auto-Upgrade Flow
 
-Users who set `auto_upgrade: true` in `~/linkedout-data/config/config.yaml` get silent, automatic upgrades.
-
-### Config
-
-```yaml
-# ~/linkedout-data/config/config.yaml
-auto_upgrade: true    # default: false
-```
-
-### Behavior
-
-1. On skill invocation, the update check runs as normal.
-2. If an update is available, the system checks whether the new version includes database migrations.
-3. **If the update includes DB migrations:** auto-upgrade is skipped and the standard notification is shown instead. DB migrations carry schema change risk and should only run with the user's explicit knowledge.
-4. **If the update is code-only (no migrations):** the upgrade runs silently.
-5. All output goes to `~/linkedout-data/logs/cli.log` — nothing is printed to the terminal.
-6. The skill invocation proceeds normally. The user does not see any upgrade-related output.
-7. After the silent upgrade completes, the next skill invocation uses the new code.
-
-### Silent upgrade success
-
-The user sees nothing. The upgrade report is written to `~/linkedout-data/reports/upgrade-*.json`. A log entry is written:
-
-```
-2026-04-07 14:23:05.123 | INFO     | cli.upgrade:auto_upgrade:82 | Auto-upgrade completed: v0.1.0 -> v0.2.0 (15.2s)
-```
-
-### Silent upgrade failure — fallback to notification
-
-If the silent upgrade fails at any step:
-
-1. The upgrade is aborted. Partial changes are rolled back automatically (git checkout to the pre-upgrade version).
-2. The failure is logged to `~/linkedout-data/logs/cli.log`.
-3. Auto-upgrade is temporarily disabled for this version (to prevent retry loops).
-4. On the next skill invocation, the standard update notification is shown instead:
-
-```
-LinkedOut v0.2.0 available (you have v0.1.0). Run /linkedout-upgrade
-```
-
-This allows the user to run the upgrade manually and see the error output.
-
-### Log entry on silent upgrade failure
-
-```
-2026-04-07 14:23:05.123 | ERROR    | cli.upgrade:auto_upgrade:95 | Auto-upgrade failed at step "run_migrations": Migration "abc123" failed. Falling back to notification mode.
-```
-
-### Auto-upgrade state tracking
-
-To prevent retry loops, a failed auto-upgrade records the failure in `~/linkedout-data/state/update-check.json`:
-
-```json
-{
-  "checked_at": "2026-04-07T14:23:05Z",
-  "latest_version": "0.2.0",
-  "current_version": "0.1.0",
-  "is_outdated": true,
-  "auto_upgrade_failed": true,
-  "auto_upgrade_failed_at": "2026-04-07T14:23:05Z",
-  "auto_upgrade_error": "Migration abc123 failed"
-}
-```
-
-When `auto_upgrade_failed` is `true` for a given version, the system falls back to notification mode for that version. A new release (v0.2.1) resets this flag.
+> **DROPPED** — decided 2026-04-12. Auto-upgrade is too risky (silent git pull during queries). Users are notified via CLI banner and skill preamble instead. See Sub-phases 1 and 4 of the upgrade UX plan.
 
 ---
 

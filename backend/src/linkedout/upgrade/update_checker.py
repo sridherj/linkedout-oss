@@ -47,20 +47,27 @@ class UpdateInfo:
     checked_at: str
 
 
-def check_for_update() -> UpdateInfo | None:
+def check_for_update(*, force: bool = False, skip_snooze: bool = False, timeout: float = 10) -> UpdateInfo | None:
     """Check GitHub for a newer release, returning ``None`` on any error.
 
-    Uses the cache if the last check was less than 1 hour ago.
-    Respects snooze state — returns ``None`` if the version is snoozed.
-    Resets snooze when a new version is detected.
-    Never raises — network/parse errors are logged and swallowed.
+    Args:
+        force: Skip cache freshness check, always hit GitHub API.
+        skip_snooze: Return UpdateInfo even if snoozed (for --check).
+        timeout: HTTP client timeout in seconds.
     """
-    cached = get_cached_update()
-    if cached is not None:
-        info = cached
+    if not force:
+        cached = get_cached_update()
+        if cached is not None:
+            info = cached
+        else:
+            try:
+                info = _fetch_and_cache(timeout=timeout)
+            except Exception:
+                logger.debug('Update check failed — continuing without update info')
+                return None
     else:
         try:
-            info = _fetch_and_cache()
+            info = _fetch_and_cache(timeout=timeout)
         except Exception:
             logger.debug('Update check failed — continuing without update info')
             return None
@@ -71,8 +78,8 @@ def check_for_update() -> UpdateInfo | None:
     # Reset snooze if a different (newer) version was detected
     _maybe_reset_snooze(info.latest_version)
 
-    # Suppress notification if snoozed
-    if is_snoozed(info.latest_version):
+    # Suppress notification if snoozed (unless caller asked to skip snooze)
+    if not skip_snooze and is_snoozed(info.latest_version):
         return None
 
     return info
@@ -170,6 +177,26 @@ def snooze_update(version: str) -> None:
     SNOOZE_FILE.write_text(json.dumps(state, indent=2) + '\n')
 
 
+def get_snooze_duration(version: str) -> timedelta:
+    """Return the duration of the next snooze for display purposes.
+
+    Reads the current snooze count for *version* and computes what the
+    next snooze duration would be. Returns the default (24h) if no
+    prior snooze exists.
+    """
+    snooze_count = 0
+    try:
+        if SNOOZE_FILE.exists():
+            data = json.loads(SNOOZE_FILE.read_text())
+            if data.get('snoozed_version') == version:
+                snooze_count = data.get('snooze_count', 0)
+    except Exception:
+        pass
+
+    next_count = snooze_count + 1
+    return _SNOOZE_DURATIONS.get(next_count, _SNOOZE_DEFAULT_DURATION)
+
+
 def reset_snooze() -> None:
     """Clear the snooze state.
 
@@ -182,14 +209,14 @@ def reset_snooze() -> None:
         logger.debug('Could not clear snooze state')
 
 
-def _fetch_and_cache() -> UpdateInfo | None:
+def _fetch_and_cache(timeout: float = 10) -> UpdateInfo | None:
     """Hit the GitHub API, build an UpdateInfo, cache it, and return it."""
     headers = {'Accept': 'application/vnd.github+json'}
     token = os.environ.get('GITHUB_TOKEN')
     if token:
         headers['Authorization'] = f'Bearer {token}'
 
-    with httpx.Client(timeout=10) as client:
+    with httpx.Client(timeout=timeout) as client:
         resp = client.get(GITHUB_API_URL, headers=headers)
         resp.raise_for_status()
 
@@ -223,63 +250,4 @@ def _is_outdated(current: str, latest: str) -> bool:
         return Version(latest) > Version(current)
     except InvalidVersion:
         logger.debug(f'Could not parse versions: current={current!r}, latest={latest!r}')
-        return False
-
-
-# ── Auto-upgrade ───────────────────────────────────────────
-
-LOG_FILE = Path.home() / 'linkedout-data' / 'logs' / 'cli.log'
-
-
-def try_auto_upgrade(update_info: UpdateInfo) -> bool:
-    """Attempt a silent auto-upgrade when ``auto_upgrade`` is enabled.
-
-    Runs the ``Upgrader`` in the background, logging to
-    ``~/linkedout-data/logs/cli.log`` (no terminal output).
-    Returns True if upgrade succeeded, False on failure (falls back
-    to notification mode).
-    """
-    import subprocess
-
-    from linkedout.version import _repo_root
-
-    try:
-        repo = _repo_root()
-        LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with open(LOG_FILE, 'a') as log_fh:
-            log_fh.write(
-                f'[{datetime.now(timezone.utc).isoformat()}] '
-                f'Auto-upgrade starting: v{update_info.current_version} -> '
-                f'v{update_info.latest_version}\n',
-            )
-
-            # Pull code
-            result = subprocess.run(
-                ['git', 'pull', 'origin', 'main'],
-                capture_output=True,
-                text=True,
-                cwd=repo,
-            )
-            if result.returncode != 0:
-                log_fh.write(f'  git pull failed: {result.stderr.strip()}\n')
-                return False
-
-            # Update deps
-            result = subprocess.run(
-                ['uv', 'pip', 'install', '-e', '.[dev]'],
-                capture_output=True,
-                text=True,
-                cwd=repo / 'backend',
-            )
-            if result.returncode != 0:
-                log_fh.write(f'  dep update failed: {result.stderr.strip()}\n')
-                return False
-
-            log_fh.write(
-                f'[{datetime.now(timezone.utc).isoformat()}] '
-                f'Auto-upgrade completed successfully to v{update_info.latest_version}\n',
-            )
-            return True
-    except Exception as exc:
-        logger.debug(f'Auto-upgrade failed: {exc}')
         return False

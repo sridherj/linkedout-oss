@@ -255,7 +255,7 @@ The primary skill. Handles natural language queries about the user's professiona
 
 **Tools required:** Bash, Read, Grep, Agent
 
-**Preamble:** Sources `agent-context.env` for `DATABASE_URL` and RLS identity variables. Runs `linkedout status --json` to verify connectivity and profile count.
+**Preamble:** Sources `agent-context.env` for `DATABASE_URL` and RLS identity variables. Runs `linkedout status --json` to verify connectivity and profile count. Runs `linkedout version --check --json` to check for available updates and displays a notification if an update is available.
 
 **Query routing** classifies requests into three strategies:
 - **Structured lookups** -- SQL via `psql` for company, role, location, skill, funding, and past-experience queries. Resolves company aliases via `company_alias` table and role aliases via `role_alias` table.
@@ -308,17 +308,11 @@ Six-step interactive flow for setting up the Chrome extension.
 
 ### /linkedout-upgrade -- Upgrade
 
-Guides users through upgrading LinkedOut to the latest version.
+Upgrades LinkedOut to the latest version by delegating to the CLI `upgrade` command.
 
 **Tools required:** Bash, Read
 
-**Dirty-state check:** Before `git pull`, checks `git status --porcelain` for uncommitted changes. If changes exist, warns the user to stash or commit before proceeding.
-
-**Steps:** `git pull` -> `pip install -e "./backend[dev]"` -> `linkedout migrate` -> `linkedout status` + `linkedout diagnostics` -> version check with changelog reference.
-
-**Post-upgrade changelog:** After `git pull`, shows `git log --oneline HEAD@{1}..HEAD` to display what changed. If no commits were pulled, shows "Already up to date."
-
-**Note:** Marked as manual steps pending Phase 10 interactive upgrade flow.
+**Steps:** Loads credentials and activates the virtual environment, then runs `linkedout upgrade --verbose`. The CLI handles pre-flight checks, code pull, dependency updates, database migrations, post-upgrade health check, and What's New display. On errors, suggests `linkedout diagnostics --repair`. Verifies with `linkedout version` and `linkedout status`.
 
 ### /linkedout-history -- Query History
 

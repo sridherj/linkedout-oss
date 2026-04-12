@@ -114,12 +114,30 @@ def cli(ctx):
 
 @cli.result_callback()
 @click.pass_context
-def _append_demo_nudge(ctx, *args, **kwargs):
-    """Append a one-line nudge after every command when demo mode is active."""
+def _post_command_hooks(ctx, *args, **kwargs):
+    """Run post-command hooks: demo nudge + update notification banner."""
+    # Demo nudge
     try:
         from linkedout.demo import is_demo_mode
 
         if is_demo_mode():
             click.echo("\nDemo mode \u00b7 linkedout setup to use your own data")
+    except Exception:
+        pass
+
+    # Update notification banner (passive — never blocks, never errors)
+    try:
+        if ctx.invoked_subcommand == 'upgrade':
+            return
+
+        from linkedout.upgrade.update_checker import check_for_update
+
+        info = check_for_update(timeout=3)
+        if info and info.is_outdated:
+            click.echo(
+                f"\nLinkedOut v{info.latest_version} available "
+                f"(you have v{info.current_version}). "
+                f"Run: linkedout upgrade"
+            )
     except Exception:
         pass

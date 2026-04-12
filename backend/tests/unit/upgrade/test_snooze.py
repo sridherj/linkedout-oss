@@ -1,18 +1,18 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Tests for snooze support and auto-upgrade in update_checker."""
+"""Tests for snooze support in update_checker."""
 import json
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from linkedout.upgrade.update_checker import (
     UpdateInfo,
     check_for_update,
+    get_snooze_duration,
     is_snoozed,
     reset_snooze,
     snooze_update,
-    try_auto_upgrade,
 )
 
 
@@ -202,97 +202,89 @@ class TestCheckForUpdateWithSnooze:
         assert result.is_outdated is False
 
 
-class TestAutoUpgradeConfig:
-    """auto_upgrade config flag is read correctly from LinkedOutSettings."""
+class TestGetSnoozeDuration:
+    """get_snooze_duration returns the *next* snooze duration for display."""
 
-    def test_default_is_false(self):
-        from shared.config.settings import LinkedOutSettings
+    def test_first_snooze_returns_24h(self, snooze_file):
+        assert get_snooze_duration('0.2.0') == timedelta(hours=24)
 
-        settings = LinkedOutSettings(database_url='postgresql://test:test@localhost/test')
-        assert settings.auto_upgrade is False
+    def test_second_snooze_returns_48h(self, snooze_file):
+        snooze_update('0.2.0')
+        assert get_snooze_duration('0.2.0') == timedelta(hours=48)
 
-    def test_can_enable(self):
-        from shared.config.settings import LinkedOutSettings
+    def test_third_snooze_returns_1_week(self, snooze_file):
+        snooze_update('0.2.0')
+        snooze_update('0.2.0')
+        assert get_snooze_duration('0.2.0') == timedelta(weeks=1)
 
-        settings = LinkedOutSettings(
-            database_url='postgresql://test:test@localhost/test',
-            auto_upgrade=True,
-        )
-        assert settings.auto_upgrade is True
+    def test_different_version_resets_to_24h(self, snooze_file):
+        snooze_update('0.2.0')
+        snooze_update('0.2.0')
+        # Asking about a different version — count resets
+        assert get_snooze_duration('0.3.0') == timedelta(hours=24)
 
 
-class TestTryAutoUpgrade:
-    """Auto-upgrade triggers silent upgrade and falls back on failure."""
+class TestSnoozeCliFlag:
+    """CLI --snooze flag invokes snooze workflow."""
 
-    def test_success_returns_true(self, tmp_path):
-        log_file = tmp_path / 'logs' / 'cli.log'
-        info = _make_update_info()
+    def test_snooze_outdated_version(self, snooze_file):
+        from click.testing import CliRunner
 
-        with patch('linkedout.upgrade.update_checker.LOG_FILE', log_file), \
-             patch('linkedout.version._repo_root', return_value=tmp_path), \
-             patch('subprocess.run') as mock_run:
-            # Both git pull and uv pip install succeed
-            mock_run.return_value = MagicMock(returncode=0, stdout='', stderr='')
-            result = try_auto_upgrade(info)
+        from linkedout.commands.upgrade import upgrade_command
 
-        assert result is True
-        assert log_file.exists()
-        log_content = log_file.read_text()
-        assert 'Auto-upgrade completed successfully' in log_content
+        info = _make_update_info(latest='0.3.0', current='0.1.0', is_outdated=True)
+        runner = CliRunner()
+        with patch('linkedout.upgrade.update_checker.check_for_update', return_value=info) as mock_check, \
+             patch('linkedout.upgrade.update_checker.snooze_update') as mock_snooze, \
+             patch('linkedout.upgrade.update_checker.get_snooze_duration', return_value=timedelta(hours=24)), \
+             patch('linkedout.upgrade.update_checker.get_cached_update'):
+            result = runner.invoke(upgrade_command, ['--snooze'])
 
-    def test_git_pull_failure_returns_false(self, tmp_path):
-        log_file = tmp_path / 'logs' / 'cli.log'
-        info = _make_update_info()
+        assert result.exit_code == 0
+        assert 'Update v0.3.0 snoozed for 24 hours' in result.output
+        mock_check.assert_called_once_with(skip_snooze=True)
+        mock_snooze.assert_called_once_with('0.3.0')
 
-        with patch('linkedout.upgrade.update_checker.LOG_FILE', log_file), \
-             patch('linkedout.version._repo_root', return_value=tmp_path), \
-             patch('subprocess.run') as mock_run:
-            mock_run.return_value = MagicMock(returncode=1, stdout='', stderr='merge conflict')
-            result = try_auto_upgrade(info)
+    def test_snooze_up_to_date(self, snooze_file):
+        from click.testing import CliRunner
 
-        assert result is False
-        log_content = log_file.read_text()
-        assert 'git pull failed' in log_content
+        from linkedout.commands.upgrade import upgrade_command
 
-    def test_dep_update_failure_returns_false(self, tmp_path):
-        log_file = tmp_path / 'logs' / 'cli.log'
-        info = _make_update_info()
+        info = _make_update_info(latest='0.1.0', current='0.1.0', is_outdated=False)
+        runner = CliRunner()
+        with patch('linkedout.upgrade.update_checker.check_for_update', return_value=info), \
+             patch('linkedout.upgrade.update_checker.get_cached_update'):
+            result = runner.invoke(upgrade_command, ['--snooze'])
 
-        def side_effect(*args, **kwargs):
-            cmd = args[0] if args else kwargs.get('args', [])
-            if cmd[0] == 'git':
-                return MagicMock(returncode=0, stdout='', stderr='')
-            return MagicMock(returncode=1, stdout='', stderr='resolution failed')
+        assert result.exit_code == 0
+        assert 'Already running the latest version.' in result.output
 
-        with patch('linkedout.upgrade.update_checker.LOG_FILE', log_file), \
-             patch('linkedout.version._repo_root', return_value=tmp_path), \
-             patch('subprocess.run', side_effect=side_effect):
-            result = try_auto_upgrade(info)
+    def test_snooze_network_error(self, snooze_file):
+        from click.testing import CliRunner
 
-        assert result is False
-        log_content = log_file.read_text()
-        assert 'dep update failed' in log_content
+        from linkedout.commands.upgrade import upgrade_command
 
-    def test_logs_to_file_not_terminal(self, tmp_path, capsys):
-        log_file = tmp_path / 'logs' / 'cli.log'
-        info = _make_update_info()
+        runner = CliRunner()
+        with patch('linkedout.upgrade.update_checker.check_for_update', return_value=None), \
+             patch('linkedout.upgrade.update_checker.get_cached_update', return_value=None):
+            result = runner.invoke(upgrade_command, ['--snooze'])
 
-        with patch('linkedout.upgrade.update_checker.LOG_FILE', log_file), \
-             patch('linkedout.version._repo_root', return_value=tmp_path), \
-             patch('subprocess.run') as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout='', stderr='')
-            try_auto_upgrade(info)
+        assert result.exit_code == 0
+        assert 'Could not check for updates.' in result.output
 
-        captured = capsys.readouterr()
-        assert captured.out == ''  # No terminal output
-        assert log_file.exists()  # Logged to file
+    def test_snooze_already_snoozed_shows_increased_duration(self, snooze_file):
+        from click.testing import CliRunner
 
-    def test_exception_returns_false(self, tmp_path):
-        log_file = tmp_path / 'logs' / 'cli.log'
-        info = _make_update_info()
+        from linkedout.commands.upgrade import upgrade_command
 
-        with patch('linkedout.upgrade.update_checker.LOG_FILE', log_file), \
-             patch('linkedout.version._repo_root', side_effect=RuntimeError('boom')):
-            result = try_auto_upgrade(info)
+        info = _make_update_info(latest='0.3.0', current='0.1.0', is_outdated=True)
+        # Pre-snooze once so next duration is 48h
+        snooze_update('0.3.0')
 
-        assert result is False
+        runner = CliRunner()
+        with patch('linkedout.upgrade.update_checker.check_for_update', return_value=info), \
+             patch('linkedout.upgrade.update_checker.get_cached_update'):
+            result = runner.invoke(upgrade_command, ['--snooze'])
+
+        assert result.exit_code == 0
+        assert 'snoozed for 48 hours' in result.output

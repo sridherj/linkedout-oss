@@ -65,6 +65,7 @@ Get a key at [platform.openai.com/api-keys](https://platform.openai.com/api-keys
 Your LinkedIn CSV export only includes name, URL, company, and title. Apify fetches the full profile: complete work history, education, skills, certifications. This is what powers affinity scoring ("career overlap with you") and deep queries ("who has both ML and product experience?").
 
 - Cost: ~$4 per 1,000 profiles. Apify gives [$5 free credit/month](https://apify.com/pricing) — enough for ~1,250 profiles.
+- Multiple keys supported: configure up to 9 Apify keys for round-robin rotation — useful for pooling free-tier credits across accounts.
 - Without: LinkedOut works, but with stub profiles (name + current company only). Search and affinity will be shallow.
 
 Get a key at [console.apify.com/account/integrations](https://console.apify.com/account/integrations).

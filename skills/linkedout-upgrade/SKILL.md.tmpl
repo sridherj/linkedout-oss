@@ -1,6 +1,6 @@
 ---
 name: linkedout-upgrade
-description: Upgrade LinkedOut to the latest version — run migrations, update config, and verify system health
+description: Upgrade LinkedOut to the latest version — pull code, run migrations, and verify system health
 tools:
   - Bash
   - Read
@@ -8,77 +8,46 @@ tools:
 
 # /linkedout-upgrade — Upgrade LinkedOut
 
-Upgrade LinkedOut to the latest version: pull the latest code, run database migrations, and verify system health.
-
-> **Note:** Full interactive upgrade flow coming in a future release (Phase 10). For now, follow the manual steps below.
+Upgrade LinkedOut to the latest version using the CLI upgrade command.
 
 ## Preamble
 
-Load credentials and check the current version:
+1. **Load credentials and activate the virtual environment:**
 
 ```bash
-cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source {{AGENT_CONTEXT_PATH}} && {{CLI_PREFIX}} version
+cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source {{AGENT_CONTEXT_PATH}}
 ```
 
 If `agent-context.env` does not exist, tell the user:
 > Run `/linkedout-setup` first to configure LinkedOut.
 
-## Upgrade Steps
+## Upgrade
 
-1. **Check for uncommitted changes:**
-
-```bash
-cd $(git rev-parse --show-toplevel) && git status --porcelain
-```
-
-If there are uncommitted changes, warn the user:
-> You have uncommitted changes. Stash or commit them before upgrading: `git stash`
-
-Do not proceed until the working tree is clean.
-
-2. **Pull latest code:**
+2. **Run the upgrade:**
 
 ```bash
-cd $(git rev-parse --show-toplevel) && git pull origin main
+{{CLI_PREFIX}} upgrade --verbose
 ```
 
-3. **Show what changed:**
+Show the full output to the user. The CLI handles:
+- Pre-flight checks (git status, install type detection)
+- Code pull, dependency updates, database migrations
+- Post-upgrade health check
+- What's New section from changelog
+
+3. **Handle issues:**
+
+If the upgrade reports errors or failures, suggest:
 
 ```bash
-cd $(git rev-parse --show-toplevel) && git log --oneline HEAD@{1}..HEAD
+{{CLI_PREFIX}} diagnostics --repair
 ```
 
-If no commits were pulled: "Already up to date."
-
-4. **Update dependencies:**
+4. **Verify:**
 
 ```bash
-cd $(git rev-parse --show-toplevel)/backend && source .venv/bin/activate && uv pip install -r requirements.txt
+{{CLI_PREFIX}} version
+{{CLI_PREFIX}} status
 ```
 
-5. **Run database migrations:**
-
-```bash
-cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source {{AGENT_CONTEXT_PATH}} && {{CLI_PREFIX}} migrate
-```
-
-6. **Verify system health:**
-
-```bash
-cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source {{AGENT_CONTEXT_PATH}} && {{CLI_PREFIX}} status
-cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source {{AGENT_CONTEXT_PATH}} && {{CLI_PREFIX}} diagnostics
-```
-
-If diagnostics reports issues, follow its recommendations or run:
-
-```bash
-cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source {{AGENT_CONTEXT_PATH}} && {{CLI_PREFIX}} diagnostics --repair
-```
-
-## Version Check
-
-```bash
-cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source {{AGENT_CONTEXT_PATH}} && {{CLI_PREFIX}} version
-```
-
-Check the `CHANGELOG.md` at the repo root for what changed in each release.
+Show the new version and system status to confirm the upgrade succeeded.

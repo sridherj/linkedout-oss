@@ -48,6 +48,17 @@ Interpret the status results and give contextual guidance:
 - **0 embeddings but profiles > 0:** "Semantic search is unavailable — run `linkedout embed` first. Structured queries (by company, role, location) still work."
 - **Demo mode:** "Running in demo mode with sample data. Run `/linkedout-setup` to switch to your real network."
 
+3. **Check for updates (silent):**
+
+```bash
+UPDATE_JSON=$(linkedout version --check --json 2>/dev/null)
+```
+
+If the command succeeds and the JSON contains `"update_available": true`, show:
+> LinkedOut v{latest} available (you have v{current}). Run /linkedout-upgrade to update.
+
+If the command fails or returns an error, skip silently and proceed to the query. Do NOT let a failed version check block the user's query.
+
 ## Schema Reference
 
 # Database Schema Reference

@@ -222,11 +222,6 @@ class LinkedOutSettings(BaseSettings):
         validation_alias=AliasChoices('LANGFUSE_HOST', 'langfuse_host'),
     )
 
-    # ── Upgrade ─────────────────────────────────────────────
-    # When true, silently upgrade on skill invocation when an update is available.
-    # Logs to ~/linkedout-data/logs/cli.log; falls back to notification on failure.
-    auto_upgrade: bool = Field(default=False)
-
     # ── Extension Tuning ────────────────────────────────────
     rate_limit_hourly: int = Field(default=30)
     rate_limit_daily: int = Field(default=150)

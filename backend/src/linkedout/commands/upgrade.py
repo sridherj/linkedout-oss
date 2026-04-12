@@ -7,8 +7,13 @@ import click
 
 @click.command('upgrade')
 @click.option('--verbose', is_flag=True, help='Show detailed command output')
-def upgrade_command(verbose: bool) -> None:
+@click.option('--snooze', 'do_snooze', is_flag=True, help='Snooze update notification')
+def upgrade_command(verbose: bool, do_snooze: bool) -> None:
     """Upgrade LinkedOut to the latest version."""
+    if do_snooze:
+        _handle_snooze()
+        return
+
     from linkedout.upgrade.upgrader import Upgrader
 
     upgrader = Upgrader(verbose=verbose)
@@ -89,6 +94,50 @@ def _print_step(step, verbose: bool) -> None:
     if step.detail:
         click.echo(f'  {step.detail}')
     click.echo()
+
+
+def _handle_snooze() -> None:
+    """Handle --snooze: snooze update notification with confirmation."""
+    from linkedout.upgrade.update_checker import (
+        check_for_update,
+        get_cached_update,
+        get_snooze_duration,
+        snooze_update,
+    )
+
+    # Try with skip_snooze so we can re-snooze an already-snoozed version
+    info = check_for_update(skip_snooze=True)
+    if info is None:
+        # Network error — try cached data as fallback
+        info = get_cached_update()
+
+    if info is None:
+        click.echo('Could not check for updates. Try again later.')
+        return
+
+    if not info.is_outdated:
+        click.echo('Already running the latest version.')
+        return
+
+    duration = get_snooze_duration(info.latest_version)
+    snooze_update(info.latest_version)
+
+    duration_str = _format_duration(duration)
+    click.echo(
+        f"Update v{info.latest_version} snoozed for {duration_str}. "
+        f"Run 'linkedout upgrade' when ready."
+    )
+
+
+def _format_duration(td) -> str:
+    """Format a timedelta as a human-readable duration string."""
+    hours = td.total_seconds() / 3600
+    if hours <= 24:
+        return '24 hours'
+    elif hours <= 48:
+        return '48 hours'
+    else:
+        return '1 week'
 
 
 def _find_report_path(report) -> str | None:

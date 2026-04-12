@@ -55,7 +55,7 @@ Provide a user-facing CLI surface for all LinkedOut operations: setup, data impo
 
 - **dry_run_option**: A shared `click.option('--dry-run', is_flag=True)` is defined in `cli_helpers.py` for reuse. Some commands import it directly; others define their own `--dry-run` inline.
 
-- **Demo mode nudge**: A `result_callback` on the root group appends "Demo mode . linkedout setup to use your own data" after every command when demo mode is active. Verify the nudge appears after any command while in demo mode.
+- **Post-command hooks**: A `result_callback` on the root group (`_post_command_hooks`) runs after every command. It handles two concerns: (1) appends a demo mode nudge ("Demo mode . linkedout setup to use your own data") when demo mode is active, and (2) appends an update notification banner when an update is available and not snoozed (using `check_for_update(timeout=3)` with a 3-second timeout to avoid stalling the CLI). Verify both the demo nudge and the update banner appear after commands when their conditions are met.
 
 - **Exit codes**: Commands propagate non-zero exit codes via `raise SystemExit(1)` or `sys.exit(1)` on failure. Verify failed commands exit non-zero.
 
@@ -134,8 +134,8 @@ Provide a user-facing CLI surface for all LinkedOut operations: setup, data impo
   - Verify: API key status shows configured/not-configured without revealing secrets; `--repair` invokes the `linkedout` CLI entry point directly; `--json` output includes `health_status` object (`{badge, critical, warning, info}`) and `issues` array with severity-sorted actionable items.
 
 - **version**: Show version information. Displays ASCII art logo, version number, Python version, PostgreSQL version, install path, config path, and data directory.
-  - Options: `--json` (output as JSON object from `get_version_info()`).
-  - Verify: version matches `__version__` in `linkedout.version`.
+  - Options: `--json` (output as JSON object from `get_version_info()`), `--check` (run a fresh update check, ignoring cache and snooze; prints "Up to date (v{current})" or "Update available: v{current} -> v{latest}. Run: linkedout upgrade" with exit code 0 for up-to-date or 1 for update available; combine with `--json` for machine-readable output: `{"update_available": bool, "current": str, "latest": str, "release_url": str}`).
+  - Verify: version matches `__version__` in `linkedout.version`; `--check` bypasses snooze via `check_for_update(force=True, skip_snooze=True)`; `--check` returns exit code 1 when outdated.
 
 - **config**: Click subgroup for configuration management. Currently has two subcommands:
   - **config path**: Show the config file location (`~/.linkedout/config.yaml`).
@@ -196,9 +196,9 @@ Provide a user-facing CLI surface for all LinkedOut operations: setup, data impo
 ### Upgrade
 
 - **upgrade**: Upgrade LinkedOut to the latest version. Only works for git clone installations. Delegates to `linkedout.upgrade.upgrader.Upgrader` which handles: pre-flight checks, `git pull`, dependency updates, database migrations, version scripts, and post-upgrade health checks. Reports step-by-step progress, prints what's-new notes, and saves an upgrade report.
-  - Options: `--verbose` (show detailed command output).
+  - Options: `--verbose` (show detailed command output), `--snooze` (snooze the current update notification instead of upgrading; shows confirmation with duration using escalating backoff: 24h → 48h → 1 week; if already up to date, prints "Already running the latest version."; if update check fails, prints "Could not check for updates.").
   - Output: Step-by-step progress messages, version transition summary (e.g., "v0.1.0 -> v0.2.0"), duration, and report path.
-  - Verify: detects non-git-clone installations and refuses to upgrade; already-up-to-date is a no-op; failures include rollback instructions.
+  - Verify: detects non-git-clone installations and refuses to upgrade; already-up-to-date is a no-op; failures include rollback instructions; `--snooze` invokes `snooze_update()` and displays the escalating duration.
 
 ### Hidden Commands
 

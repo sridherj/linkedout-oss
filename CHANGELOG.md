@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-04-12
+
+### Added
+- Update notification banner after every CLI command when a newer version is available
+- `linkedout version --check` flag for explicit update checks (supports `--json`)
+- `linkedout upgrade --snooze` flag to dismiss update notifications with escalating backoff (24h → 48h → 1 week)
+- Version check in `/linkedout` skill preamble — notifies during AI-assisted queries too
+
+### Changed
+- `/linkedout-upgrade` skill now delegates to `linkedout upgrade --verbose` instead of manual git/pip steps
+- Renamed internal `_append_demo_nudge` to `_post_command_hooks` to reflect dual purpose
+- Update checker supports `force`, `skip_snooze`, and `timeout` parameters
+- Passive banner uses 3s HTTP timeout (vs 10s for explicit `--check`) for fast failure
+
+### Removed
+- `try_auto_upgrade()` — dead code that was never wired into any call path
+- `auto_upgrade` config field — removed alongside the auto-upgrade code
+- Section 7 (Auto-Upgrade Flow) from UX design doc — too risky for a single-user tool
+
 ## [0.1.0] — 2026-04-08
 
 ### Highlights
