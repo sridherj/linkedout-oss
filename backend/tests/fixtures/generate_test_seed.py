@@ -68,7 +68,7 @@ def _create_schema(db_url: str) -> None:
         db_url,
         connect_args={"options": f"-c search_path={STAGING_SCHEMA},public"},
     )
-    Base.metadata.create_all(engine, tables=seed_tables)
+    Base.metadata.create_all(engine, tables=seed_tables, checkfirst=False)
     engine.dispose()
     print(f"Created {len(seed_tables)} tables in {STAGING_SCHEMA} schema")
 

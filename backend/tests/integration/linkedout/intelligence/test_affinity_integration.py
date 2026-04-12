@@ -13,7 +13,7 @@ from linkedout.intelligence.scoring.affinity_scorer import (
     AffinityScorer,
 )
 
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, pytest.mark.live_services]
 
 
 class TestAffinityBatchComputation:
