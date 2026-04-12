@@ -11,6 +11,11 @@ from sqlalchemy import text
 class TestEnrichLiveIntegration:
     """Full enrichment flow: real Postgres, real EmbeddingProvider, no mocks."""
 
+    @pytest.fixture(autouse=True)
+    def _use_openai_provider(self, monkeypatch):
+        """Test checks embedding_openai column, so force openai provider."""
+        monkeypatch.setenv("LINKEDOUT_EMBEDDING__PROVIDER", "openai")
+
     @pytest.fixture
     def app_user(self, seeded_data: dict):
         return seeded_data['app_user'][0].id

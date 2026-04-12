@@ -33,8 +33,8 @@ class TestVersionFileParsing:
         for part in parts:
             assert part.isdigit(), f'Non-numeric semver component: {part!r}'
 
-    def test_version_file_content_is_0_1_0(self, version_file):
-        assert version_file.read_text().strip() == '0.1.0'
+    def test_version_file_content_is_0_2_0(self, version_file):
+        assert version_file.read_text().strip() == '0.2.0'
 
 
 class TestVersionModule:
