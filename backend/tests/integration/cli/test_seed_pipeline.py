@@ -66,7 +66,10 @@ def public_tables(integration_db_engine, fixture_path):
     seed_tables = [Base.metadata.tables[t] for t in IMPORT_ORDER]
     Base.metadata.create_all(engine, tables=seed_tables)
     yield engine
-    Base.metadata.drop_all(engine, tables=seed_tables)
+    with engine.connect() as conn:
+        for table_name in reversed(IMPORT_ORDER):
+            conn.execute(text(f'DROP TABLE IF EXISTS {table_name} CASCADE'))
+        conn.commit()
     engine.dispose()
 
 
