@@ -60,6 +60,7 @@ htmlcov/
 tests/e2e/fixtures/
 
 # ---------- Seed data files (published as GitHub Release assets) ----------
+seed-data/*.dump
 seed-data/*.sqlite
 seed-data/*.db
 seed-data/seed-manifest.json

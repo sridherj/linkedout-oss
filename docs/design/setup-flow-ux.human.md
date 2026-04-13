@@ -387,17 +387,12 @@ LinkedOut ships pre-curated company data so queries like "who do I
 know at Series B AI startups?" work immediately, even before you
 crawl any profiles with the Chrome extension.
 
-  Core dataset (default):  ~50 MB download
-    ~5,000 companies with funding data, role aliases, and
-    pre-crawled public profile snapshots
+  Core dataset:            ~7 MB  — ~47,000 companies
+  Full dataset (default):  ~20 MB — ~218,000 companies
 
-  Full dataset:            ~500 MB download
-    ~50,000+ companies — same data, broader coverage
+Both include funding data, role aliases, and company metadata.
 
-You can upgrade from core to full at any time by running:
-  linkedout download-seed --full && linkedout import-seed
-
-Download which dataset? [core/full] (default: core):
+Download which dataset? [core/full] (default: full):
 ```
 
 ### Step 10: Embedding Generation
@@ -1418,7 +1413,7 @@ All output is plain text. The setup flow runs inside a skill context where termi
 ### B. Default Choices
 
 - Embedding provider defaults to OpenAI (faster, negligible cost for typical networks)
-- Seed data defaults to core (~50 MB) rather than full (~500 MB)
+- Seed data defaults to full (~20 MB, ~218K companies)
 - Contacts import defaults to skip (N)
 - All confirmations for required steps default to yes (Y)
 - Re-embed on provider mismatch defaults to no (N) — it is a potentially long operation

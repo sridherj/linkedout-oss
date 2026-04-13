@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """``linkedout download-seed`` — download seed company data from GitHub Releases.
 
-Downloads tiered seed dump files with progress bar, SHA256 checksum
+Downloads the seed dump file with progress bar, SHA256 checksum
 verification, and skip-if-exists logic. Follows the Operation Result Pattern.
 """
 import json
@@ -116,25 +116,13 @@ def _fetch_manifest(release_url: str) -> dict:
         )
 
     for f in manifest["files"]:
-        for key in ("name", "tier", "sha256", "size_bytes"):
+        for key in ("name", "sha256", "size_bytes"):
             if key not in f:
                 raise click.ClickException(
                     f"Manifest validation failed: file entry missing '{key}'. The release may be corrupted."
                 )
 
     return manifest
-
-
-def _select_tier_file(manifest: dict, full: bool) -> dict:
-    """Select the file entry from the manifest matching the requested tier."""
-    tier = "full" if full else "core"
-    for f in manifest["files"]:
-        if f["tier"] == tier:
-            return f
-    available = [f["tier"] for f in manifest["files"]]
-    raise click.ClickException(
-        f"No '{tier}' tier found in manifest. Available tiers: {', '.join(available)}"
-    )
 
 
 def _download_file(url: str, dest: Path, expected_size: int) -> None:
@@ -188,15 +176,13 @@ def _format_size(size_bytes: int) -> str:
 
 
 @click.command("download-seed")
-@click.option("--full", is_flag=True, help="Download full dataset (~500MB) instead of core (~50MB)")
 @click.option("--output", "output_dir", default=None, help="Download location (default: ~/linkedout-data/seed/)")
 @click.option("--version", "release_version", default=None, help="Specific release version (default: latest)")
 @click.option("--force", is_flag=True, help="Re-download even if file exists and checksum matches")
 @cli_logged("download_seed")
-def download_seed_command(full: bool, output_dir: str | None, release_version: str | None, force: bool):
+def download_seed_command(output_dir: str | None, release_version: str | None, force: bool):
     """Download seed company data from GitHub Releases."""
     start = time.time()
-    tier_name = "full" if full else "core"
 
     # 1. Determine download directory
     seed_dir = _get_seed_dir(output_dir)
@@ -211,8 +197,8 @@ def download_seed_command(full: bool, output_dir: str | None, release_version: s
     click.echo("Fetching manifest...")
     manifest = _fetch_manifest(release_url)
 
-    # 4. Select tier file
-    file_info = _select_tier_file(manifest, full)
+    # 4. Get the seed file info (single file)
+    file_info = manifest["files"][0]
     filename = file_info["name"]
     expected_sha256 = file_info["sha256"]
     expected_size = file_info["size_bytes"]
@@ -222,7 +208,7 @@ def download_seed_command(full: bool, output_dir: str | None, release_version: s
     if dest.exists() and not force:
         if verify_checksum(dest, expected_sha256):
             click.echo(
-                f"\nSeed data already downloaded ({tier_name} v{resolved_version}, checksum OK). "
+                f"\nSeed data already downloaded (v{resolved_version}, checksum OK). "
                 f"Use --force to re-download."
             )
             return
@@ -231,7 +217,7 @@ def download_seed_command(full: bool, output_dir: str | None, release_version: s
 
     # 6. Download with progress
     download_url = f"{release_url}/{filename}"
-    click.echo(f"\nDownloading {filename} ({tier_name}, {_format_size(expected_size)})...")
+    click.echo(f"\nDownloading {filename} ({_format_size(expected_size)})...")
     _download_file(download_url, dest, expected_size)
 
     # 7. Verify checksum
@@ -257,7 +243,6 @@ def download_seed_command(full: bool, output_dir: str | None, release_version: s
     # Also save a detailed download report
     _save_download_report(
         version=resolved_version,
-        tier=tier_name,
         filename=filename,
         size_bytes=actual_size,
         sha256=expected_sha256,
@@ -294,7 +279,6 @@ def download_seed_command(full: bool, output_dir: str | None, release_version: s
 
 def _save_download_report(
     version: str,
-    tier: str,
     filename: str,
     size_bytes: int,
     sha256: str,
@@ -315,7 +299,6 @@ def _save_download_report(
         "operation": "download-seed",
         "timestamp": ts.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "version": version,
-        "tier": tier,
         "filename": filename,
         "size_bytes": size_bytes,
         "sha256": sha256,

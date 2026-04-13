@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Seed data version (semver, e.g., 0.1.0)'
+        description: 'Seed data version (semver, e.g., 0.3.0)'
         required: true
       notes:
         description: 'Release notes'
@@ -23,7 +23,7 @@ jobs:
         # locally with: python -m dev_tools.seed_export --output seed-data/
         # Then upload them as artifacts before triggering this workflow.
         run: |
-          echo "This workflow expects seed-core.sqlite, seed-full.sqlite, and seed-manifest.json"
+          echo "This workflow expects seed.dump and seed-manifest.json"
           echo "to be available in the seed-data/ directory."
           echo "Build these locally with: python -m dev_tools.seed_export --output seed-data/"
           exit 1  # Placeholder — replace with actual artifact source
@@ -35,6 +35,5 @@ jobs:
           gh release create "seed-v${{ inputs.version }}" \
             --title "Seed Data v${{ inputs.version }}" \
             --notes "${{ inputs.notes }}" \
-            seed-data/seed-core.sqlite \
-            seed-data/seed-full.sqlite \
+            seed-data/seed.dump \
             seed-data/seed-manifest.json

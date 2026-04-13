@@ -1,9 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Seed data download and import orchestration for LinkedOut setup.
 
-Handles downloading pre-curated reference data from GitHub Releases
-(core ~50MB or full ~500MB), verifying checksums, and importing into
-the local PostgreSQL database.
+Handles downloading pre-curated reference data from GitHub Releases,
+verifying checksums, and importing into the local PostgreSQL database.
 
 All operations are idempotent:
 - Download is skipped if checksum matches existing file
@@ -19,37 +18,12 @@ from pathlib import Path
 from linkedout.setup.logging_integration import get_setup_logger
 from shared.utilities.operation_report import OperationCounts, OperationReport
 
-# ── Prompt text (exact wording from setup-flow-ux.md) ────────────────
 
-_PROMPT_SEED_TIER = """\
-Step 10 of 15: Seed Data
-
-LinkedOut ships pre-curated company data so queries like "who do I
-know at Series B AI startups?" work immediately, even before you
-crawl any profiles with the Chrome extension.
-
-  Core dataset (default):  ~50 MB download
-    ~5,000 companies with funding data, role aliases, and
-    pre-crawled public profile snapshots
-
-  Full dataset:            ~500 MB download
-    ~50,000+ companies \u2014 same data, broader coverage
-
-You can upgrade from core to full at any time by running:
-  linkedout download-seed --full && linkedout import-seed
-
-Download which dataset? [core/full] (default: core): """
-
-
-def download_seed(full: bool = False) -> OperationReport:
+def download_seed() -> OperationReport:
     """Download seed data via the ``linkedout`` CLI.
 
-    Runs ``linkedout download-seed [--full]`` as a subprocess. The CLI
+    Runs ``linkedout download-seed`` as a subprocess. The CLI
     command handles progress bars and checksum verification.
-
-    Args:
-        full: If ``True``, download the full dataset (~500MB).
-            If ``False``, download core (~50MB).
 
     Returns:
         OperationReport summarizing the download result.
@@ -60,12 +34,9 @@ def download_seed(full: bool = False) -> OperationReport:
     log = get_setup_logger("seed_data")
     start = time.monotonic()
 
-    tier = "full" if full else "core"
-    print(f"  Downloading {tier} seed data...")
+    print("  Downloading seed data...")
 
     cmd = ["linkedout", "download-seed"]
-    if full:
-        cmd.append("--full")
 
     result = subprocess.run(cmd, capture_output=True, text=True)
     duration_ms = (time.monotonic() - start) * 1000
@@ -87,7 +58,7 @@ def download_seed(full: bool = False) -> OperationReport:
     if stdout:
         print(stdout)
 
-    log.info("{} seed download completed in {:.1f}s", tier, duration_ms / 1000)
+    log.info("Seed download completed in {:.1f}s", duration_ms / 1000)
 
     return OperationReport(
         operation="seed-download",
@@ -202,10 +173,8 @@ def setup_seed_data(data_dir: Path) -> OperationReport:
     """Full seed data orchestration.
 
     Steps:
-    1. Prompt for dataset tier (core/full)
-    2. Download seed data
-    3. Import into database
-    4. Optionally offer full dataset upgrade
+    1. Download seed data
+    2. Import into database
 
     Args:
         data_dir: Root data directory (e.g., ``~/linkedout-data``).
@@ -215,17 +184,10 @@ def setup_seed_data(data_dir: Path) -> OperationReport:
     """
     start = time.monotonic()
 
-    # Step 1: Prompt for tier
-    try:
-        choice = input(_PROMPT_SEED_TIER).strip().lower()
-    except (EOFError, KeyboardInterrupt):
-        choice = ""  # default to core
-    full = choice == "full"
+    # Step 1: Download
+    download_report = download_seed()
 
-    # Step 2: Download
-    download_report = download_seed(full=full)
-
-    # Step 3: Import
+    # Step 2: Import
     import_report = import_seed()
 
     # Combine results
@@ -235,16 +197,8 @@ def setup_seed_data(data_dir: Path) -> OperationReport:
 
     duration_ms = (time.monotonic() - start) * 1000
 
-    next_steps: list[str] = []
-    if not full:
-        next_steps.append(
-            "Upgrade to full dataset later: "
-            "linkedout download-seed --full && linkedout import-seed"
-        )
-
     return OperationReport(
         operation="seed-data-setup",
         duration_ms=duration_ms,
         counts=OperationCounts(total=total_succeeded, succeeded=total_succeeded),
-        next_steps=next_steps,
     )

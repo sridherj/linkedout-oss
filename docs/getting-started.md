@@ -77,7 +77,7 @@ Then open your AI assistant and invoke `/linkedout-setup`. It handles the entire
 3. **Installs dependencies** — runs `uv pip install -e .` to install the Python package
 4. **Generates config** — creates `~/linkedout-data/config/config.yaml` and `~/linkedout-data/config/secrets.yaml`
 5. **Imports your LinkedIn data** — parses your exported CSV file
-6. **Downloads seed data** — fetches pre-curated company intelligence (~50 MB)
+6. **Downloads seed data** — fetches pre-curated company intelligence (~20 MB)
 7. **Imports seed data** — loads companies, funding rounds, role aliases into your database
 8. **Generates embeddings** — creates vector embeddings for semantic search
 9. **Computes affinity** — calculates relationship strength scores and Dunbar tiers

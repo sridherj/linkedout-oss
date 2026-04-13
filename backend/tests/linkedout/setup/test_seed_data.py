@@ -14,29 +14,16 @@ from linkedout.setup.seed_data import (
 
 class TestDownloadSeed:
     @patch("linkedout.setup.seed_data.subprocess.run")
-    def test_core_download_calls_download_seed(self, mock_run):
+    def test_download_calls_download_seed(self, mock_run):
         mock_run.return_value.returncode = 0
-        mock_run.return_value.stdout = "Downloaded core seed"
+        mock_run.return_value.stdout = "Downloaded seed"
         mock_run.return_value.stderr = ""
 
-        report = download_seed(full=False)
+        report = download_seed()
 
         assert report.counts.succeeded == 1
         call_args = mock_run.call_args[0][0]
         assert "download-seed" in call_args
-        assert "--full" not in call_args
-
-    @patch("linkedout.setup.seed_data.subprocess.run")
-    def test_full_download_includes_full_flag(self, mock_run):
-        mock_run.return_value.returncode = 0
-        mock_run.return_value.stdout = ""
-        mock_run.return_value.stderr = ""
-
-        download_seed(full=True)
-
-        call_args = mock_run.call_args[0][0]
-        assert "download-seed" in call_args
-        assert "--full" in call_args
 
     @patch("linkedout.setup.seed_data.subprocess.run")
     def test_raises_on_failure(self, mock_run):

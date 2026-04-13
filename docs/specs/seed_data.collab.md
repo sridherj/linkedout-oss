@@ -3,14 +3,13 @@ feature: seed-data
 module: seed-data
 linked_files:
   - seed-data/seed-manifest.json
-  - seed-data/seed-core.dump
-  - seed-data/seed-full.dump
+  - seed-data/seed.dump
   - seed-data/README.md
   - backend/src/linkedout/commands/download_seed.py
   - backend/src/linkedout/commands/import_seed.py
   - scripts/verify-seed-checksums.py
-version: 2
-last_verified: "2026-04-09"
+version: 3
+last_verified: "2026-04-13"
 ---
 
 # Seed Data
@@ -27,44 +26,40 @@ Provide pre-curated company reference data so new LinkedOut installations have u
 
 - **Company reference data only**: Seed data covers 6 tables of public company intelligence that is shared across all tenants. These tables provide the foundation for company matching during profile import, role title normalization, and startup tracking. Personal data (profiles, connections, contact sources) is explicitly excluded -- it ships via the demo pipeline instead.
 
-- **Two tiers**:
-  - **Core** (`seed-core.dump`, ~30 MB): Companies from the LinkedOut network where connections actually work. Contains ~47K companies, ~63K role aliases, ~108 funding rounds, ~148 startup tracking entries.
-  - **Full** (`seed-full.dump`, ~84 MB): Core data plus ~171K additional US/India companies from PDL (People Data Labs) with 201+ employees. Contains ~218K companies, ~63K role aliases, ~320 funding rounds, ~322 startup tracking entries.
+- **Single seed file** (`seed.dump`): Contains all qualifying companies -- those with employee data, funding rounds, size tier, or profile experience. This is a unified dataset that replaces the previous two-tier (core/full) system.
 
-- **Data format**: pg_dump files using a `_seed_staging` schema. Data is exported from PostgreSQL into a staging schema, then dumped with `pg_dump`. On import, `pg_restore` loads into the staging schema, then SQL upserts merge into the public schema. This eliminates type conversion issues (boolean casting, array serialization) that existed with the previous SQLite-based format.
+- **Data format**: pg_dump file using a `_seed_staging` schema. Data is exported from PostgreSQL into a staging schema, then dumped with `pg_dump`. On import, `pg_restore` loads into the staging schema, then SQL upserts merge into the public schema. This eliminates type conversion issues (boolean casting, array serialization) that existed with the previous SQLite-based format.
 
 ### Tables Covered
 
-| Table | Description | Core Count | Full Count |
-|-------|-------------|------------|------------|
-| `company` | Company reference data (name, website, industry, size, etc.) | 47,258 | 218,199 |
-| `company_alias` | Company name variations for fuzzy matching | 0 | 0 |
-| `role_alias` | Job title normalization mappings | 62,717 | 62,717 |
-| `funding_round` | Public funding data (round type, amount, investors) | 108 | 320 |
-| `startup_tracking` | Startup metrics and tracking status | 148 | 322 |
-| `growth_signal` | Growth indicators | 0 | 0 |
+| Table | Description |
+|-------|-------------|
+| `company` | Company reference data (name, website, industry, size, etc.) |
+| `company_alias` | Company name variations for fuzzy matching |
+| `role_alias` | Job title normalization mappings |
+| `funding_round` | Public funding data (round type, amount, investors) |
+| `startup_tracking` | Startup metrics and tracking status |
+| `growth_signal` | Growth indicators |
 
 ### Manifest Structure
 
-- **File**: `seed-data/seed-manifest.json`, published alongside dump files as a GitHub Release asset.
+- **File**: `seed-data/seed-manifest.json`, published alongside the dump file as a GitHub Release asset.
 
-- **Top-level fields**: `version` (semver string, currently `"0.1.0"`), `created_at` (ISO 8601 timestamp), `format` (`"pgdump"`), `files` (array of file entries).
+- **Top-level fields**: `version` (semver string, currently `"0.3.0"`), `created_at` (ISO 8601 timestamp), `format` (`"pgdump"`), `files` (array with a single file entry).
 
-- **Per-file fields**: `name` (filename), `tier` (`"core"` or `"full"`), `size_bytes` (integer), `sha256` (hex digest for integrity verification), `table_counts` (object mapping table name to row count).
+- **Per-file fields**: `name` (filename), `size_bytes` (integer), `sha256` (hex digest for integrity verification), `table_counts` (object mapping table name to row count).
 
-- **Validation**: Both `download-seed` and `import-seed` validate the manifest. `download-seed` checks that each file entry has `name`, `tier`, `sha256`, and `size_bytes`. `import-seed` validates the manifest `format` field is `"pgdump"`.
+- **Validation**: Both `download-seed` and `import-seed` validate the manifest. `download-seed` checks that each file entry has `name`, `sha256`, and `size_bytes`. `import-seed` validates the manifest `format` field is `"pgdump"`.
 
 ### Download Flow
 
-- **Command**: `linkedout download-seed [--full] [--output DIR] [--version TAG] [--force]`
+- **Command**: `linkedout download-seed [--output DIR] [--version TAG] [--force]`
 
-- **Source**: GitHub Releases on `sridherj/linkedout-oss`. Default tier is core; pass `--full` for the full dataset. Files are `.dump` format (pg_dump). The base URL can be overridden with `LINKEDOUT_SEED_URL` for forks.
+- **Source**: GitHub Releases on `sridherj/linkedout-oss`. Downloads `seed.dump` from the manifest. The base URL can be overridden with `LINKEDOUT_SEED_URL` for forks.
 
 - **Version resolution**: If `--version` is not specified, queries the GitHub API (`/repos/.../releases/latest`) to find the latest release tag. Handles rate limiting (403/429) with a message to set `GITHUB_TOKEN`. Supports `GITHUB_TOKEN` for authenticated requests throughout.
 
-- **Manifest fetch**: Downloads `seed-manifest.json` from the resolved release URL, parses JSON, validates structure (must have `files` array, each entry must have `name`, `tier`, `sha256`, `size_bytes`).
-
-- **Tier selection**: `_select_tier_file()` finds the manifest entry matching the requested tier. Raises an error listing available tiers if the requested one is not found.
+- **Manifest fetch**: Downloads `seed-manifest.json` from the resolved release URL, parses JSON, validates structure (must have `files` array, each entry must have `name`, `sha256`, `size_bytes`).
 
 - **Download mechanics**: Stream-downloads with `tqdm` progress bar (8192-byte chunks), writing to a `.tmp` file first and renaming on success. Identical pattern to `download-demo`.
 
@@ -72,13 +67,13 @@ Provide pre-curated company reference data so new LinkedOut installations have u
 
 - **Checksum verification**: Post-download SHA256 check via `shared.utils.checksum.verify_checksum()`. On mismatch, the file is deleted.
 
-- **Reporting**: Generates both an `OperationReport` (standard format) and a detailed JSON download report at `~/linkedout-data/reports/download-seed-<timestamp>.json` containing version, tier, filename, size, SHA256, duration, source URL, and destination path.
+- **Reporting**: Generates both an `OperationReport` (standard format) and a detailed JSON download report at `~/linkedout-data/reports/download-seed-<timestamp>.json` containing version, filename, size, SHA256, duration, source URL, and destination path.
 
 ### Import Flow
 
 - **Command**: `linkedout import-seed [--seed-file PATH] [--dry-run]`
 
-- **File location**: Auto-detects seed files in `~/linkedout-data/seed/`, preferring `seed-core.dump` over `seed-full.dump`. Can be overridden with `--seed-file`.
+- **File location**: Auto-detects `seed.dump` in `~/linkedout-data/seed/`. Can be overridden with `--seed-file`.
 
 - **Staging schema pattern**: Import uses `_seed_staging` as a staging schema. `pg_restore` loads the dump file into the staging schema, then SQL upserts merge data from staging into public. The staging schema is dropped after import (or on error).
 
@@ -107,9 +102,9 @@ Provide pre-curated company reference data so new LinkedOut installations have u
 
 ### Seed Data Generation (Maintainer-Only)
 
-- **Export tool**: `python -m dev_tools.seed_export --output seed-data/` produces both dump files and the manifest. Export uses the `_seed_staging` schema pattern: filtered data is written to the staging schema, then `pg_dump` produces the `.dump` files. Requires access to the production LinkedOut PostgreSQL database.
+- **Export tool**: `python -m dev_tools.seed_export --output seed-data/` produces the dump file and manifest. Export uses the `_seed_staging` schema pattern: filtered data is written to the staging schema, then `pg_dump` produces the `.dump` file. Requires access to the production LinkedOut PostgreSQL database.
 
-- **Release process**: Uses `gh release create "seed-v<VERSION>"` with all 3 files (core dump, full dump, manifest) as release assets. Tag format is `seed-v{semver}` to keep seed releases separate from code releases.
+- **Release process**: Uses `gh release create "seed-v<VERSION>"` with 2 files (dump and manifest) as release assets. Tag format is `seed-v{semver}` to keep seed releases separate from code releases.
 
 - **PII policy**: Seed data contains only company reference data -- no personal profile information. Company names, websites, industries, and funding data are all public.
 
@@ -117,7 +112,7 @@ Provide pre-curated company reference data so new LinkedOut installations have u
 
 - **pg_dump as transport format**: Seed data ships as pg_dump files using a staging schema pattern. This eliminates the entire type conversion layer (boolean casting, array serialization, column naming) that was required with the previous SQLite-based format. pg_restore loads data natively into PostgreSQL with correct types, and the staging schema + column intersection pattern handles version skew gracefully.
 
-- **Two tiers over one**: Core (47K companies from the actual network) and Full (218K including PDL companies) provide a meaningful choice. Users who just want matching for their connections use core; users who want broader company intelligence use full. This keeps the default download small (~30 MB) while offering comprehensive data for those who want it.
+- **Single seed file over tiers**: After migrating all data to the OSS database, the two-tier system (core/full) no longer adds value — the private DB is a strict superset. A single `seed.dump` simplifies the download/import flow, removes tier selection UX, and reduces code surface area.
 
 - **Upsert with change detection over truncate-and-reload**: The `IS DISTINCT FROM` pattern means re-running `import-seed` with the same data is a no-op (all rows skipped). This is safer than truncate-and-reload which would temporarily leave tables empty and could break concurrent queries.
 
@@ -129,7 +124,7 @@ Provide pre-curated company reference data so new LinkedOut installations have u
 
 - **Incremental seed updates**: No mechanism to download only rows that changed since the last import. Each download is the complete tier file. The upsert logic handles this gracefully (unchanged rows are skipped).
 
-- **Custom tier creation**: Users cannot create their own seed tiers or filter which tables to import. The 6-table set is fixed.
+- **Custom seed filtering**: Users cannot filter which tables to import. The 6-table set is fixed.
 
 - **Automatic seed updates**: No background check for newer seed versions. Users must manually run `download-seed --force` to get updated data.
 

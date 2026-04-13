@@ -129,7 +129,7 @@ Orchestrate CSV contact file uploads and seed data through parse, dedup, and mer
 
 - **Six reference tables**: Imports `company`, `company_alias`, `role_alias`, `funding_round`, `startup_tracking`, `growth_signal` in FK-safe order. Profile data (crawled_profile, experience, education) is NOT part of seed data.
 
-- **pg_dump source format**: Reads from a downloaded `.dump` file (pg_dump format). Auto-detects `seed-core.dump` or `seed-full.dump` in `~/linkedout-data/seed/`.
+- **pg_dump source format**: Reads from a downloaded `.dump` file (pg_dump format). Auto-detects `seed.dump` in `~/linkedout-data/seed/`.
 
 - **Staging schema pattern**: Uses `_seed_staging` as a staging schema. `pg_restore` loads the dump into the staging schema, then SQL upserts merge into the public schema. The staging schema is dropped after import (or on error). Column intersection ensures only columns present in both staging and public schemas are upserted, handling version skew gracefully.
 

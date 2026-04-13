@@ -32,31 +32,18 @@ def fixture_path(tmp_path):
 
 class TestAutoDetect:
 
-    def test_core_file_found(self, tmp_path):
-        """seed-core.dump in seed dir -> found."""
+    def test_seed_file_found(self, tmp_path):
+        """seed.dump in seed dir -> found."""
         seed_dir = tmp_path / 'seed'
         seed_dir.mkdir()
-        (seed_dir / 'seed-core.dump').write_bytes(b'x')
+        (seed_dir / 'seed.dump').write_bytes(b'x')
 
         settings = MagicMock()
         settings.data_dir = str(tmp_path)
 
         with patch('linkedout.commands.import_seed.get_config', return_value=settings):
             result = _locate_seed_file(None)
-        assert result.name == 'seed-core.dump'
-
-    def test_full_file_found_when_no_core(self, tmp_path):
-        """seed-full.dump in seed dir (no core) -> found."""
-        seed_dir = tmp_path / 'seed'
-        seed_dir.mkdir()
-        (seed_dir / 'seed-full.dump').write_bytes(b'x')
-
-        settings = MagicMock()
-        settings.data_dir = str(tmp_path)
-
-        with patch('linkedout.commands.import_seed.get_config', return_value=settings):
-            result = _locate_seed_file(None)
-        assert result.name == 'seed-full.dump'
+        assert result.name == 'seed.dump'
 
     def test_no_dump_files_raises(self, tmp_path):
         """No dump files -> error pointing to download-seed."""
@@ -69,20 +56,6 @@ class TestAutoDetect:
         with patch('linkedout.commands.import_seed.get_config', return_value=settings):
             with pytest.raises(Exception, match='download-seed'):
                 _locate_seed_file(None)
-
-    def test_prefers_core_over_full(self, tmp_path):
-        """Multiple files -> prefers core."""
-        seed_dir = tmp_path / 'seed'
-        seed_dir.mkdir()
-        (seed_dir / 'seed-core.dump').write_bytes(b'core')
-        (seed_dir / 'seed-full.dump').write_bytes(b'full')
-
-        settings = MagicMock()
-        settings.data_dir = str(tmp_path)
-
-        with patch('linkedout.commands.import_seed.get_config', return_value=settings):
-            result = _locate_seed_file(None)
-        assert result.name == 'seed-core.dump'
 
     def test_explicit_path_used(self, fixture_path):
         """Explicit --seed-file path -> used directly."""

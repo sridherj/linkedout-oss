@@ -18,7 +18,6 @@ from linkedout.commands.download_seed import (
     _fetch_manifest,
     _format_size,
     _get_base_url,
-    _select_tier_file,
     download_seed_command,
     get_release_url,
 )
@@ -33,22 +32,14 @@ def runner():
 @pytest.fixture
 def valid_manifest():
     return {
-        'version': '0.1.0',
+        'version': '0.3.0',
         'created_at': '2026-01-01T00:00:00Z',
         'files': [
             {
-                'name': 'seed-core.dump',
-                'tier': 'core',
+                'name': 'seed.dump',
                 'size_bytes': 50_000_000,
                 'sha256': 'abc123' * 10 + 'ab',
-                'table_counts': {'company': 5000},
-            },
-            {
-                'name': 'seed-full.dump',
-                'tier': 'full',
-                'size_bytes': 500_000_000,
-                'sha256': 'def456' * 10 + 'de',
-                'table_counts': {'company': 50000},
+                'table_counts': {'company': 237000},
             },
         ],
     }
@@ -68,9 +59,9 @@ class TestManifestParsing:
         with patch('linkedout.commands.download_seed.requests.get', return_value=resp):
             result = _fetch_manifest('https://example.com/release/v1')
 
-        assert result['version'] == '0.1.0'
-        assert len(result['files']) == 2
-        assert result['files'][0]['tier'] == 'core'
+        assert result['version'] == '0.3.0'
+        assert len(result['files']) == 1
+        assert result['files'][0]['name'] == 'seed.dump'
 
     def test_manifest_missing_files_raises(self):
         """Manifest without 'files' array -> raises ClickException."""
@@ -87,7 +78,7 @@ class TestManifestParsing:
         resp = MagicMock()
         resp.status_code = 200
         resp.json.return_value = {
-            'files': [{'name': 'seed-core.dump', 'tier': 'core'}],
+            'files': [{'name': 'seed.dump'}],
         }
 
         with patch('linkedout.commands.download_seed.requests.get', return_value=resp):
@@ -207,7 +198,7 @@ class TestSkipIfExists:
         seed_dir.mkdir()
 
         if file_exists:
-            dest = seed_dir / 'seed-core.dump'
+            dest = seed_dir / 'seed.dump'
             dest.write_bytes(b'existing data')
 
         args = ['--output', str(seed_dir)]
@@ -220,7 +211,7 @@ class TestSkipIfExists:
              patch('linkedout.commands.download_seed._download_file') as mock_download, \
              patch('linkedout.commands.download_seed.OperationReport') as mock_report:
 
-            mock_url.return_value = ('https://example.com/release/v1', '0.1.0')
+            mock_url.return_value = ('https://example.com/release/v1', '0.3.0')
             mock_manifest.return_value = manifest
             mock_verify.return_value = checksum_match
 
@@ -233,7 +224,7 @@ class TestSkipIfExists:
             mock_report.return_value = mock_report_instance
 
             # Create the dest file for post-download stat()
-            dest = seed_dir / 'seed-core.dump'
+            dest = seed_dir / 'seed.dump'
             if not dest.exists():
                 dest.write_bytes(b'downloaded data')
 
@@ -275,32 +266,6 @@ class TestSkipIfExists:
             file_exists=False, checksum_match=False, force=False,
         )
         mock_download.assert_called_once()
-
-
-# ── Tier selection ───────────────────────────────────────────────────────────
-
-
-class TestTierSelection:
-
-    def test_default_selects_core(self, valid_manifest):
-        """Default -> selects 'core' file from manifest."""
-        result = _select_tier_file(valid_manifest, full=False)
-        assert result['tier'] == 'core'
-        assert result['name'] == 'seed-core.dump'
-
-    def test_full_flag_selects_full(self, valid_manifest):
-        """--full -> selects 'full' file from manifest."""
-        result = _select_tier_file(valid_manifest, full=True)
-        assert result['tier'] == 'full'
-        assert result['name'] == 'seed-full.dump'
-
-    def test_missing_tier_raises(self):
-        """Requested tier not in manifest -> raises clear error."""
-        manifest = {
-            'files': [{'name': 'seed-core.dump', 'tier': 'core', 'sha256': 'x', 'size_bytes': 0}],
-        }
-        with pytest.raises(Exception, match="No 'full' tier found"):
-            _select_tier_file(manifest, full=True)
 
 
 # ── Size formatting ──────────────────────────────────────────────────────────

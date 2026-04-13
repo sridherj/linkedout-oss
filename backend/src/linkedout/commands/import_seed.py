@@ -161,10 +161,9 @@ def _locate_seed_file(seed_file: str | None) -> Path:
     settings = get_config()
     seed_dir = Path(settings.data_dir) / 'seed'
 
-    for name in ('seed-core.dump', 'seed-full.dump'):
-        candidate = seed_dir / name
-        if candidate.exists():
-            return candidate
+    candidate = seed_dir / 'seed.dump'
+    if candidate.exists():
+        return candidate
 
     raise click.ClickException(
         f'No seed file found in {seed_dir}/\n\n'

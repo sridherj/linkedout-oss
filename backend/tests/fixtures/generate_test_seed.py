@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Generate a small PostgreSQL test fixture for seed data pipeline tests.
 
-Creates ``test-seed-core.dump`` and ``seed-manifest.json`` with ~10 rows per
+Creates ``test-seed.dump`` and ``seed-manifest.json`` with ~10 rows per
 table using synthetic data.  Requires a running PostgreSQL instance.
 
 Runnable standalone to regenerate the fixture if the schema changes::
@@ -267,13 +267,13 @@ def generate(
     Args:
         base_db_url: PostgreSQL connection URL pointing to any existing database.
         output_path: Where to write the dump. Defaults to
-            ``test-seed-core.dump`` in the same directory as this script.
+            ``test-seed.dump`` in the same directory as this script.
 
     Returns:
         Path to the generated dump file.
     """
     if output_path is None:
-        output_path = Path(__file__).parent / "test-seed-core.dump"
+        output_path = Path(__file__).parent / "test-seed.dump"
 
     manifest_path = output_path.parent / "seed-manifest.json"
 
@@ -309,7 +309,6 @@ def generate(
         manifest = {
             "version": "0.0.1-test",
             "format": "pgdump",
-            "tier": "core",
             "created_at": _now_iso(),
             "table_counts": table_counts,
         }

@@ -81,14 +81,14 @@ Provide a user-facing CLI surface for all LinkedOut operations: setup, data impo
   - Verify: email matching merges onto existing connections; name matching works; unmatched contacts create new stubs; prior contact_source rows are cleaned up.
 
 - **import-seed**: Import seed company data from a pg_dump file into PostgreSQL. Uses `pg_restore` to load into a `_seed_staging` schema, then SQL upserts merge data into the public schema using column intersection for version-skew safety. Imports 6 tables in FK-safe order: `company`, `company_alias`, `role_alias`, `funding_round`, `startup_tracking`, `growth_signal`. Uses `INSERT ... ON CONFLICT (id) DO UPDATE ... WHERE ... IS DISTINCT FROM ...` for null-safe upsert with change detection. `RETURNING (xmax = 0)` distinguishes inserts from updates.
-  - Options: `--seed-file <path>` (default: auto-detect in `~/linkedout-data/seed/`, preferring `seed-core.dump` over `seed-full.dump`), `--dry-run` (report what would be imported without writing).
+  - Options: `--seed-file <path>` (default: auto-detect `seed.dump` in `~/linkedout-data/seed/`), `--dry-run` (report what would be imported without writing).
   - Output: Per-table counts (inserted/updated/skipped), total summary, and a detailed JSON import report saved to `~/linkedout-data/reports/`.
   - Verify: idempotent (running twice produces no updates on identical data); validates manifest format before import; staging schema is cleaned up after import.
 
 ### Seed Data
 
-- **download-seed**: Download seed company data (pg_dump files) from GitHub Releases. Queries GitHub API for the latest release (or uses `--version`), fetches `seed-manifest.json` for file metadata, downloads the selected tier `.dump` file with a tqdm progress bar, and verifies SHA256 checksum. Respects `GITHUB_TOKEN` for rate-limited API calls and `LINKEDOUT_SEED_URL` for fork/mirror overrides. Skips download if the file already exists and checksum matches (unless `--force`). Writes to a temp file first, renames on success.
-  - Options: `--full` (download ~500MB full dataset instead of ~50MB core), `--output <dir>` (download location, default: `~/linkedout-data/seed/`), `--version <tag>` (specific release version, default: latest), `--force` (re-download even if cached).
+- **download-seed**: Download seed company data (pg_dump file) from GitHub Releases. Queries GitHub API for the latest release (or uses `--version`), fetches `seed-manifest.json` for file metadata, downloads `seed.dump` with a tqdm progress bar, and verifies SHA256 checksum. Respects `GITHUB_TOKEN` for rate-limited API calls and `LINKEDOUT_SEED_URL` for fork/mirror overrides. Skips download if the file already exists and checksum matches (unless `--force`). Writes to a temp file first, renames on success.
+  - Options: `--output <dir>` (download location, default: `~/linkedout-data/seed/`), `--version <tag>` (specific release version, default: latest), `--force` (re-download even if cached).
   - Output: Download progress bar, checksum verification, file location, and a detailed JSON download report.
   - Suggested next steps: `linkedout import-seed`.
   - Verify: skip-if-cached works; checksum mismatch triggers re-download; `--force` always re-downloads.
