@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from linkedout.company.entities.company_entity import CompanyEntity
 from linkedout.crawled_profile.entities.crawled_profile_entity import CrawledProfileEntity
+from linkedout.experience.entities.experience_entity import ExperienceEntity
 from linkedout.crawled_profile.schemas.crawled_profile_api_schema import (
     EnrichEducationItem,
     EnrichExperienceItem,
@@ -357,9 +358,14 @@ class PostEnrichmentService:
                         )
                     ).scalar_one_or_none()
                     if profile:
+                        experiences = self._session.execute(
+                            select(ExperienceEntity).where(
+                                ExperienceEntity.crawled_profile_id == profile_id
+                            )
+                        ).scalars().all()
                         exp_dicts = [
                             {'company_name': exp.company_name or '', 'title': exp.position or ''}
-                            for exp in profile.experiences
+                            for exp in experiences
                         ]
                         profile_dict = {
                             'full_name': profile.full_name,

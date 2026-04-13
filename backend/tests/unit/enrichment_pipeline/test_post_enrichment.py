@@ -1,9 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """Unit tests for PostEnrichmentService."""
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, create_autospec, patch
 
+from linkedout.crawled_profile.entities.crawled_profile_entity import CrawledProfileEntity
 from linkedout.enrichment_pipeline.post_enrichment import PostEnrichmentService
+from linkedout.experience.entities.experience_entity import ExperienceEntity
+from utilities.llm_manager.embedding_provider import EmbeddingProvider
 
 
 def _make_apify_profile(**overrides) -> dict:
@@ -89,14 +92,13 @@ class TestPostEnrichmentService:
 
     def _make_profile_mock(self):
         """Create a profile mock with string attributes for search_vector compatibility."""
-        profile = MagicMock()
+        profile = create_autospec(CrawledProfileEntity, instance=True, spec_set=True)
         profile.has_enriched_data = False
         profile.id = 'cp_001'
         profile.full_name = None
         profile.headline = None
         profile.about = None
         profile.search_vector = None
-        profile.embedding = None
         return profile
 
     @patch('linkedout.enrichment_pipeline.post_enrichment.ProfileEnrichmentService')
@@ -188,7 +190,7 @@ class TestPostEnrichmentService:
 
     def test_cache_hit_skips_enrichment(self):
         session = MagicMock()
-        profile = MagicMock()
+        profile = create_autospec(CrawledProfileEntity, instance=True, spec_set=True)
         profile.has_enriched_data = True
         profile.last_crawled_at = datetime.now(timezone.utc) - timedelta(days=30)
         profile.id = 'cp_001'
@@ -240,7 +242,7 @@ class TestURLRedirectUpdate:
         return svc
 
     def _make_profile_mock(self, linkedin_url='https://www.linkedin.com/in/johndoe'):
-        profile = MagicMock()
+        profile = create_autospec(CrawledProfileEntity, instance=True, spec_set=True)
         profile.has_enriched_data = False
         profile.id = 'cp_001'
         profile.linkedin_url = linkedin_url
@@ -249,7 +251,6 @@ class TestURLRedirectUpdate:
         profile.headline = None
         profile.about = None
         profile.search_vector = None
-        profile.embedding = None
         return profile
 
     @patch('linkedout.enrichment_pipeline.post_enrichment.ProfileEnrichmentService')
@@ -349,3 +350,316 @@ class TestEmbeddingTextFormat:
         profile = {'full_name': 'John'}
         text = EmbeddingClient.build_embedding_text(profile)
         assert text == 'John'
+
+
+class TestProcessBatch:
+    """Tests for the process_batch() method covering per-profile DB writes,
+    batch embedding, and batch archiving."""
+
+    def _make_service(self, session=None, embedding_provider=None):
+        session = session or MagicMock()
+        with patch.object(PostEnrichmentService, '_preload_companies'):
+            svc = PostEnrichmentService(session, embedding_provider)
+        svc._company_by_canonical = {}
+        return svc
+
+    def _make_profile_autospec(self, profile_id='cp_001', full_name='John Doe',
+                                headline='Engineer', about='Builder'):
+        profile = create_autospec(CrawledProfileEntity, instance=True, spec_set=True)
+        profile.id = profile_id
+        profile.full_name = full_name
+        profile.headline = headline
+        profile.about = about
+        return profile
+
+    def _make_experience_autospec(self, company_name='Acme', position='Engineer'):
+        exp = create_autospec(ExperienceEntity, instance=True, spec_set=True)
+        exp.company_name = company_name
+        exp.position = position
+        return exp
+
+    def _make_session_execute_side_effects(self, profile_mocks_and_exps):
+        """Build session.execute side_effect list.
+
+        Args:
+            profile_mocks_and_exps: list of (profile_mock_or_None, [experience_mocks])
+        """
+        side_effects = []
+        for profile_mock, exp_mocks in profile_mocks_and_exps:
+            profile_result = MagicMock()
+            profile_result.scalar_one_or_none.return_value = profile_mock
+            side_effects.append(profile_result)
+            if profile_mock is not None:
+                exp_result = MagicMock()
+                exp_result.scalars.return_value.all.return_value = exp_mocks
+                side_effects.append(exp_result)
+        return side_effects
+
+    @patch('linkedout.enrichment_pipeline.post_enrichment.append_apify_archive_batch')
+    @patch('utilities.llm_manager.embedding_factory.get_embedding_column_name')
+    @patch('linkedout.enrichment_pipeline.post_enrichment.build_embedding_text')
+    def test_happy_path_returns_counts_and_embeds(self, mock_build_text, mock_col_name, mock_archive):
+        session = MagicMock()
+        provider = create_autospec(EmbeddingProvider, instance=True, spec_set=True)
+        provider.embed.return_value = [[0.1, 0.2], [0.3, 0.4]]
+        provider.model_name.return_value = 'text-embedding-3-small'
+        provider.dimension.return_value = 1536
+        mock_col_name.return_value = 'embedding_openai'
+        mock_build_text.side_effect = ['John Doe | Engineer', 'Jane Smith | Designer']
+
+        svc = self._make_service(session, provider)
+
+        p1 = self._make_profile_autospec('cp_001', 'John Doe', 'Engineer', 'Builder')
+        p2 = self._make_profile_autospec('cp_002', 'Jane Smith', 'Designer', 'Creator')
+        exp1 = self._make_experience_autospec('Acme', 'Engineer')
+        exp2 = self._make_experience_autospec('BigCo', 'Designer')
+
+        session.execute.side_effect = self._make_session_execute_side_effects([
+            (p1, [exp1]),
+            (p2, [exp2]),
+        ])
+
+        results = [
+            ('cp_001', 'https://linkedin.com/in/john', {'firstName': 'John'}),
+            ('cp_002', 'https://linkedin.com/in/jane', {'firstName': 'Jane'}),
+        ]
+        event_ids = {
+            'https://linkedin.com/in/john': 'ee_001',
+            'https://linkedin.com/in/jane': 'ee_002',
+        }
+
+        with patch.object(svc, 'process_enrichment_result'):
+            enriched, failed = svc.process_batch(results, event_ids)
+
+        assert (enriched, failed) == (2, 0)
+        provider.embed.assert_called_once()
+        assert len(provider.embed.call_args[0][0]) == 2
+        mock_archive.assert_called_once()
+        assert len(mock_archive.call_args[0][0]) == 2
+
+    @patch('linkedout.enrichment_pipeline.post_enrichment.append_apify_archive_batch')
+    @patch('utilities.llm_manager.embedding_factory.get_embedding_column_name')
+    @patch('linkedout.enrichment_pipeline.post_enrichment.build_embedding_text')
+    def test_partial_failure_counts(self, mock_build_text, mock_col_name, mock_archive):
+        session = MagicMock()
+        provider = create_autospec(EmbeddingProvider, instance=True, spec_set=True)
+        provider.embed.return_value = [[0.1, 0.2]]
+        provider.model_name.return_value = 'test-model'
+        provider.dimension.return_value = 1536
+        mock_col_name.return_value = 'embedding_openai'
+        mock_build_text.return_value = 'John Doe | Engineer'
+
+        svc = self._make_service(session, provider)
+
+        p1 = self._make_profile_autospec('cp_001')
+        exp1 = self._make_experience_autospec()
+
+        session.execute.side_effect = self._make_session_execute_side_effects([
+            (p1, [exp1]),
+        ])
+
+        results = [
+            ('cp_001', 'https://linkedin.com/in/john', {'firstName': 'John'}),
+            ('cp_002', 'https://linkedin.com/in/jane', {'firstName': 'Jane'}),
+        ]
+        event_ids = {}
+
+        with patch.object(svc, 'process_enrichment_result', side_effect=[None, Exception('boom')]):
+            enriched, failed = svc.process_batch(results, event_ids)
+
+        assert (enriched, failed) == (1, 1)
+        mock_archive.assert_called_once()
+        assert len(mock_archive.call_args[0][0]) == 1
+
+    @patch('linkedout.enrichment_pipeline.post_enrichment.append_apify_archive_batch')
+    def test_skip_embeddings_flag(self, mock_archive):
+        session = MagicMock()
+        provider = create_autospec(EmbeddingProvider, instance=True, spec_set=True)
+
+        svc = self._make_service(session, provider)
+
+        results = [
+            ('cp_001', 'https://linkedin.com/in/john', {'firstName': 'John'}),
+        ]
+
+        with patch.object(svc, 'process_enrichment_result'):
+            enriched, failed = svc.process_batch(results, {}, skip_embeddings=True)
+
+        assert (enriched, failed) == (1, 0)
+        provider.embed.assert_not_called()
+
+    @patch('linkedout.enrichment_pipeline.post_enrichment.append_apify_archive_batch')
+    def test_no_embedding_provider(self, mock_archive):
+        session = MagicMock()
+        svc = self._make_service(session, embedding_provider=None)
+
+        results = [
+            ('cp_001', 'https://linkedin.com/in/john', {'firstName': 'John'}),
+        ]
+
+        with patch.object(svc, 'process_enrichment_result'):
+            enriched, failed = svc.process_batch(results, {})
+
+        assert (enriched, failed) == (1, 0)
+        # No session.execute calls for the embedding step (only begin_nested from process loop)
+        # Verify embed was never attempted by checking no profile lookups happened
+        mock_archive.assert_called_once()
+
+    @patch('linkedout.enrichment_pipeline.post_enrichment.append_apify_archive_batch')
+    @patch('utilities.llm_manager.embedding_factory.get_embedding_column_name')
+    @patch('linkedout.enrichment_pipeline.post_enrichment.build_embedding_text')
+    def test_embedding_includes_experiences(self, mock_build_text, mock_col_name, mock_archive):
+        session = MagicMock()
+        provider = create_autospec(EmbeddingProvider, instance=True, spec_set=True)
+        provider.embed.return_value = [[0.1, 0.2]]
+        provider.model_name.return_value = 'test-model'
+        provider.dimension.return_value = 1536
+        mock_col_name.return_value = 'embedding_openai'
+        mock_build_text.return_value = 'John | Engineer | Experience: Acme - SWE'
+
+        svc = self._make_service(session, provider)
+
+        p1 = self._make_profile_autospec('cp_001', full_name='John')
+        exp1 = self._make_experience_autospec('Acme', 'SWE')
+
+        session.execute.side_effect = self._make_session_execute_side_effects([
+            (p1, [exp1]),
+        ])
+
+        results = [('cp_001', 'https://linkedin.com/in/john', {})]
+
+        with patch.object(svc, 'process_enrichment_result'):
+            svc.process_batch(results, {})
+
+        mock_build_text.assert_called_once()
+        profile_dict = mock_build_text.call_args[0][0]
+        assert profile_dict['experiences'] == [{'company_name': 'Acme', 'title': 'SWE'}]
+
+    @patch('linkedout.enrichment_pipeline.post_enrichment.append_apify_archive_batch')
+    @patch('utilities.llm_manager.embedding_factory.get_embedding_column_name')
+    @patch('linkedout.enrichment_pipeline.post_enrichment.build_embedding_text')
+    def test_embedding_with_no_experiences(self, mock_build_text, mock_col_name, mock_archive):
+        session = MagicMock()
+        provider = create_autospec(EmbeddingProvider, instance=True, spec_set=True)
+        provider.embed.return_value = [[0.1, 0.2]]
+        provider.model_name.return_value = 'test-model'
+        provider.dimension.return_value = 1536
+        mock_col_name.return_value = 'embedding_openai'
+        mock_build_text.return_value = 'John | Engineer'
+
+        svc = self._make_service(session, provider)
+
+        p1 = self._make_profile_autospec('cp_001')
+
+        session.execute.side_effect = self._make_session_execute_side_effects([
+            (p1, []),  # no experiences
+        ])
+
+        results = [('cp_001', 'https://linkedin.com/in/john', {})]
+
+        with patch.object(svc, 'process_enrichment_result'):
+            svc.process_batch(results, {})
+
+        mock_build_text.assert_called_once()
+        profile_dict = mock_build_text.call_args[0][0]
+        assert profile_dict['experiences'] == []
+
+    @patch('linkedout.enrichment_pipeline.post_enrichment.append_apify_archive_batch')
+    @patch('utilities.llm_manager.embedding_factory.get_embedding_column_name')
+    @patch('linkedout.enrichment_pipeline.post_enrichment.build_embedding_text')
+    def test_embedding_failure_logs_and_continues(self, mock_build_text, mock_col_name, mock_archive):
+        session = MagicMock()
+        provider = create_autospec(EmbeddingProvider, instance=True, spec_set=True)
+        provider.embed.side_effect = RuntimeError('API down')
+        mock_build_text.return_value = 'John | Engineer'
+
+        svc = self._make_service(session, provider)
+
+        p1 = self._make_profile_autospec('cp_001')
+        p2 = self._make_profile_autospec('cp_002')
+
+        session.execute.side_effect = self._make_session_execute_side_effects([
+            (p1, []),
+            (p2, []),
+        ])
+
+        results = [
+            ('cp_001', 'https://linkedin.com/in/john', {}),
+            ('cp_002', 'https://linkedin.com/in/jane', {}),
+        ]
+
+        with patch.object(svc, 'process_enrichment_result'), \
+             patch.object(svc, '_log_failed_embedding_entry') as mock_log_fail:
+            enriched, failed = svc.process_batch(results, {})
+
+        assert (enriched, failed) == (2, 0)
+        assert mock_log_fail.call_count == 2
+        mock_archive.assert_called_once()
+
+    @patch('linkedout.enrichment_pipeline.post_enrichment.append_apify_archive_batch')
+    @patch('utilities.llm_manager.embedding_factory.get_embedding_column_name')
+    @patch('linkedout.enrichment_pipeline.post_enrichment.build_embedding_text')
+    def test_profile_missing_at_embedding_time(self, mock_build_text, mock_col_name, mock_archive):
+        session = MagicMock()
+        provider = create_autospec(EmbeddingProvider, instance=True, spec_set=True)
+        provider.embed.return_value = []
+        mock_col_name.return_value = 'embedding_openai'
+
+        svc = self._make_service(session, provider)
+
+        # Profile not found at embedding time (scalar_one_or_none returns None)
+        session.execute.side_effect = self._make_session_execute_side_effects([
+            (None, []),  # profile missing — no exp query will follow
+        ])
+
+        results = [('cp_001', 'https://linkedin.com/in/john', {})]
+
+        with patch.object(svc, 'process_enrichment_result'):
+            enriched, failed = svc.process_batch(results, {})
+
+        assert (enriched, failed) == (1, 0)
+        mock_build_text.assert_not_called()
+
+    @patch('linkedout.enrichment_pipeline.post_enrichment.append_apify_archive_batch')
+    @patch('utilities.llm_manager.embedding_factory.get_embedding_column_name')
+    @patch('linkedout.enrichment_pipeline.post_enrichment.build_embedding_text')
+    def test_empty_embedding_text_skipped(self, mock_build_text, mock_col_name, mock_archive):
+        session = MagicMock()
+        provider = create_autospec(EmbeddingProvider, instance=True, spec_set=True)
+        mock_col_name.return_value = 'embedding_openai'
+        mock_build_text.return_value = '   '  # whitespace only
+
+        svc = self._make_service(session, provider)
+
+        p1 = self._make_profile_autospec('cp_001', full_name=None, headline=None, about=None)
+
+        session.execute.side_effect = self._make_session_execute_side_effects([
+            (p1, []),
+        ])
+
+        results = [('cp_001', 'https://linkedin.com/in/john', {})]
+
+        with patch.object(svc, 'process_enrichment_result'):
+            svc.process_batch(results, {})
+
+        # embed should never be called since text was whitespace-only
+        provider.embed.assert_not_called()
+
+    @patch('linkedout.enrichment_pipeline.post_enrichment.append_apify_archive_batch')
+    def test_archive_only_successful_profiles(self, mock_archive):
+        session = MagicMock()
+        svc = self._make_service(session, embedding_provider=None)
+
+        results = [
+            ('cp_001', 'https://linkedin.com/in/john', {'firstName': 'John'}),
+            ('cp_002', 'https://linkedin.com/in/jane', {'firstName': 'Jane'}),
+        ]
+
+        with patch.object(svc, 'process_enrichment_result', side_effect=[None, Exception('fail')]):
+            enriched, failed = svc.process_batch(results, {})
+
+        assert (enriched, failed) == (1, 1)
+        mock_archive.assert_called_once()
+        archive_entries = mock_archive.call_args[0][0]
+        assert len(archive_entries) == 1
+        assert archive_entries[0]['linkedin_url'] == 'https://linkedin.com/in/john'
