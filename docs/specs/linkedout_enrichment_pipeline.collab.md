@@ -11,7 +11,7 @@ linked_files:
   - backend/src/utilities/llm_manager/embedding_factory.py
   - backend/src/shared/config/settings.py
   - backend/src/shared/utils/apify_archive.py
-version: 3
+version: 4
 last_verified: "2026-04-13"
 ---
 
@@ -73,6 +73,8 @@ Enrich LinkedIn connection profiles by crawling full profile data via Apify, the
 
 - **Stub profile creation**: If no CrawledProfile exists for the linkedin_url being enriched, PostEnrichmentService creates a stub profile with linkedin_url and data_source='apify' before proceeding. Verify stub creation works for profiles not yet in the database.
 
+- **LinkedIn slug redirect handling**: LinkedIn may resolve profile slugs to a different canonical form (e.g. stripping display name suffixes, removing emoji, normalizing hyphens). When Apify returns a `linkedinUrl` that differs from the input URL (after normalization), the system: (a) matches the result to the input via rapidfuzz greedy slug matching, (b) updates `linkedin_url` to the Apify canonical URL, and (c) stores the original URL in `previous_linkedin_url` for import dedup safety. The import pipeline checks both `linkedin_url` and `previous_linkedin_url` when deduplicating re-imports.
+
 ### BYOK Key Management
 
 - **Key validation against Apify API**: The set-key endpoint (PUT /enrichment/apify-key) validates the key by calling Apify's users/me endpoint with configurable timeout (key_validation_timeout_seconds, default 15s). Non-200 responses return HTTP 400. Verify validation catches bad keys.
@@ -114,11 +116,19 @@ Enrich LinkedIn connection profiles by crawling full profile data via Apify, the
 **Over:** Procrastinate task queue for async enrichment (internal version)
 **Because:** OSS removed the Procrastinate dependency. Synchronous with retry (3 attempts, exponential backoff) is simpler for single-user deployments.
 
+### `previous_linkedin_url` for redirect tracking — 2026-04-13
+**Chose:** Single `previous_linkedin_url` column on CrawledProfile
+**Over:** JSONB array of aliases or separate alias table
+**Because:** LinkedIn redirects are rare (~2-5%) and typically happen once. A single column handles the common case without schema complexity. If a profile redirects multiple times (extremely rare), only the most recent previous URL is preserved.
+
+## Known Limitations
+
+- **Similar-slug collision in fuzzy matching**: If two profiles with similar slugs (e.g. `abhishek-mishra-developer` and `abhishek-mishra1-engineer`) both redirect in the same batch, the rapidfuzz greedy matcher could cross-pair them. This requires: similar slugs + same batch + both redirect — extremely rare in practice since LinkedIn CSV is date-sorted (not alphabetical) so similar names are naturally spread across batches. Accepted risk; revisit if observed in production.
+
 ## Not Included
 
 - Procrastinate/task queue for async enrichment (removed in OSS; enrichment runs synchronously)
 - Webhook-based enrichment for large batches
 - Proactive cache refresh cron
 - Materialized view for enrichment stats
-- Batch embedding calls
 - Enrichment scheduling or priority queue

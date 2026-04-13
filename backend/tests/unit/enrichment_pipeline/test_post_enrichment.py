@@ -229,6 +229,100 @@ class TestPostEnrichmentService:
         assert profile.company_id == 'co_123'
 
 
+class TestURLRedirectUpdate:
+    """Tests for URL update behavior when Apify returns a redirected canonical URL (T6-T8)."""
+
+    def _make_service(self, session=None, embedding_provider=None):
+        session = session or MagicMock()
+        with patch.object(PostEnrichmentService, '_preload_companies'):
+            svc = PostEnrichmentService(session, embedding_provider)
+        svc._company_by_canonical = {}
+        return svc
+
+    def _make_profile_mock(self, linkedin_url='https://www.linkedin.com/in/johndoe'):
+        profile = MagicMock()
+        profile.has_enriched_data = False
+        profile.id = 'cp_001'
+        profile.linkedin_url = linkedin_url
+        profile.previous_linkedin_url = None
+        profile.full_name = None
+        profile.headline = None
+        profile.about = None
+        profile.search_vector = None
+        profile.embedding = None
+        return profile
+
+    @patch('linkedout.enrichment_pipeline.post_enrichment.ProfileEnrichmentService')
+    def test_t6_url_update_on_redirect(self, mock_enrich_cls):
+        """T6: canonical_url differs from current — previous_linkedin_url set, linkedin_url updated."""
+        session = MagicMock()
+        profile = self._make_profile_mock('https://www.linkedin.com/in/vikas-khatana-web-developer')
+
+        # First execute: find profile, second: check for unique conflict (None = no conflict),
+        # third: enrichment event
+        session.execute.return_value.scalar_one_or_none.side_effect = [
+            profile,  # find profile by linkedin_url
+            None,     # unique constraint check — no conflict
+            MagicMock(),  # enrichment event
+        ]
+
+        svc = self._make_service(session)
+        data = _make_apify_profile(linkedinUrl='https://www.linkedin.com/in/vikas-khatana')
+
+        svc.process_enrichment_result(
+            data, 'ee_001', 'https://www.linkedin.com/in/vikas-khatana-web-developer',
+            canonical_url='https://www.linkedin.com/in/vikas-khatana',
+        )
+
+        assert profile.previous_linkedin_url == 'https://www.linkedin.com/in/vikas-khatana-web-developer'
+        assert profile.linkedin_url == 'https://www.linkedin.com/in/vikas-khatana'
+
+    @patch('linkedout.enrichment_pipeline.post_enrichment.ProfileEnrichmentService')
+    def test_t7_no_redirect_previous_url_stays_none(self, mock_enrich_cls):
+        """T7: No canonical_url — previous_linkedin_url unchanged (None)."""
+        session = MagicMock()
+        profile = self._make_profile_mock()
+
+        session.execute.return_value.scalar_one_or_none.side_effect = [
+            profile, MagicMock(),
+        ]
+
+        svc = self._make_service(session)
+        data = _make_apify_profile()
+
+        svc.process_enrichment_result(data, 'ee_001', 'https://www.linkedin.com/in/johndoe')
+
+        assert profile.previous_linkedin_url is None
+
+    @patch('linkedout.enrichment_pipeline.post_enrichment.ProfileEnrichmentService')
+    def test_t8_unique_constraint_conflict_skips_update(self, mock_enrich_cls):
+        """T8: Another profile already has the canonical URL — URL update skipped."""
+        session = MagicMock()
+        profile = self._make_profile_mock('https://www.linkedin.com/in/old-slug')
+
+        # First execute: find profile, second: unique constraint check (conflict!),
+        # third: enrichment event
+        session.execute.return_value.scalar_one_or_none.side_effect = [
+            profile,       # find profile by linkedin_url
+            'cp_other',    # unique constraint check — conflict exists
+            MagicMock(),   # enrichment event
+        ]
+
+        svc = self._make_service(session)
+        data = _make_apify_profile()
+
+        svc.process_enrichment_result(
+            data, 'ee_001', 'https://www.linkedin.com/in/old-slug',
+            canonical_url='https://www.linkedin.com/in/new-slug',
+        )
+
+        # URL should NOT have been updated
+        assert profile.linkedin_url == 'https://www.linkedin.com/in/old-slug'
+        assert profile.previous_linkedin_url is None
+        # Profile should still be enriched (not skipped)
+        assert profile.has_enriched_data is True
+
+
 class TestEmbeddingTextFormat:
     """Test the embedding text builder from EmbeddingClient."""
 

@@ -173,27 +173,27 @@ class TestMatchResults:
             {'linkedinUrl': 'https://linkedin.com/in/alice', 'name': 'Alice'},
             {'linkedinUrl': 'https://linkedin.com/in/bob', 'name': 'Bob'},
         ]
-        matched, missing = _match_results(urls, results)
+        matched, missing, _redirects = _match_results(urls, results)
         assert len(matched) == 2
         assert missing == []
 
     def test_case_insensitive(self):
         urls = ['https://LinkedIn.com/in/Alice']
         results = [{'linkedinUrl': 'https://linkedin.com/in/alice', 'name': 'Alice'}]
-        matched, missing = _match_results(urls, results)
+        matched, missing, _redirects = _match_results(urls, results)
         assert len(matched) == 1
         assert missing == []
 
     def test_trailing_slash_normalization(self):
         urls = ['https://linkedin.com/in/alice/']
         results = [{'linkedinUrl': 'https://linkedin.com/in/alice', 'name': 'Alice'}]
-        matched, missing = _match_results(urls, results)
+        matched, missing, _redirects = _match_results(urls, results)
         assert len(matched) == 1
 
     def test_missing_urls(self):
         urls = ['https://linkedin.com/in/alice', 'https://linkedin.com/in/bob']
         results = [{'linkedinUrl': 'https://linkedin.com/in/alice', 'name': 'Alice'}]
-        matched, missing = _match_results(urls, results)
+        matched, missing, _redirects = _match_results(urls, results)
         assert len(matched) == 1
         assert missing == ['https://linkedin.com/in/bob']
 
@@ -203,7 +203,7 @@ class TestMatchResults:
             {'linkedinUrl': 'https://linkedin.com/in/alice', 'name': 'Alice1'},
             {'linkedinUrl': 'https://linkedin.com/in/alice', 'name': 'Alice2'},
         ]
-        matched, missing = _match_results(urls, results)
+        matched, missing, _redirects = _match_results(urls, results)
         assert matched['https://linkedin.com/in/alice']['name'] == 'Alice1'
 
     def test_extra_results_ignored(self):
@@ -212,19 +212,19 @@ class TestMatchResults:
             {'linkedinUrl': 'https://linkedin.com/in/alice', 'name': 'Alice'},
             {'linkedinUrl': 'https://linkedin.com/in/charlie', 'name': 'Charlie'},
         ]
-        matched, missing = _match_results(urls, results)
+        matched, missing, _redirects = _match_results(urls, results)
         assert len(matched) == 1
         assert missing == []
 
     def test_empty_inputs(self):
-        matched, missing = _match_results([], [])
+        matched, missing, _redirects = _match_results([], [])
         assert matched == {}
         assert missing == []
 
     def test_result_missing_linkedinUrl_field(self):
         urls = ['https://linkedin.com/in/alice']
         results = [{'name': 'Alice'}]  # no linkedinUrl
-        matched, missing = _match_results(urls, results)
+        matched, missing, _redirects = _match_results(urls, results)
         assert len(matched) == 0
         assert missing == ['https://linkedin.com/in/alice']
 
@@ -233,10 +233,91 @@ class TestMatchResults:
         encoded_url = 'https://www.linkedin.com/in/dhirendra-singh-%e3%83%87%e3%82%a3%e3%83%ab-578b761ba'
         decoded_url = 'https://www.linkedin.com/in/dhirendra-singh-ディル-578b761ba'
         results = [{'linkedinUrl': decoded_url, 'firstName': 'Dhirendra'}]
-        matched, missing = _match_results([encoded_url], results)
+        matched, missing, _redirects = _match_results([encoded_url], results)
         assert len(matched) == 1
         assert encoded_url in matched
         assert missing == []
+
+
+# ---------------------------------------------------------------------------
+# Redirect matching tests (T1-T5)
+# ---------------------------------------------------------------------------
+
+class TestRedirectMatching:
+    """Tests for rapidfuzz-based redirect detection in _match_results."""
+
+    def test_t1_single_redirect_pairing(self):
+        """T1: Single redirect — slug shortened by LinkedIn."""
+        batch_urls = ['https://www.linkedin.com/in/vikas-khatana-web-developer']
+        apify_results = [{'linkedinUrl': 'https://www.linkedin.com/in/vikas-khatana', 'firstName': 'Vikas'}]
+        matched, missing, redirects = _match_results(batch_urls, apify_results)
+
+        assert len(matched) == 1
+        assert batch_urls[0] in matched
+        assert missing == []
+        assert redirects == {
+            'https://www.linkedin.com/in/vikas-khatana-web-developer': 'https://www.linkedin.com/in/vikas-khatana',
+        }
+
+    def test_t2_multiple_redirects_greedy(self):
+        """T2: 3 unmatched inputs + 3 unmatched results, all paired correctly."""
+        batch_urls = [
+            'https://www.linkedin.com/in/alice-jones-developer',
+            'https://www.linkedin.com/in/bob-smith-engineer',
+            'https://www.linkedin.com/in/carol-white-designer',
+        ]
+        apify_results = [
+            {'linkedinUrl': 'https://www.linkedin.com/in/alice-jones', 'firstName': 'Alice'},
+            {'linkedinUrl': 'https://www.linkedin.com/in/bob-smith', 'firstName': 'Bob'},
+            {'linkedinUrl': 'https://www.linkedin.com/in/carol-white', 'firstName': 'Carol'},
+        ]
+        matched, missing, redirects = _match_results(batch_urls, apify_results)
+
+        assert len(matched) == 3
+        assert missing == []
+        assert len(redirects) == 3
+        assert redirects[batch_urls[0]] == 'https://www.linkedin.com/in/alice-jones'
+        assert redirects[batch_urls[1]] == 'https://www.linkedin.com/in/bob-smith'
+        assert redirects[batch_urls[2]] == 'https://www.linkedin.com/in/carol-white'
+
+    def test_t3_all_exact_matches_no_redirects(self):
+        """T3: All inputs match exactly — redirects dict is empty."""
+        batch_urls = [
+            'https://www.linkedin.com/in/alice',
+            'https://www.linkedin.com/in/bob',
+        ]
+        apify_results = [
+            {'linkedinUrl': 'https://www.linkedin.com/in/alice', 'firstName': 'Alice'},
+            {'linkedinUrl': 'https://www.linkedin.com/in/bob', 'firstName': 'Bob'},
+        ]
+        matched, missing, redirects = _match_results(batch_urls, apify_results)
+
+        assert len(matched) == 2
+        assert missing == []
+        assert redirects == {}
+
+    def test_t4_extra_apify_result_ignored(self):
+        """T4: Apify returns result for URL not in batch. No crash, ignored."""
+        batch_urls = ['https://www.linkedin.com/in/alice']
+        apify_results = [
+            {'linkedinUrl': 'https://www.linkedin.com/in/alice', 'firstName': 'Alice'},
+            {'linkedinUrl': 'https://www.linkedin.com/in/stranger', 'firstName': 'Stranger'},
+        ]
+        matched, missing, redirects = _match_results(batch_urls, apify_results)
+
+        assert len(matched) == 1
+        assert missing == []
+        assert redirects == {}
+
+    def test_t5_below_threshold_stays_failed(self):
+        """T5: Unmatched input slug is completely dissimilar — stays in missing."""
+        batch_urls = ['https://www.linkedin.com/in/completely-different-person']
+        apify_results = [{'linkedinUrl': 'https://www.linkedin.com/in/xyz-abc-123', 'firstName': 'X'}]
+        matched, missing, redirects = _match_results(batch_urls, apify_results)
+
+        assert len(matched) == 0
+        assert missing == ['https://www.linkedin.com/in/completely-different-person']
+        assert redirects == {}
 
 
 # ---------------------------------------------------------------------------

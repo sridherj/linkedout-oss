@@ -21,6 +21,7 @@ from shared.utils.apify_archive import append_apify_archive, append_apify_archiv
 from shared.utils.company_matcher import CompanyMatcher
 from shared.utils.company_resolver import resolve_company
 from shared.utils.date_parsing import parse_month_name
+from shared.utils.linkedin_url import normalize_linkedin_url
 from utilities.llm_manager.embedding_provider import EmbeddingProvider, build_embedding_text
 from shared.utilities.logger import get_logger
 
@@ -62,6 +63,7 @@ class PostEnrichmentService:
         linkedin_url: str,
         source: str = 'enrichment',
         skip_archive: bool = False,
+        canonical_url: str | None = None,
     ) -> None:
         """Process a single Apify profile result.
 
@@ -106,6 +108,26 @@ class PostEnrichmentService:
 
         # 2. Update crawled profile with Apify data
         self._update_crawled_profile(profile, apify_data)
+
+        # 2b. URL redirect: update linkedin_url if Apify returned a different canonical URL
+        if canonical_url and normalize_linkedin_url(profile.linkedin_url) != canonical_url:
+            existing = self._session.execute(
+                select(CrawledProfileEntity.id).where(
+                    CrawledProfileEntity.linkedin_url == canonical_url
+                )
+            ).scalar_one_or_none()
+            if existing:
+                logger.warning(
+                    'Skipping URL update for {}: canonical URL {} already exists (profile {})',
+                    profile.linkedin_url, canonical_url, existing,
+                )
+            else:
+                profile.previous_linkedin_url = profile.linkedin_url
+                profile.linkedin_url = canonical_url
+                logger.info(
+                    'Updated linkedin_url: {} -> {} (old preserved in previous_linkedin_url)',
+                    profile.previous_linkedin_url, canonical_url,
+                )
 
         # 3. Delegate structured rows, search_vector, and embedding to enrich()
         enrich_request = self._to_enrich_schema(apify_data)
@@ -277,6 +299,7 @@ class PostEnrichmentService:
         enrichment_event_ids: dict[str, str],
         skip_embeddings: bool = False,
         source: str = 'bulk_enrichment',
+        redirects: dict[str, str] | None = None,
     ) -> tuple[int, int]:
         """Process a batch of Apify results with batched embedding and archiving.
 
@@ -301,9 +324,11 @@ class PostEnrichmentService:
             try:
                 with self._session.begin_nested():
                     event_id = enrichment_event_ids.get(linkedin_url)
+                    canonical_url = redirects.get(linkedin_url) if redirects else None
                     self.process_enrichment_result(
                         apify_data, event_id, linkedin_url,
                         source=source, skip_archive=True,
+                        canonical_url=canonical_url,
                     )
                 enriched += 1
                 enriched_profiles.append((profile_id, linkedin_url))
@@ -313,7 +338,7 @@ class PostEnrichmentService:
                 })
             except Exception as e:
                 failed += 1
-                logger.error("Failed to process %s: %s", linkedin_url, e)
+                logger.error("Failed to process {}: {}", linkedin_url, e)
 
         # Restore embedding provider
         self._embedding_provider = original_provider
@@ -357,7 +382,7 @@ class PostEnrichmentService:
                         profile.embedding_updated_at = datetime.now(timezone.utc)
                     self._session.flush()
             except Exception as e:
-                logger.error("Batch embedding failed: %s", e)
+                logger.error("Batch embedding failed: {}", e)
                 for profile_id, _ in enriched_profiles:
                     self._log_failed_embedding_entry(profile_id, str(e))
 
@@ -380,4 +405,4 @@ class PostEnrichmentService:
             with open(FAILED_EMBEDDINGS_PATH, 'a') as f:
                 f.write(json.dumps(entry) + '\n')
         except Exception as e:
-            logger.error('Failed to log embedding failure: %s', e)
+            logger.error('Failed to log embedding failure: {}', e)

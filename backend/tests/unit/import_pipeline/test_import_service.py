@@ -138,3 +138,66 @@ class TestImportServiceOrchestration:
         # Should NOT be async
         assert result.get('async') is not True
         assert result['status'] == 'complete'
+
+
+class TestRunMergeRedirectDedup:
+    """T-redirect-9: Re-import with old URL finds profile via previous_linkedin_url."""
+
+    @patch('linkedout.import_pipeline.service.create_new_connection')
+    def test_previous_url_prevents_duplicate_profile(self, mock_create_new):
+        """A 'new' contact whose URL matches a profile's previous_linkedin_url
+        should be routed to the existing profile, not create a stub."""
+        session = MagicMock()
+
+        # Existing profile: URL was redirected from old → new
+        profile = MagicMock()
+        profile.linkedin_url = 'https://www.linkedin.com/in/vikas-khatana'
+        profile.previous_linkedin_url = 'https://www.linkedin.com/in/vikas-khatana-web-developer'
+
+        # session.execute(select(CrawledProfileEntity)).scalars().all()
+        session.execute.return_value.scalars.return_value.all.return_value = [profile]
+
+        # Contact source from CSV with the OLD (pre-redirect) URL
+        cs = MagicMock()
+        cs.dedup_status = 'new'
+        cs.linkedin_url = 'https://www.linkedin.com/in/vikas-khatana-web-developer'
+
+        service = ImportService(session)
+        service._run_merge([cs], 't1', 'b1', 'u1')
+
+        # create_new_connection should have been called
+        mock_create_new.assert_called_once()
+        # The existing_profiles dict passed to create_new_connection should contain
+        # the old URL mapped to the existing profile
+        call_args = mock_create_new.call_args
+        existing_profiles_arg = call_args[0][2]  # 3rd positional arg
+        old_url_norm = 'https://www.linkedin.com/in/vikas-khatana-web-developer'
+        assert old_url_norm in existing_profiles_arg
+        assert existing_profiles_arg[old_url_norm] is profile
+
+    def test_build_connection_lookups_includes_previous_url(self):
+        """_build_connection_lookups() creates entries for previous_linkedin_url."""
+        session = MagicMock()
+
+        # Simulate a joined row: (conn_id, emails, li_url, prev_li_url, full_name, company)
+        session.execute.return_value.all.return_value = [
+            (
+                'conn_1',
+                None,
+                'https://www.linkedin.com/in/vikas-khatana',
+                'https://www.linkedin.com/in/vikas-khatana-web-developer',
+                'Vikas Khatana',
+                'Acme Corp',
+            ),
+        ]
+
+        service = ImportService(session)
+        entries = service._build_connection_lookups('u1')
+
+        # Should produce two entries: one for current URL, one for previous
+        assert len(entries) == 2
+        urls = {e.linkedin_url for e in entries}
+        assert 'https://www.linkedin.com/in/vikas-khatana' in urls
+        assert 'https://www.linkedin.com/in/vikas-khatana-web-developer' in urls
+        # Both entries should reference the same connection
+        assert all(e.connection_id == 'conn_1' for e in entries)

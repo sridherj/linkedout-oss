@@ -216,6 +216,7 @@ class ImportService:
                 ConnectionEntity.id,
                 ConnectionEntity.emails,
                 CrawledProfileEntity.linkedin_url,
+                CrawledProfileEntity.previous_linkedin_url,
                 CrawledProfileEntity.full_name,
                 CrawledProfileEntity.current_company_name,
             ).join(
@@ -228,8 +229,9 @@ class ImportService:
 
         entries = []
         for row in rows:
-            conn_id, emails_csv, li_url, full_name, company = row
+            conn_id, emails_csv, li_url, prev_li_url, full_name, company = row
             norm_url = normalize_linkedin_url(li_url) if li_url else None
+            norm_prev_url = normalize_linkedin_url(prev_li_url) if prev_li_url else None
             norm_emails = []
             if emails_csv:
                 for em in emails_csv.split(','):
@@ -244,6 +246,15 @@ class ImportService:
                 full_name=full_name,
                 company=company,
             ))
+            # Add duplicate entry with previous URL for redirect dedup
+            if norm_prev_url and norm_prev_url != norm_url:
+                entries.append(ConnectionLookupEntry(
+                    connection_id=conn_id,
+                    linkedin_url=norm_prev_url,
+                    emails=norm_emails or None,
+                    full_name=full_name,
+                    company=company,
+                ))
 
         return entries
 
@@ -276,6 +287,10 @@ class ImportService:
             norm = normalize_linkedin_url(p.linkedin_url) if p.linkedin_url else None
             if norm:
                 existing_profiles[norm] = p
+            # Also index by previous URL for redirect dedup safety
+            prev = normalize_linkedin_url(p.previous_linkedin_url) if p.previous_linkedin_url else None
+            if prev and prev not in existing_profiles:
+                existing_profiles[prev] = p
 
         # Pre-load connections by ID for merge_matched
         connections_by_id: dict[str, ConnectionEntity] = {}

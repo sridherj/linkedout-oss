@@ -15,6 +15,9 @@ class CrawledProfileEntity(BaseEntity):
     id_prefix = 'cp'
 
     linkedin_url: Mapped[str] = mapped_column(String(500), nullable=False, unique=True, comment='Full LinkedIn URL')
+    previous_linkedin_url: Mapped[Optional[str]] = mapped_column(
+        String(500), nullable=True, comment='Previous LinkedIn URL before redirect canonicalization'
+    )
     public_identifier: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, comment='LinkedIn public identifier token')
     first_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, comment='First name')
     last_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, comment='Last name')
@@ -64,6 +67,7 @@ class CrawledProfileEntity(BaseEntity):
 
     __table_args__ = (
         Index('ix_cp_linkedin_url', 'linkedin_url', unique=True),
+        Index('ix_cp_prev_linkedin_url', 'previous_linkedin_url'),
         Index('ix_cp_company_id', 'company_id'),
         Index('ix_cp_current_company', 'current_company_name'),
         Index('ix_cp_location', 'location_city', 'location_country_code'),

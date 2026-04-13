@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
+from rapidfuzz import fuzz
 from shared.utils.linkedin_url import normalize_linkedin_url
 
 from linkedout.enrichment_pipeline.apify_client import (
@@ -87,7 +88,7 @@ def _load_state(state_path: Path) -> dict[int, BatchState]:
             try:
                 event = json.loads(raw_line)
             except json.JSONDecodeError:
-                logger.warning('Corrupt state line %d, skipping: %s', line_no, raw_line[:120])
+                logger.warning('Corrupt state line {}, skipping: {}', line_no, raw_line[:120])
                 continue
 
             event_type = event.get('type')
@@ -150,13 +151,13 @@ def _acquire_lock(data_dir: Path):
                     is_stale_by_age = True  # unparseable timestamp → treat as stale
 
             if is_stale_by_age:
-                logger.warning('Stale lock (age > 6h), reclaiming: %s', lock_data)
+                logger.warning('Stale lock (age > 6h), reclaiming: {}', lock_data)
             elif pid is not None:
                 try:
                     os.kill(pid, 0)  # check if PID is alive
                     raise SystemExit(f'Enrichment already running (PID {pid})')
                 except OSError:
-                    logger.warning('Stale lock (PID %d dead), reclaiming', pid)
+                    logger.warning('Stale lock (PID {} dead), reclaiming', pid)
             # else: no PID in lock data — treat as stale
         except (json.JSONDecodeError, OSError):
             logger.warning('Corrupt lock file, reclaiming')
@@ -205,17 +206,20 @@ def _chunk_profiles(
 def _match_results(
     batch_urls: list[str],
     apify_results: list[dict],
-) -> tuple[dict[str, dict], list[str]]:
+) -> tuple[dict[str, dict], list[str], dict[str, str]]:
     """Match Apify results to input URLs.
 
     Returns:
-        (matched: {linkedin_url: apify_data}, missing: [urls not in results])
+        (matched: {linkedin_url: apify_data},
+         missing: [urls not in results],
+         redirects: {original_input_url: apify_canonical_url})
 
     Handles:
         - URL percent-encoding normalization (%xx -> decoded chars)
         - Case-insensitive URL matching
         - Duplicate linkedinUrl in results (first wins)
         - Extra results not in input (ignored)
+        - Redirect detection via rapidfuzz slug similarity
     """
     # Build lookup: normalized URL -> apify result (first occurrence wins)
     result_lookup: dict[str, dict] = {}
@@ -230,14 +234,61 @@ def _match_results(
     matched: dict[str, dict] = {}
     missing: list[str] = []
 
+    # Track which result keys were claimed by exact match
+    matched_result_keys: set[str] = set()
+
     for url in batch_urls:
         key = normalize_linkedin_url(url)
         if key and key in result_lookup:
             matched[url] = result_lookup[key]
+            matched_result_keys.add(key)
         else:
             missing.append(url)
 
-    return matched, missing
+    # Fuzzy-match pass: pair unmatched inputs with unmatched results
+    redirects: dict[str, str] = {}
+
+    unmatched_results: dict[str, dict] = {
+        k: v for k, v in result_lookup.items() if k not in matched_result_keys
+    }
+
+    if missing and unmatched_results:
+        def _slug(normalized_url: str) -> str:
+            return normalized_url.rsplit('/in/', 1)[-1] if '/in/' in normalized_url else normalized_url
+
+        pairs: list[tuple[float, str, str]] = []
+        for input_url in missing:
+            input_key = normalize_linkedin_url(input_url)
+            if not input_key:
+                continue
+            input_slug = _slug(input_key)
+            for result_key in unmatched_results:
+                result_slug = _slug(result_key)
+                score = fuzz.ratio(input_slug, result_slug)
+                pairs.append((score, input_url, result_key))
+
+        # Greedy assignment: highest similarity first
+        pairs.sort(key=lambda x: x[0], reverse=True)
+        used_inputs: set[str] = set()
+        used_results: set[str] = set()
+
+        for score, input_url, result_key in pairs:
+            if score < 60:
+                break
+            if input_url in used_inputs or result_key in used_results:
+                continue
+            matched[input_url] = unmatched_results[result_key]
+            apify_url = unmatched_results[result_key].get('linkedinUrl', '')
+            canonical = normalize_linkedin_url(apify_url)
+            if canonical:
+                redirects[input_url] = canonical
+            used_inputs.add(input_url)
+            used_results.add(result_key)
+
+        # Update missing: remove successfully paired inputs
+        missing = [url for url in missing if url not in used_inputs]
+
+    return matched, missing, redirects
 
 
 # ---------------------------------------------------------------------------
@@ -326,7 +377,7 @@ def enrich_profiles(
 
             # ── Already completed ──────────────────────────────
             if batch_state and batch_state.completed:
-                logger.info('Batch %d already completed, skipping', batch_idx)
+                logger.info('Batch {} already completed, skipping', batch_idx)
                 # Reconstruct counts from state events — we don't store them
                 # on BatchState directly, so count processed_urls
                 batches_completed += 1
@@ -386,7 +437,7 @@ def enrich_profiles(
                             client, run_id, results_dir, batch_idx, state_path,
                         )
                     except Exception as e:
-                        logger.error('Batch %d fetch failed: %s', batch_idx, e)
+                        logger.error('Batch {} fetch failed: {}', batch_idx, e)
                         continue
 
                     enriched, failed = _process_batch_results(
@@ -415,7 +466,7 @@ def enrich_profiles(
 
             # ── Started but not fetched (resume polling) ──────
             if batch_state and batch_state.run_id and not batch_state.dataset_id:
-                logger.info('Batch %d started (run %s) but not fetched, resuming poll',
+                logger.info('Batch {} started (run {}) but not fetched, resuming poll',
                             batch_idx, batch_state.run_id)
                 run_id = batch_state.run_id
                 api_key = _get_key(key_tracker)
@@ -428,7 +479,7 @@ def enrich_profiles(
                         client, run_id, results_dir, batch_idx, state_path,
                     )
                 except Exception as e:
-                    logger.error('Batch %d poll/fetch failed: %s', batch_idx, e)
+                    logger.error('Batch {} poll/fetch failed: {}', batch_idx, e)
                     continue
 
                 already_processed = batch_state.processed_urls if batch_state else set()
@@ -479,7 +530,7 @@ def enrich_profiles(
                     client, run_id, results_dir, batch_idx, state_path,
                 )
             except Exception as e:
-                logger.error('Batch %d poll/fetch failed: %s', batch_idx, e)
+                logger.error('Batch {} poll/fetch failed: {}', batch_idx, e)
                 continue
 
             enriched, failed = _process_batch_results(
@@ -557,17 +608,17 @@ def _dispatch_batch(
                 'urls': batch_urls,
                 'started_at': datetime.now(timezone.utc).isoformat(),
             })
-            logger.info('Batch %d dispatched: run_id=%s, urls=%d', batch_idx, run_id, len(batch_urls))
+            logger.info('Batch {} dispatched: run_id={}, urls={}', batch_idx, run_id, len(batch_urls))
             return run_id
 
         except ApifyCreditExhaustedError:
-            logger.warning('Batch %d: key …%s credits exhausted (402), rotating', batch_idx, api_key[-4:])
+            logger.warning('Batch {}: key …{} credits exhausted (402), rotating', batch_idx, api_key[-4:])
             if key_tracker is not None:
                 key_tracker.mark_exhausted(api_key)
             continue
 
         except ApifyAuthError:
-            logger.warning('Batch %d: key …%s auth failed (401/403), rotating', batch_idx, api_key[-4:])
+            logger.warning('Batch {}: key …{} auth failed (401/403), rotating', batch_idx, api_key[-4:])
             if key_tracker is not None:
                 key_tracker.mark_invalid(api_key)
             continue
@@ -575,10 +626,10 @@ def _dispatch_batch(
         except ApifyRateLimitError:
             retries_429 += 1
             if retries_429 > _RATE_LIMIT_MAX_RETRIES:
-                logger.error('Batch %d: rate limit retries exceeded', batch_idx)
+                logger.error('Batch {}: rate limit retries exceeded', batch_idx)
                 return None
             delay = _RATE_LIMIT_BASE_DELAY * (2 ** (retries_429 - 1))
-            logger.warning('Batch %d: rate limited (429), backing off %ds', batch_idx, delay)
+            logger.warning('Batch {}: rate limited (429), backing off {}s', batch_idx, delay)
             time.sleep(delay)
             continue
 
@@ -596,7 +647,7 @@ def _poll_fetch_save(
     Does NOT write batch_fetched to state if fetch fails (enables clean resume).
     """
     status, dataset_id = client.poll_run_safe(run_id)
-    logger.info('Batch %d run %s finished: status=%s, dataset=%s', batch_idx, run_id, status, dataset_id)
+    logger.info('Batch {} run {} finished: status={}, dataset={}', batch_idx, run_id, status, dataset_id)
 
     results = client.fetch_results(dataset_id)
 
@@ -631,7 +682,7 @@ def _process_batch_results(
     Uses PostEnrichmentService.process_batch() for batch embedding and archiving
     when db_session_factory and post_enrichment_factory are provided.
     """
-    matched, _missing = _match_results(batch_urls, apify_results)
+    matched, _missing, redirects = _match_results(batch_urls, apify_results)
     enriched = 0
     failed = 0
 
@@ -648,7 +699,7 @@ def _process_batch_results(
             to_process.append((profile_id, url, matched[url]))
         else:
             failed += 1
-            logger.warning('Batch %d: no result for %s', batch_idx, url)
+            logger.warning('Batch {}: no result for {}', batch_idx, url)
             _append_state(state_path, {
                 'type': 'profile_processed',
                 'batch_idx': batch_idx,
@@ -667,12 +718,13 @@ def _process_batch_results(
                     enrichment_event_ids={},
                     skip_embeddings=skip_embeddings,
                     source='bulk_enrichment',
+                    redirects=redirects,
                 )
                 session.commit()
             enriched += batch_enriched
             failed += batch_failed
         except Exception:
-            logger.exception('Batch %d process_batch() failed entirely', batch_idx)
+            logger.exception('Batch {} process_batch() failed entirely', batch_idx)
             failed += len(to_process)
 
         for profile_id, url, _ in to_process:
