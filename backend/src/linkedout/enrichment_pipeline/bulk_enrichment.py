@@ -69,6 +69,8 @@ class BatchState:
     result_count: int | None = None
     processed_urls: set[str] = field(default_factory=set)
     completed: bool = False
+    enriched_count: int = 0
+    failed_count: int = 0
 
 
 @dataclass
@@ -123,6 +125,8 @@ def _load_state(state_path: Path) -> dict[int, BatchState]:
                     states[batch_idx].processed_urls.add(url)
             elif event_type == 'batch_completed' and batch_idx in states:
                 states[batch_idx].completed = True
+                states[batch_idx].enriched_count = event.get('enriched', 0)
+                states[batch_idx].failed_count = event.get('failed', 0)
 
     return states
 
@@ -980,3 +984,151 @@ def _rotate_state(state_path: Path) -> None:
     if prev.exists():
         prev.unlink()
     state_path.rename(prev)
+
+
+# ---------------------------------------------------------------------------
+# Recovery: re-process matching failures from prior runs
+# ---------------------------------------------------------------------------
+
+def recover_matching_failures(
+    data_dir: str | Path,
+    db_session_factory=None,
+    post_enrichment_factory=None,
+    skip_embeddings: bool = False,
+) -> RecoverySummary:
+    """Re-process profiles that failed with 'missing_from_results' in a prior run.
+
+    When URL matching improves (better normalization, redirect detection),
+    previously unmatched profiles may now match against saved Apify results.
+    This function re-runs ``_match_results`` with the current code against
+    result files on disk, and processes any newly matched profiles that are
+    still unenriched in the DB.
+
+    Reads from the ``.jsonl.prev`` state file (rotated after the prior run).
+    Only processes profiles where ``has_enriched_data = false`` in the DB —
+    already-enriched profiles are skipped even if they were previously marked
+    as failed.
+    """
+    data_dir = Path(data_dir)
+    enrichment_dir = data_dir / 'enrichment'
+    results_dir = enrichment_dir / 'results'
+    prev_path = enrichment_dir / 'enrich-state.jsonl.prev'
+
+    if not prev_path.exists():
+        return RecoverySummary()
+
+    prev_state = _load_state(prev_path)
+    if not prev_state:
+        return RecoverySummary()
+
+    # Find completed batches that had results saved to disk
+    candidates: list[tuple[int, BatchState, list[dict]]] = []
+    for batch_idx, bs in prev_state.items():
+        if not bs.completed or not bs.run_id or bs.failed_count == 0:
+            continue
+        results_data = _load_results(results_dir, bs.run_id)
+        if results_data is None:
+            continue
+        candidates.append((batch_idx, bs, results_data))
+
+    if not candidates:
+        return RecoverySummary()
+
+    # Query DB for unenriched profiles (only need to check once)
+    unenriched_profile_ids: dict[str, str] = {}  # url -> profile_id
+    if db_session_factory is not None:
+        try:
+            with db_session_factory() as session:
+                from sqlalchemy import text
+                rows = session.execute(text(
+                    "SELECT id, linkedin_url FROM crawled_profile "
+                    "WHERE has_enriched_data = false "
+                    "AND linkedin_url LIKE '%linkedin.com/%'"
+                )).fetchall()
+                for row in rows:
+                    unenriched_profile_ids[row[1]] = row[0]
+        except Exception:
+            logger.exception('Failed to query unenriched profiles for matching recovery')
+            return RecoverySummary()
+
+    if not unenriched_profile_ids:
+        return RecoverySummary()
+
+    summary = RecoverySummary()
+
+    for batch_idx, bs, results_data in candidates:
+        matched, _missing, redirects = _match_results(bs.urls, results_data)
+
+        # Find batch_started URLs that are (a) now matched and (b) still unenriched
+        to_process: list[tuple[str, str, dict]] = []
+        for url in bs.urls:
+            if url not in matched:
+                continue
+            # Check if this profile is still unenriched
+            pid = unenriched_profile_ids.get(url)
+            if pid:
+                to_process.append((pid, url, matched[url]))
+
+        if not to_process:
+            continue
+
+        logger.info(
+            'Matching recovery batch {}: {} profiles newly matched',
+            batch_idx, len(to_process),
+        )
+
+        if db_session_factory is not None and post_enrichment_factory is not None:
+            try:
+                with db_session_factory() as session:
+                    service = post_enrichment_factory(session)
+                    batch_enriched, batch_failed = service.process_batch(
+                        to_process,
+                        enrichment_event_ids={},
+                        skip_embeddings=skip_embeddings,
+                        source='matching_recovery',
+                        redirects=redirects,
+                    )
+                    session.commit()
+                summary.recovered += batch_enriched
+                summary.failed += batch_failed
+                summary.batches_recovered += 1
+            except Exception:
+                logger.exception('Matching recovery batch {} failed', batch_idx)
+                summary.failed += len(to_process)
+
+    return summary
+
+
+def check_matching_failures(data_dir: str | Path) -> int:
+    """Read-only check: how many prior 'missing_from_results' failures might
+    now match with the current URL matching code?
+
+    Returns the count of potentially recoverable profiles (for dry-run display).
+    For each completed batch with failures, re-runs ``_match_results`` with
+    current code and compares against the original enriched count.
+    """
+    data_dir = Path(data_dir)
+    enrichment_dir = data_dir / 'enrichment'
+    results_dir = enrichment_dir / 'results'
+    prev_path = enrichment_dir / 'enrich-state.jsonl.prev'
+
+    if not prev_path.exists():
+        return 0
+
+    prev_state = _load_state(prev_path)
+    recoverable = 0
+
+    for batch_idx, bs in prev_state.items():
+        if not bs.completed or not bs.run_id or bs.failed_count == 0:
+            continue
+        results_data = _load_results(results_dir, bs.run_id)
+        if results_data is None:
+            continue
+
+        matched, _missing, _redirects = _match_results(bs.urls, results_data)
+        # New matches beyond what was originally enriched
+        newly_matched = len(matched) - bs.enriched_count
+        if newly_matched > 0:
+            recoverable += newly_matched
+
+    return recoverable

@@ -16,8 +16,10 @@ from dev_tools.db.fixed_data import SYSTEM_USER_ID
 from linkedout.cli_helpers import cli_logged
 from linkedout.enrichment_pipeline.apify_client import get_platform_apify_key
 from linkedout.enrichment_pipeline.bulk_enrichment import (
+    check_matching_failures,
     check_recoverable_batches,
     recover_incomplete_batches,
+    recover_matching_failures,
 )
 from linkedout.enrichment_pipeline.post_enrichment import PostEnrichmentService
 from shared.config import get_config
@@ -92,13 +94,21 @@ def enrich_command(limit: int | None, dry_run: bool, skip_embeddings: bool):
     recovery_check = check_recoverable_batches(data_dir)
     recoverable = recovery_check.recovered  # profiles with SUCCEEDED Apify runs
 
+    # 2b. Check for recoverable matching failures from prior runs
+    matching_recoverable = check_matching_failures(data_dir)
+
     # 3. Dry-run
     if dry_run:
         click.echo(f"Dry run: {total_unenriched:,} unenriched profiles found")
-        if recoverable > 0:
-            click.echo(f"  {recoverable:,} have completed Apify runs awaiting collection (no additional cost)")
-            new_cost = (total_unenriched - recoverable) * cost_per
-            click.echo(f"  {total_unenriched - recoverable:,} need new Apify enrichment (~${new_cost:.2f})")
+        if recoverable > 0 or matching_recoverable > 0:
+            if recoverable > 0:
+                click.echo(f"  {recoverable:,} have completed Apify runs awaiting collection (no additional cost)")
+            if matching_recoverable > 0:
+                click.echo(f"  up to {matching_recoverable:,} recoverable from prior matching failures (no additional cost)")
+            free_recovery = recoverable + matching_recoverable
+            new_needed = max(0, total_unenriched - free_recovery)
+            new_cost = new_needed * cost_per
+            click.echo(f"  {new_needed:,} need new Apify enrichment (~${new_cost:.2f})")
         else:
             est_cost = total_unenriched * cost_per
             click.echo(f"Estimated cost: ${est_cost:.2f} (~${cost_per * 1000:.2f} per 1,000 profiles)")
@@ -164,6 +174,30 @@ def enrich_command(limit: int | None, dry_run: bool, skip_embeddings: bool):
             return
     if recovery.failed > 0:
         click.echo(f"  {recovery.failed:,} profiles in failed Apify batches (will retry)")
+
+    # 5b. Recover matching failures from prior runs (no Apify cost)
+    matching_recovery = recover_matching_failures(
+        data_dir=data_dir,
+        db_session_factory=db_session_factory,
+        post_enrichment_factory=post_enrichment_factory,
+        skip_embeddings=effective_skip_embeddings,
+    )
+    if matching_recovery.recovered > 0:
+        click.echo(f"Recovered {matching_recovery.recovered:,} profiles from prior matching failures")
+        # Re-query unenriched profiles
+        with db_manager.get_session(DbSessionType.READ, app_user_id=SYSTEM_USER_ID) as session:
+            rows = session.execute(text(
+                "SELECT id, linkedin_url FROM crawled_profile "
+                "WHERE has_enriched_data = false "
+                "AND linkedin_url LIKE '%linkedin.com/%'"
+            )).fetchall()
+        profiles = [(r[0], r[1]) for r in rows]
+        if limit is not None:
+            profiles = profiles[:limit]
+        total = len(profiles)
+        if total == 0:
+            click.echo("All profiles are now enriched after recovery. Nothing more to do.")
+            return
 
     # 6. Cost estimate
     est_cost = total * cost_per
