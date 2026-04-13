@@ -228,6 +228,16 @@ class TestMatchResults:
         assert len(matched) == 0
         assert missing == ['https://linkedin.com/in/alice']
 
+    def test_percent_encoded_url_matches_decoded(self):
+        """DB stores %e3%83%87, Apify returns decoded ディル — must still match."""
+        encoded_url = 'https://www.linkedin.com/in/dhirendra-singh-%e3%83%87%e3%82%a3%e3%83%ab-578b761ba'
+        decoded_url = 'https://www.linkedin.com/in/dhirendra-singh-ディル-578b761ba'
+        results = [{'linkedinUrl': decoded_url, 'firstName': 'Dhirendra'}]
+        matched, missing = _match_results([encoded_url], results)
+        assert len(matched) == 1
+        assert encoded_url in matched
+        assert missing == []
+
 
 # ---------------------------------------------------------------------------
 # _save_results / _load_results

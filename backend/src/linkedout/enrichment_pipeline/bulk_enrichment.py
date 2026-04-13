@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
+from shared.utils.linkedin_url import normalize_linkedin_url
 
 from linkedout.enrichment_pipeline.apify_client import (
     AllKeysExhaustedError,
@@ -211,26 +212,27 @@ def _match_results(
         (matched: {linkedin_url: apify_data}, missing: [urls not in results])
 
     Handles:
+        - URL percent-encoding normalization (%xx -> decoded chars)
         - Case-insensitive URL matching
         - Duplicate linkedinUrl in results (first wins)
         - Extra results not in input (ignored)
     """
-    # Build lookup: lowercase URL -> apify result (first occurrence wins)
+    # Build lookup: normalized URL -> apify result (first occurrence wins)
     result_lookup: dict[str, dict] = {}
     for item in apify_results:
         url = item.get('linkedinUrl', '')
         if not url:
             continue
-        key = url.lower().rstrip('/')
-        if key not in result_lookup:
+        key = normalize_linkedin_url(url)
+        if key and key not in result_lookup:
             result_lookup[key] = item
 
     matched: dict[str, dict] = {}
     missing: list[str] = []
 
     for url in batch_urls:
-        key = url.lower().rstrip('/')
-        if key in result_lookup:
+        key = normalize_linkedin_url(url)
+        if key and key in result_lookup:
             matched[url] = result_lookup[key]
         else:
             missing.append(url)

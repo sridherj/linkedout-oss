@@ -43,11 +43,12 @@ class TestNormalizeLinkedinUrl:
     def test_invalid_url_returns_none(self):
         assert normalize_linkedin_url('https://example.com/profile') is None
 
-    def test_url_encoded_characters_preserved(self):
+    def test_url_encoded_characters_decoded(self):
+        """Percent-encoded chars are decoded so DB-stored and Apify-returned URLs match."""
         result = normalize_linkedin_url(
             'https://www.linkedin.com/in/%f0%9f%a7%bf-test'
         )
-        assert result == 'https://www.linkedin.com/in/%f0%9f%a7%bf-test'
+        assert result == 'https://www.linkedin.com/in/\U0001f9ff-test'
 
     def test_no_scheme(self):
         assert normalize_linkedin_url(
