@@ -144,7 +144,7 @@ class _EnrichmentTriggerService:
             unenriched = self._session.execute(
                 select(CrawledProfileEntity).where(
                     CrawledProfileEntity.has_enriched_data == False,  # noqa: E712
-                    CrawledProfileEntity.linkedin_url.isnot(None),
+                    CrawledProfileEntity.linkedin_url.like('%linkedin.com/%'),
                 )
             ).scalars().all()
             profile_ids.update(p.id for p in unenriched)

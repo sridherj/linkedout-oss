@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-04-13
+
+### Fixed
+- Enrichment pipeline was sending non-LinkedIn URLs (e.g. `stub://gmail-...` from contact imports) to Apify, wasting ~$15 in failed API calls
+- Added `ApifyInvalidUrlError` guard in Apify client as defense-in-depth — raises before any HTTP call if the URL isn't a valid LinkedIn profile
+- Fixed both CLI (`linkedout enrich`) and API enrichment trigger to filter by `linkedin.com/` instead of just `IS NOT NULL`
+
 ## [0.2.0] — 2026-04-12
 
 ### Added

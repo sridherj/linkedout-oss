@@ -11,8 +11,8 @@ linked_files:
   - backend/src/utilities/llm_manager/embedding_factory.py
   - backend/src/shared/config/settings.py
   - backend/src/shared/utils/apify_archive.py
-version: 2
-last_verified: "2026-04-11"
+version: 3
+last_verified: "2026-04-13"
 ---
 
 # LinkedOut Enrichment Pipeline
@@ -27,7 +27,7 @@ Enrich LinkedIn connection profiles by crawling full profile data via Apify, the
 
 ### Enrichment Trigger
 
-- **Three target resolution methods**: Enrichment can be triggered by profile IDs, connection IDs (resolved to their linked profiles), or all_unenriched flag (selects all profiles with has_enriched_data=False and non-null linkedin_url). Targets are unioned and capped at max_count (default 100, max 1000). Verify all three methods resolve to CrawledProfile entities.
+- **Three target resolution methods**: Enrichment can be triggered by profile IDs, connection IDs (resolved to their linked profiles), or all_unenriched flag (selects all profiles with has_enriched_data=False and linkedin_url containing "linkedin.com/"). Stub URLs (e.g. `stub://gmail-...` from non-LinkedIn contact imports) are excluded. Targets are unioned and capped at max_count (default 100, max 1000). Verify all three methods resolve to CrawledProfile entities.
 
 - **90-day cache check**: Profiles with has_enriched_data=True and last_crawled_at within cache_ttl_days (default 90, configurable in settings.py) are skipped with a cache_hit enrichment event. Verify cached profiles are not re-crawled.
 
@@ -35,7 +35,7 @@ Enrich LinkedIn connection profiles by crawling full profile data via Apify, the
 
 - **Synchronous enrichment with retry**: Each non-cached profile is enriched synchronously (not via task queue) with 3 retry attempts and exponential backoff (1s, 2s, 4s). On final failure, the enrichment event is marked as 'failed'. Verify retry behavior and failure marking.
 
-> Edge: Profiles without a linkedin_url are skipped entirely (skipped_no_url counter). They cannot be enriched via Apify.
+> Edge: Profiles without a linkedin_url, or with non-LinkedIn URLs (e.g. `stub://` placeholders from contact imports), are skipped entirely (skipped_no_url counter). Only URLs containing "linkedin.com/" are sent to Apify.
 
 ### Apify Client
 

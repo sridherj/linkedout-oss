@@ -53,6 +53,10 @@ class ApifyAuthError(ApifyError):
     """HTTP 401/403 — invalid or revoked API key."""
 
 
+class ApifyInvalidUrlError(ApifyError):
+    """URL is not a valid LinkedIn profile URL — must not be sent to Apify."""
+
+
 class AllKeysExhaustedError(ApifyError):
     """All configured Apify keys are exhausted or invalid."""
 
@@ -155,6 +159,16 @@ def get_byok_apify_key(app_user_id: str, db_session: Session) -> str:
     return fernet.decrypt(config.apify_key_encrypted.encode()).decode()
 
 
+def _validate_linkedin_url(url: str) -> None:
+    """Raise ApifyInvalidUrlError if *url* is not a LinkedIn profile URL."""
+    from shared.utils.linkedin_url import normalize_linkedin_url
+
+    if normalize_linkedin_url(url) is None:
+        raise ApifyInvalidUrlError(
+            f"Not a LinkedIn URL — refusing to send to Apify: {url}"
+        )
+
+
 class LinkedOutApifyClient:
     """Client for Apify LinkedIn profile scraper actor."""
 
@@ -173,6 +187,7 @@ class LinkedOutApifyClient:
 
     def enrich_profile_sync(self, linkedin_url: str) -> Optional[dict]:
         """Synchronous single-profile enrichment. Returns raw Apify response or None."""
+        _validate_linkedin_url(linkedin_url)
         url = f'{self.base_url}/acts/{self.actor_id}/run-sync-get-dataset-items'
         resp = requests.post(
             url,
@@ -207,6 +222,8 @@ class LinkedOutApifyClient:
 
     def enrich_profiles_async(self, linkedin_urls: list[str]) -> str:
         """Start async run for multiple profiles. Returns run_id."""
+        for u in linkedin_urls:
+            _validate_linkedin_url(u)
         url = f'{self.base_url}/acts/{self.actor_id}/runs'
         resp = requests.post(
             url,

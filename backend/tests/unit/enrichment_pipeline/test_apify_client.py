@@ -9,6 +9,7 @@ from linkedout.enrichment_pipeline.apify_client import (
     ApifyAuthError,
     ApifyCreditExhaustedError,
     ApifyError,
+    ApifyInvalidUrlError,
     ApifyRateLimitError,
     LinkedOutApifyClient,
     get_byok_apify_key,
@@ -235,3 +236,54 @@ class TestEnrichProfileSyncErrors:
             result = client.enrich_profile_sync('https://linkedin.com/in/alice')
 
         assert result == {'firstName': 'Alice'}
+
+
+# ---------------------------------------------------------------------------
+# URL validation tests — defense-in-depth before Apify calls
+# ---------------------------------------------------------------------------
+
+class TestUrlValidation:
+    """Non-LinkedIn URLs must be rejected before any HTTP call to Apify."""
+
+    @pytest.mark.parametrize('bad_url', [
+        'stub://gmail-+09894689808',
+        'stub://gmail-+02261717606',
+        'https://example.com/in/someone',
+        'not-a-url',
+        '',
+        'https://linkedin.com/',          # no /in/<slug>
+        'https://linkedin.com/company/x', # company page, not profile
+    ])
+    def test_enrich_profile_sync_rejects_non_linkedin_url(self, client, bad_url):
+        with pytest.raises(ApifyInvalidUrlError, match="Not a LinkedIn URL"):
+            client.enrich_profile_sync(bad_url)
+
+    @pytest.mark.parametrize('bad_url', [
+        'stub://gmail-+09894689808',
+        'https://example.com/profile',
+        '',
+    ])
+    def test_enrich_profiles_async_rejects_non_linkedin_url(self, client, bad_url):
+        with pytest.raises(ApifyInvalidUrlError, match="Not a LinkedIn URL"):
+            client.enrich_profiles_async([bad_url])
+
+    def test_async_rejects_if_any_url_is_bad(self, client):
+        """One bad URL in a batch should fail the entire batch."""
+        with pytest.raises(ApifyInvalidUrlError):
+            client.enrich_profiles_async([
+                'https://linkedin.com/in/valid',
+                'stub://gmail-+09894689808',
+            ])
+
+    @pytest.mark.parametrize('good_url', [
+        'https://www.linkedin.com/in/janesmith',
+        'https://linkedin.com/in/janesmith',
+        'https://www.linkedin.com/in/jane-smith-123abc',
+        'https://www.linkedin.com/in/abhijit-das%f0%9f%87%ae%f0%9f%87%b3-62355a54',
+    ])
+    def test_valid_linkedin_urls_pass_validation(self, client, good_url):
+        """Valid LinkedIn URLs should not raise — verify no false positives."""
+        mock_resp = _mock_response(200, json_data=[{'firstName': 'Test'}])
+        with patch('linkedout.enrichment_pipeline.apify_client.requests.post', return_value=mock_resp):
+            result = client.enrich_profile_sync(good_url)
+        assert result is not None

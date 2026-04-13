@@ -76,7 +76,8 @@ def enrich_command(limit: int | None, dry_run: bool):
     with db_manager.get_session(DbSessionType.READ, app_user_id=SYSTEM_USER_ID) as session:
         rows = session.execute(text(
             "SELECT id, linkedin_url FROM crawled_profile "
-            "WHERE has_enriched_data = false AND linkedin_url IS NOT NULL"
+            "WHERE has_enriched_data = false "
+            "AND linkedin_url LIKE '%linkedin.com/%'"
         )).fetchall()
 
     profiles = [(r[0], r[1]) for r in rows]
