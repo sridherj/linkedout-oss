@@ -75,7 +75,7 @@ class EnrichmentConfig(BaseModel):
     cache_ttl_days: int = 90
     sync_timeout_seconds: int = 60
     async_start_timeout_seconds: int = 30
-    run_poll_timeout_seconds: int = 300
+    run_poll_timeout_seconds: int = 900
     run_poll_interval_seconds: int = 5
     fetch_results_timeout_seconds: int = 30
     key_validation_timeout_seconds: int = 15
