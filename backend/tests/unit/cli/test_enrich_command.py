@@ -30,11 +30,13 @@ def _mock_db_manager(rows):
     return mock_db
 
 
-def _mock_config(cost_per=0.004, skip_embeddings=True):
+def _mock_config(cost_per=0.004, skip_embeddings=True, data_dir=None):
     """Create a mock config with enrichment settings."""
     cfg = MagicMock()
     cfg.enrichment.cost_per_profile_usd = cost_per
     cfg.enrichment.skip_embeddings = skip_embeddings
+    # data_dir must be a real path so Path(cfg.data_dir) works
+    cfg.data_dir = data_dir or '/tmp/linkedout-test-nonexistent'
     return cfg
 
 
@@ -220,6 +222,55 @@ class TestHelpText:
     def test_help_includes_description(self, runner):
         result = runner.invoke(enrich_command, ['--help'])
         assert 'enrich' in result.output.lower() or 'Apify' in result.output
+
+
+class TestDryRunRecovery:
+    """Verify dry-run reports recoverable batches from prior incomplete runs."""
+
+    def test_dry_run_reports_recoverable_batches(self, runner):
+        """Dry-run should report profiles with completed Apify runs awaiting collection."""
+        from linkedout.enrichment_pipeline.bulk_enrichment import RecoverySummary
+        profiles = [(f'cp_{i}', f'https://linkedin.com/in/user{i}') for i in range(10)]
+        recovery = RecoverySummary(recovered=3, failed=0, still_running=0)
+
+        with patch('linkedout.commands.enrich.cli_db_manager', return_value=_mock_db_manager(profiles)), \
+             patch('linkedout.commands.enrich.get_config', return_value=_mock_config()), \
+             patch('linkedout.commands.enrich.check_recoverable_batches', return_value=recovery):
+            result = runner.invoke(enrich_command, ['--dry-run'])
+
+        assert result.exit_code == 0
+        assert '10 unenriched profiles found' in result.output
+        assert '3 have completed Apify runs awaiting collection' in result.output
+        assert '7 need new Apify enrichment' in result.output
+
+    def test_dry_run_no_recoverable(self, runner):
+        """Dry-run with no recoverable batches shows standard cost estimate."""
+        from linkedout.enrichment_pipeline.bulk_enrichment import RecoverySummary
+        profiles = [('cp_1', 'https://linkedin.com/in/alice')]
+        recovery = RecoverySummary()
+
+        with patch('linkedout.commands.enrich.cli_db_manager', return_value=_mock_db_manager(profiles)), \
+             patch('linkedout.commands.enrich.get_config', return_value=_mock_config()), \
+             patch('linkedout.commands.enrich.check_recoverable_batches', return_value=recovery):
+            result = runner.invoke(enrich_command, ['--dry-run'])
+
+        assert result.exit_code == 0
+        assert 'Dry run: 1 unenriched profiles found' in result.output
+        assert 'awaiting collection' not in result.output
+
+    def test_dry_run_reports_still_running(self, runner):
+        """Dry-run should report batches still running on Apify."""
+        from linkedout.enrichment_pipeline.bulk_enrichment import RecoverySummary
+        profiles = [(f'cp_{i}', f'https://linkedin.com/in/user{i}') for i in range(5)]
+        recovery = RecoverySummary(recovered=0, still_running=2)
+
+        with patch('linkedout.commands.enrich.cli_db_manager', return_value=_mock_db_manager(profiles)), \
+             patch('linkedout.commands.enrich.get_config', return_value=_mock_config()), \
+             patch('linkedout.commands.enrich.check_recoverable_batches', return_value=recovery):
+            result = runner.invoke(enrich_command, ['--dry-run'])
+
+        assert result.exit_code == 0
+        assert '2 in batches still running on Apify' in result.output
 
 
 class TestFormatDuration:

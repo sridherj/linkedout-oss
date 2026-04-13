@@ -25,10 +25,14 @@ from linkedout.enrichment_pipeline.bulk_enrichment import (
     _save_results,
     _load_results,
     _acquire_lock,
+    _rotate_state,
     enrich_profiles,
+    recover_incomplete_batches,
+    check_recoverable_batches,
     BatchResumeResult,
     BatchState,
     EnrichmentResult,
+    RecoverySummary,
 )
 
 
@@ -1797,3 +1801,290 @@ class TestResumeHelper:
         result = _check_batch_resume(0, ['u1'], existing_state, results_dir)
         assert result.action == 'dispatch'
         assert result.run_id is None
+
+
+# ---------------------------------------------------------------------------
+# State file rotation
+# ---------------------------------------------------------------------------
+
+class TestRotateState:
+
+    def test_rotates_to_prev(self, tmp_path):
+        state_path = tmp_path / 'enrich-state.jsonl'
+        state_path.write_text('{"type": "test"}\n')
+        _rotate_state(state_path)
+        assert not state_path.exists()
+        assert (tmp_path / 'enrich-state.jsonl.prev').exists()
+
+    def test_overwrites_existing_prev(self, tmp_path):
+        state_path = tmp_path / 'enrich-state.jsonl'
+        prev_path = tmp_path / 'enrich-state.jsonl.prev'
+        prev_path.write_text('old\n')
+        state_path.write_text('new\n')
+        _rotate_state(state_path)
+        assert prev_path.read_text() == 'new\n'
+        assert not state_path.exists()
+
+
+# ---------------------------------------------------------------------------
+# check_recoverable_batches (read-only)
+# ---------------------------------------------------------------------------
+
+class TestCheckRecoverableBatches:
+
+    def test_no_state_file(self, tmp_path):
+        summary = check_recoverable_batches(tmp_path)
+        assert summary.recovered == 0
+        assert summary.still_running == 0
+
+    def test_all_completed(self, tmp_path):
+        """All batches completed → nothing recoverable."""
+        state_path = tmp_path / 'enrichment' / 'enrich-state.jsonl'
+        state_path.parent.mkdir(parents=True)
+        _append_state(state_path, {
+            'type': 'batch_started', 'batch_idx': 0,
+            'run_id': 'r0', 'urls': ['u1'],
+        })
+        _append_state(state_path, {
+            'type': 'batch_completed', 'batch_idx': 0,
+            'enriched': 1, 'failed': 0,
+        })
+        summary = check_recoverable_batches(tmp_path)
+        assert summary.recovered == 0
+
+    @patch('linkedout.enrichment_pipeline.bulk_enrichment.LinkedOutApifyClient')
+    @patch('linkedout.enrichment_pipeline.bulk_enrichment.get_platform_apify_key',
+           return_value='test-key')
+    def test_succeeded_run_reported(self, _mock_key, mock_client_cls, tmp_path):
+        """Incomplete batch with SUCCEEDED Apify run → reported as recoverable."""
+        state_path = tmp_path / 'enrichment' / 'enrich-state.jsonl'
+        state_path.parent.mkdir(parents=True)
+        _append_state(state_path, {
+            'type': 'batch_started', 'batch_idx': 0,
+            'run_id': 'r0', 'urls': ['u1', 'u2', 'u3'],
+        })
+
+        mock_client = MagicMock()
+        mock_client.check_run_status.return_value = ('SUCCEEDED', 'ds0')
+        mock_client_cls.return_value = mock_client
+
+        summary = check_recoverable_batches(tmp_path)
+        assert summary.recovered == 3
+        assert summary.failed == 0
+        # Read-only: state file should NOT be modified
+        states = _load_state(state_path)
+        assert not states[0].completed
+
+    @patch('linkedout.enrichment_pipeline.bulk_enrichment.LinkedOutApifyClient')
+    @patch('linkedout.enrichment_pipeline.bulk_enrichment.get_platform_apify_key',
+           return_value='test-key')
+    def test_still_running_reported(self, _mock_key, mock_client_cls, tmp_path):
+        """Incomplete batch still running → reported as still_running."""
+        state_path = tmp_path / 'enrichment' / 'enrich-state.jsonl'
+        state_path.parent.mkdir(parents=True)
+        _append_state(state_path, {
+            'type': 'batch_started', 'batch_idx': 0,
+            'run_id': 'r0', 'urls': ['u1', 'u2'],
+        })
+
+        mock_client = MagicMock()
+        mock_client.check_run_status.return_value = None  # still running
+        mock_client_cls.return_value = mock_client
+
+        summary = check_recoverable_batches(tmp_path)
+        assert summary.still_running == 2
+        assert summary.recovered == 0
+
+
+# ---------------------------------------------------------------------------
+# recover_incomplete_batches
+# ---------------------------------------------------------------------------
+
+class TestRecoverIncompleteBatches:
+
+    def _write_state(self, tmp_path, events):
+        """Helper to write state events and create directory structure."""
+        enrichment_dir = tmp_path / 'enrichment'
+        enrichment_dir.mkdir(parents=True, exist_ok=True)
+        (enrichment_dir / 'results').mkdir(exist_ok=True)
+        state_path = enrichment_dir / 'enrich-state.jsonl'
+        for event in events:
+            _append_state(state_path, event)
+        return state_path
+
+    @patch('linkedout.enrichment_pipeline.bulk_enrichment.LinkedOutApifyClient')
+    @patch('linkedout.enrichment_pipeline.bulk_enrichment.get_platform_apify_key',
+           return_value='test-key')
+    def test_recover_succeeded_batches(self, _mock_key, mock_client_cls, tmp_path):
+        """SUCCEEDED Apify runs → results fetched, processed, state updated."""
+        self._write_state(tmp_path, [
+            {'type': 'batch_started', 'batch_idx': 0,
+             'run_id': 'r0', 'urls': ['https://linkedin.com/in/alice', 'https://linkedin.com/in/bob']},
+            {'type': 'batch_started', 'batch_idx': 1,
+             'run_id': 'r1', 'urls': ['https://linkedin.com/in/carol']},
+            # batch 1 completed, batch 0 did not
+            {'type': 'batch_completed', 'batch_idx': 1, 'enriched': 1, 'failed': 0},
+        ])
+
+        mock_client = MagicMock()
+        mock_client.check_run_status.return_value = ('SUCCEEDED', 'ds0')
+        mock_client.fetch_results.return_value = [
+            {'linkedinUrl': 'https://linkedin.com/in/alice', 'firstName': 'Alice'},
+            {'linkedinUrl': 'https://linkedin.com/in/bob', 'firstName': 'Bob'},
+        ]
+        mock_client_cls.return_value = mock_client
+
+        # Mock DB session factory
+        mock_session = MagicMock()
+        mock_session.execute.return_value.fetchall.return_value = [
+            ('cp_1', 'https://linkedin.com/in/alice'),
+            ('cp_2', 'https://linkedin.com/in/bob'),
+        ]
+
+        @contextmanager
+        def mock_db_factory():
+            yield mock_session
+
+        mock_post_service = MagicMock()
+        mock_post_service.process_batch.return_value = (2, 0)  # 2 enriched, 0 failed
+
+        summary = recover_incomplete_batches(
+            data_dir=tmp_path,
+            db_session_factory=mock_db_factory,
+            post_enrichment_factory=lambda session: mock_post_service,
+        )
+
+        assert summary.recovered == 2
+        assert summary.batches_recovered == 1
+        assert summary.failed == 0
+        # State file should be rotated (all resolved)
+        assert not (tmp_path / 'enrichment' / 'enrich-state.jsonl').exists()
+        assert (tmp_path / 'enrichment' / 'enrich-state.jsonl.prev').exists()
+
+    @patch('linkedout.enrichment_pipeline.bulk_enrichment.LinkedOutApifyClient')
+    @patch('linkedout.enrichment_pipeline.bulk_enrichment.get_platform_apify_key',
+           return_value='test-key')
+    def test_recover_failed_batches(self, _mock_key, mock_client_cls, tmp_path):
+        """FAILED Apify run → marked failed, profiles not processed."""
+        self._write_state(tmp_path, [
+            {'type': 'batch_started', 'batch_idx': 0,
+             'run_id': 'r0', 'urls': ['u1', 'u2']},
+        ])
+
+        mock_client = MagicMock()
+        mock_client.check_run_status.return_value = ('FAILED', 'ds0')
+        mock_client_cls.return_value = mock_client
+
+        summary = recover_incomplete_batches(data_dir=tmp_path)
+
+        assert summary.failed == 2
+        assert summary.recovered == 0
+        # State file should have batch_completed with 0 enriched
+        states = _load_state(tmp_path / 'enrichment' / 'enrich-state.jsonl.prev')
+        assert states[0].completed
+
+    @patch('linkedout.enrichment_pipeline.bulk_enrichment.LinkedOutApifyClient')
+    @patch('linkedout.enrichment_pipeline.bulk_enrichment.get_platform_apify_key',
+           return_value='test-key')
+    def test_recover_still_running(self, _mock_key, mock_client_cls, tmp_path):
+        """Still-running batch → skipped, state file NOT rotated."""
+        state_path = self._write_state(tmp_path, [
+            {'type': 'batch_started', 'batch_idx': 0,
+             'run_id': 'r0', 'urls': ['u1']},
+        ])
+
+        mock_client = MagicMock()
+        mock_client.check_run_status.return_value = None  # still running
+        mock_client_cls.return_value = mock_client
+
+        summary = recover_incomplete_batches(data_dir=tmp_path)
+
+        assert summary.still_running == 1
+        assert summary.recovered == 0
+        # State file should NOT be rotated
+        assert state_path.exists()
+
+    @patch('linkedout.enrichment_pipeline.bulk_enrichment.LinkedOutApifyClient')
+    @patch('linkedout.enrichment_pipeline.bulk_enrichment.get_platform_apify_key',
+           return_value='test-key')
+    def test_recover_mixed(self, _mock_key, mock_client_cls, tmp_path):
+        """One SUCCEEDED, one FAILED, one RUNNING → each handled correctly."""
+        url1 = 'https://linkedin.com/in/alice'
+        url2 = 'https://linkedin.com/in/bob'
+        url3 = 'https://linkedin.com/in/carol'
+        url4 = 'https://linkedin.com/in/dave'
+        url5 = 'https://linkedin.com/in/eve'
+
+        self._write_state(tmp_path, [
+            {'type': 'batch_started', 'batch_idx': 0,
+             'run_id': 'r0', 'urls': [url1, url2]},
+            {'type': 'batch_started', 'batch_idx': 1,
+             'run_id': 'r1', 'urls': [url3]},
+            {'type': 'batch_started', 'batch_idx': 2,
+             'run_id': 'r2', 'urls': [url4, url5]},
+        ])
+
+        mock_client = MagicMock()
+
+        def side_effect(run_id):
+            if run_id == 'r0':
+                return ('SUCCEEDED', 'ds0')
+            elif run_id == 'r1':
+                return ('FAILED', 'ds1')
+            else:
+                return None  # still running
+
+        mock_client.check_run_status.side_effect = side_effect
+        mock_client.fetch_results.return_value = [
+            {'linkedinUrl': url1, 'firstName': 'Alice'},
+            {'linkedinUrl': url2, 'firstName': 'Bob'},
+        ]
+        mock_client_cls.return_value = mock_client
+
+        mock_session = MagicMock()
+        mock_session.execute.return_value.fetchall.return_value = [
+            ('cp_1', url1), ('cp_2', url2),
+        ]
+
+        @contextmanager
+        def mock_db_factory():
+            yield mock_session
+
+        mock_post_service = MagicMock()
+        mock_post_service.process_batch.return_value = (2, 0)
+
+        summary = recover_incomplete_batches(
+            data_dir=tmp_path,
+            db_session_factory=mock_db_factory,
+            post_enrichment_factory=lambda session: mock_post_service,
+        )
+
+        assert summary.recovered == 2
+        assert summary.failed == 1
+        assert summary.still_running == 2
+        assert summary.batches_recovered == 1
+        # State NOT rotated (batch 2 still running)
+        assert (tmp_path / 'enrichment' / 'enrich-state.jsonl').exists()
+
+    def test_no_state_file(self, tmp_path):
+        """No state file → empty summary, no errors."""
+        summary = recover_incomplete_batches(data_dir=tmp_path)
+        assert summary.recovered == 0
+        assert summary.failed == 0
+
+    def test_all_completed_rotates_state(self, tmp_path):
+        """All batches completed → state rotated on recovery call."""
+        self._write_state(tmp_path, [
+            {'type': 'batch_started', 'batch_idx': 0,
+             'run_id': 'r0', 'urls': ['u1']},
+            {'type': 'batch_completed', 'batch_idx': 0,
+             'enriched': 1, 'failed': 0},
+        ])
+        state_path = tmp_path / 'enrichment' / 'enrich-state.jsonl'
+        assert state_path.exists()
+
+        summary = recover_incomplete_batches(data_dir=tmp_path)
+
+        assert summary.recovered == 0
+        assert not state_path.exists()
+        assert (tmp_path / 'enrichment' / 'enrich-state.jsonl.prev').exists()

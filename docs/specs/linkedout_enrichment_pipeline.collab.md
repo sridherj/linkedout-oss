@@ -12,13 +12,14 @@ linked_files:
   - backend/src/utilities/llm_manager/embedding_factory.py
   - backend/src/shared/config/settings.py
   - backend/src/shared/utils/apify_archive.py
-version: 5
+version: 6
 last_verified: "2026-04-13"
 ---
 
 # LinkedOut Enrichment Pipeline
 
 **Created:** 2026-04-09 — Adapted from internal spec to OSS implementation
+**Updated:** 2026-04-13 — Added pre-run recovery sweep, state rotation, dry-run recovery awareness
 
 ## Intent
 
@@ -64,9 +65,17 @@ Enrich LinkedIn connection profiles by crawling full profile data via Apify, the
 
 - **Per-batch error isolation**: Each `check_run_status()` and `fetch_results()` call is wrapped in try/except. One batch's HTTP error does not affect other batches in the same poll cycle — the errored batch is retried next cycle. Verify that a poll error for one batch does not block processing of another batch that completed in the same cycle.
 
-- **Timeout per batch**: Each inflight batch tracks its dispatch time. If `time.time() - dispatch_time > run_poll_timeout_seconds`, the batch is removed from inflight (not re-dispatched). It remains in state as `batch_started` and can be resumed in a future run. Verify that timed-out batches do not block other inflight batches.
+- **Timeout per batch**: Each inflight batch tracks its dispatch time. If `time.time() - dispatch_time > run_poll_timeout_seconds`, the batch is removed from inflight (not re-dispatched) and logged as a warning (not an error) with a note that recovery will be attempted on next run. It remains in state as `batch_started` and can be resumed in a future run. Verify that timed-out batches do not block other inflight batches.
 
 - **Key exhaustion handling**: If all keys become exhausted or invalid during the fill phase, dispatch stops (`stopped_reason = 'all_keys_exhausted'`). If all keys die during the poll phase, the loop breaks — inflight batches are tracked in state for future resume. Verify that key exhaustion stops new dispatches but does not lose track of inflight batches.
+
+- **Pre-run recovery sweep**: Before querying for unenriched profiles, `recover_incomplete_batches()` scans the state file for batches with `batch_started` but no `batch_completed`. For each incomplete batch, it checks Apify run status: SUCCEEDED runs have their results fetched and processed, FAILED/ABORTED/TIMED-OUT runs are marked failed, and still-running batches are skipped. Uses URLs from the state file (not a fresh DB query) to avoid index collisions. Returns a `RecoverySummary` with recovered, failed, still_running, and batches_recovered counts. After recovery, the DB is re-queried to exclude profiles that were just recovered. Verify that a crash mid-batch followed by re-run completes the batch without re-dispatching to Apify.
+
+- **State file rotation after recovery**: When `recover_incomplete_batches()` resolves all prior batches (none still running), it renames the state file from `.jsonl` to `.jsonl.prev` via `_rotate_state()`. This prevents batch index collisions between the old run's indices and the new run's indices. If any batches are still running, rotation is deferred to the next invocation. Verify that rotation only occurs when no batches remain in-flight.
+
+- **Dry-run awareness of recoverable batches**: In dry-run mode, `check_recoverable_batches()` performs a read-only scan of the state file and checks Apify run statuses without fetching results or writing state. The dry-run output reports recoverable and still-running counts separately from truly unenriched profiles. Verify that dry-run does not modify the state file or fetch Apify dataset results.
+
+- **RecoverySummary dataclass**: Recovery functions return a `RecoverySummary(recovered, failed, still_running, batches_recovered)` dataclass summarizing the outcome. This is used by both the full run (to log results) and the dry run (to report counts). Verify all four fields are populated accurately.
 
 ### Post-Enrichment Processing
 

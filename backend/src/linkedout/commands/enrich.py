@@ -15,6 +15,10 @@ from sqlalchemy import text
 from dev_tools.db.fixed_data import SYSTEM_USER_ID
 from linkedout.cli_helpers import cli_logged
 from linkedout.enrichment_pipeline.apify_client import get_platform_apify_key
+from linkedout.enrichment_pipeline.bulk_enrichment import (
+    check_recoverable_batches,
+    recover_incomplete_batches,
+)
 from linkedout.enrichment_pipeline.post_enrichment import PostEnrichmentService
 from shared.config import get_config
 from shared.infra.db.cli_db import cli_db_manager
@@ -83,11 +87,23 @@ def enrich_command(limit: int | None, dry_run: bool, skip_embeddings: bool):
         profiles = profiles[:limit]
     total = len(profiles)
 
-    # 2. Dry-run
+    # 2. Check for recoverable batches from prior incomplete runs
+    data_dir = Path(cfg.data_dir)
+    recovery_check = check_recoverable_batches(data_dir)
+    recoverable = recovery_check.recovered  # profiles with SUCCEEDED Apify runs
+
+    # 3. Dry-run
     if dry_run:
-        est_cost = total_unenriched * cost_per
         click.echo(f"Dry run: {total_unenriched:,} unenriched profiles found")
-        click.echo(f"Estimated cost: ${est_cost:.2f} (~${cost_per * 1000:.2f} per 1,000 profiles)")
+        if recoverable > 0:
+            click.echo(f"  {recoverable:,} have completed Apify runs awaiting collection (no additional cost)")
+            new_cost = (total_unenriched - recoverable) * cost_per
+            click.echo(f"  {total_unenriched - recoverable:,} need new Apify enrichment (~${new_cost:.2f})")
+        else:
+            est_cost = total_unenriched * cost_per
+            click.echo(f"Estimated cost: ${est_cost:.2f} (~${cost_per * 1000:.2f} per 1,000 profiles)")
+        if recovery_check.still_running > 0:
+            click.echo(f"  {recovery_check.still_running:,} in batches still running on Apify")
         click.echo()
         click.echo("Run `linkedout enrich` to start enrichment.")
         click.echo("Run `linkedout enrich --limit 1000` to enrich a subset.")
@@ -105,12 +121,9 @@ def enrich_command(limit: int | None, dry_run: bool, skip_embeddings: bool):
         click.echo("Configure in secrets.yaml, .env, or environment variables.")
         raise SystemExit(1)
 
-    # 4. Cost estimate
+    # 4. Set up factories (needed for both recovery and main pipeline)
     effective_skip_embeddings = skip_embeddings or cfg.enrichment.skip_embeddings
-    est_cost = total * cost_per
-    click.echo(f"Enriching {total:,} profiles (~${est_cost:.2f})")
 
-    # 5. Set up embedding provider (unless --skip-embeddings)
     embedding_provider = None
     if not effective_skip_embeddings:
         from utilities.llm_manager.embedding_factory import get_embedding_provider
@@ -120,12 +133,41 @@ def enrich_command(limit: int | None, dry_run: bool, skip_embeddings: bool):
             click.echo(f"Warning: Could not initialize embedding provider: {e}")
             click.echo("Continuing without embeddings. Run `linkedout embed` later.")
 
-    # 6. Session factory + post-enrichment factory for the pipeline
     def db_session_factory():
         return db_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID)
 
     def post_enrichment_factory(session):
         return PostEnrichmentService(session, embedding_provider=embedding_provider)
+
+    # 5. Recover incomplete batches from prior runs (no Apify cost)
+    recovery = recover_incomplete_batches(
+        data_dir=data_dir,
+        db_session_factory=db_session_factory,
+        post_enrichment_factory=post_enrichment_factory,
+        skip_embeddings=effective_skip_embeddings,
+    )
+    if recovery.recovered > 0:
+        click.echo(f"Recovered {recovery.recovered:,} profiles from prior incomplete run")
+        # Re-query unenriched profiles (some are now enriched)
+        with db_manager.get_session(DbSessionType.READ, app_user_id=SYSTEM_USER_ID) as session:
+            rows = session.execute(text(
+                "SELECT id, linkedin_url FROM crawled_profile "
+                "WHERE has_enriched_data = false "
+                "AND linkedin_url LIKE '%linkedin.com/%'"
+            )).fetchall()
+        profiles = [(r[0], r[1]) for r in rows]
+        if limit is not None:
+            profiles = profiles[:limit]
+        total = len(profiles)
+        if total == 0:
+            click.echo("All profiles are now enriched after recovery. Nothing more to do.")
+            return
+    if recovery.failed > 0:
+        click.echo(f"  {recovery.failed:,} profiles in failed Apify batches (will retry)")
+
+    # 6. Cost estimate
+    est_cost = total * cost_per
+    click.echo(f"Enriching {total:,} profiles (~${est_cost:.2f})")
 
     # 7. Progress callback
     def on_progress(enriched, failed, total_profiles, batch_idx):
@@ -144,7 +186,7 @@ def enrich_command(limit: int | None, dry_run: bool, skip_embeddings: bool):
             f"({pct:.1f}%) | ${cost_so_far:.2f} | {remaining_str}"
         )
 
-    # 8. Run the pipeline
+    # 8. Run the pipeline (new batches only — recovery already handled above)
     from linkedout.enrichment_pipeline.bulk_enrichment import enrich_profiles
 
     result = enrich_profiles(

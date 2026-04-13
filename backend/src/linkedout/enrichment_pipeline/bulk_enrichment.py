@@ -533,7 +533,11 @@ def enrich_profiles(
             for batch_idx in list(inflight):
                 run_id, batch_urls, dispatch_time = inflight[batch_idx]
                 if time.time() - dispatch_time > poll_timeout:
-                    logger.error('Batch {} timed out (run {})', batch_idx, run_id)
+                    logger.warning(
+                        'Batch {} poll timed out (run {}). Results may still arrive — '
+                        'will attempt recovery on next run.',
+                        batch_idx, run_id,
+                    )
                     del inflight[batch_idx]
 
             # ── Sleep before next poll cycle ──
@@ -758,3 +762,221 @@ def _process_batch_results(
             })
 
     return enriched, failed
+
+
+# ---------------------------------------------------------------------------
+# Recovery: collect results from incomplete prior runs
+# ---------------------------------------------------------------------------
+
+@dataclass
+class RecoverySummary:
+    """Result of a pre-run recovery sweep."""
+
+    recovered: int = 0           # profiles successfully processed
+    failed: int = 0              # profiles in FAILED/ABORTED Apify batches
+    still_running: int = 0       # profiles in batches still running on Apify
+    batches_recovered: int = 0   # batches fully recovered
+
+
+def check_recoverable_batches(
+    data_dir: str | Path,
+    api_key: str | None = None,
+) -> RecoverySummary:
+    """Read-only check: how many profiles have uncollected Apify results?
+
+    Checks the state file for incomplete batches and queries Apify for their
+    status. Does NOT fetch results or write to the state file.
+    """
+    data_dir = Path(data_dir)
+    state_path = data_dir / 'enrichment' / 'enrich-state.jsonl'
+    existing_state = _load_state(state_path)
+
+    incomplete = {
+        idx: bs for idx, bs in existing_state.items()
+        if not bs.completed and bs.run_id
+    }
+    if not incomplete:
+        return RecoverySummary()
+
+    if api_key is None:
+        try:
+            api_key = get_platform_apify_key()
+        except (ValueError, AllKeysExhaustedError):
+            # Can't check Apify — report all incomplete as unknown
+            total_urls = sum(len(bs.urls) for bs in incomplete.values())
+            return RecoverySummary(still_running=total_urls)
+
+    client = LinkedOutApifyClient(api_key)
+    summary = RecoverySummary()
+
+    for batch_idx, batch_state in incomplete.items():
+        n_urls = len(batch_state.urls)
+        try:
+            result = client.check_run_status(batch_state.run_id)
+        except Exception:
+            summary.still_running += n_urls
+            continue
+
+        if result is None:
+            # Still running
+            summary.still_running += n_urls
+        else:
+            status, _dataset_id = result
+            if status == 'SUCCEEDED':
+                summary.recovered += n_urls
+            else:
+                summary.failed += n_urls
+
+    return summary
+
+
+def recover_incomplete_batches(
+    data_dir: str | Path,
+    db_session_factory=None,
+    post_enrichment_factory=None,
+    skip_embeddings: bool = False,
+    api_key: str | None = None,
+) -> RecoverySummary:
+    """Recover results from incomplete batches in a prior run.
+
+    Scans the state file for batches that were dispatched (batch_started) but
+    never completed (no batch_completed).  For each, checks Apify status and
+    fetches/processes results if the run succeeded.
+
+    Uses URLs stored in the state file's batch_started events — not the current
+    DB query — so recovery works even when the unenriched profile list has
+    changed between runs.
+
+    After all incomplete batches are resolved (none still running), the state
+    file is rotated to ``.jsonl.prev`` so the next run starts clean.
+    """
+    data_dir = Path(data_dir)
+    enrichment_dir = data_dir / 'enrichment'
+    results_dir = enrichment_dir / 'results'
+    state_path = enrichment_dir / 'enrich-state.jsonl'
+
+    existing_state = _load_state(state_path)
+
+    incomplete = {
+        idx: bs for idx, bs in existing_state.items()
+        if not bs.completed and bs.run_id
+    }
+    if not incomplete:
+        # Nothing to recover — rotate if all completed
+        if existing_state and all(bs.completed for bs in existing_state.values()):
+            _rotate_state(state_path)
+        return RecoverySummary()
+
+    if api_key is None:
+        try:
+            api_key = get_platform_apify_key()
+        except (ValueError, AllKeysExhaustedError):
+            logger.warning('Cannot recover: no Apify API key available')
+            return RecoverySummary()
+
+    client = LinkedOutApifyClient(api_key)
+    summary = RecoverySummary()
+
+    # Build profile_id lookup from the state file URLs
+    # We need profile_ids to process results — query DB for the URLs we care about
+    all_recovery_urls: set[str] = set()
+    for bs in incomplete.values():
+        all_recovery_urls.update(bs.urls)
+
+    profile_id_by_url: dict[str, str] = {}
+    if db_session_factory is not None and all_recovery_urls:
+        try:
+            with db_session_factory() as session:
+                from sqlalchemy import text
+                rows = session.execute(text(
+                    "SELECT id, linkedin_url FROM crawled_profile "
+                    "WHERE is_active = true"
+                )).fetchall()
+                for row in rows:
+                    if row[1] in all_recovery_urls:
+                        profile_id_by_url[row[1]] = row[0]
+        except Exception:
+            logger.exception('Failed to query profile IDs for recovery')
+            return RecoverySummary()
+
+    for batch_idx, batch_state in incomplete.items():
+        n_urls = len(batch_state.urls)
+        run_id = batch_state.run_id
+
+        try:
+            result = client.check_run_status(run_id)
+        except Exception:
+            logger.warning('Batch {} recovery: poll failed for run {}', batch_idx, run_id)
+            summary.still_running += n_urls
+            continue
+
+        if result is None:
+            logger.info('Batch {} recovery: run {} still running, skipping', batch_idx, run_id)
+            summary.still_running += n_urls
+            continue
+
+        status, dataset_id = result
+
+        if status != 'SUCCEEDED':
+            logger.warning('Batch {} recovery: run {} status={}, marking failed', batch_idx, run_id, status)
+            _append_state(state_path, {
+                'type': 'batch_completed', 'batch_idx': batch_idx,
+                'enriched': 0, 'failed': n_urls,
+            })
+            summary.failed += n_urls
+            continue
+
+        # SUCCEEDED — fetch and process
+        logger.info('Batch {} recovery: run {} succeeded, fetching {} results', batch_idx, run_id, n_urls)
+
+        # Try disk cache first, then Apify
+        results_data = _load_results(results_dir, run_id)
+        if results_data is None:
+            try:
+                results_data = client.fetch_results(dataset_id)
+                _save_results(results_dir, run_id, results_data)
+            except Exception:
+                logger.exception('Batch {} recovery: fetch failed for run {}', batch_idx, run_id)
+                summary.still_running += n_urls  # might succeed later
+                continue
+
+        _append_state(state_path, {
+            'type': 'batch_fetched', 'batch_idx': batch_idx,
+            'run_id': run_id, 'dataset_id': dataset_id,
+            'run_status': status, 'result_count': len(results_data),
+        })
+
+        enriched, failed = _process_batch_results(
+            batch_idx=batch_idx,
+            batch_urls=batch_state.urls,
+            apify_results=results_data,
+            profile_id_by_url=profile_id_by_url,
+            already_processed=batch_state.processed_urls,
+            state_path=state_path,
+            db_session_factory=db_session_factory,
+            post_enrichment_factory=post_enrichment_factory,
+            skip_embeddings=skip_embeddings,
+        )
+
+        _append_state(state_path, {
+            'type': 'batch_completed', 'batch_idx': batch_idx,
+            'enriched': enriched, 'failed': failed,
+        })
+
+        summary.recovered += enriched
+        summary.failed += failed
+        summary.batches_recovered += 1
+
+    # Rotate state file if everything is resolved
+    if summary.still_running == 0 and state_path.exists():
+        _rotate_state(state_path)
+
+    return summary
+
+
+def _rotate_state(state_path: Path) -> None:
+    """Rotate state file to .jsonl.prev so next run starts clean."""
+    prev = state_path.with_suffix('.jsonl.prev')
+    if prev.exists():
+        prev.unlink()
+    state_path.rename(prev)
