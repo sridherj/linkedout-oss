@@ -255,6 +255,37 @@ class LinkedOutApifyClient:
             elapsed += poll_interval
         raise TimeoutError(f'Apify run {run_id} did not complete within {timeout}s')
 
+    def poll_run_safe(self, run_id: str, timeout: int | None = None, poll_interval: int | None = None) -> tuple[str, str]:
+        """Poll until run reaches a terminal state. Returns (status, dataset_id).
+
+        Unlike poll_run(), this method does NOT raise on FAILED/ABORTED/TIMED-OUT.
+        It always returns the dataset_id (which Apify allocates at run creation,
+        regardless of outcome) so the caller can fetch partial results.
+
+        Returns:
+            Tuple of (status, dataset_id) where status is one of:
+            SUCCEEDED, FAILED, ABORTED, TIMED-OUT
+
+        Raises:
+            TimeoutError: If the run does not reach a terminal state within timeout.
+        """
+        if timeout is None:
+            timeout = self._cfg.run_poll_timeout_seconds
+        if poll_interval is None:
+            poll_interval = self._cfg.run_poll_interval_seconds
+        url = f'{self.base_url}/actor-runs/{run_id}'
+        elapsed = 0
+        while elapsed < timeout:
+            resp = requests.get(url, params={'token': self.api_key}, timeout=15)
+            resp.raise_for_status()
+            data = resp.json()['data']
+            status = data['status']
+            if status in ('SUCCEEDED', 'FAILED', 'ABORTED', 'TIMED-OUT'):
+                return (status, data['defaultDatasetId'])
+            time.sleep(poll_interval)
+            elapsed += poll_interval
+        raise TimeoutError(f'Apify run {run_id} did not complete within {timeout}s')
+
     def fetch_results(self, dataset_id: str) -> list[dict]:
         """Fetch results from a completed dataset."""
         url = f'{self.base_url}/datasets/{dataset_id}/items'

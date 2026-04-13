@@ -52,3 +52,47 @@ def append_apify_archive(
 
     except Exception:
         logger.warning('Failed to archive Apify response for %s', linkedin_url, exc_info=True)
+
+
+def append_apify_archive_batch(
+    entries: list[dict],
+    source: str,
+    data_dir: str | Path | None = None,
+) -> None:
+    """Append multiple raw Apify responses to the JSONL archive in one I/O cycle.
+
+    Each entry in the list should be a dict with keys:
+        - linkedin_url: str
+        - apify_data: dict
+
+    Fire-and-forget: failures are logged but never raised.
+
+    Args:
+        entries: List of dicts, each with 'linkedin_url' and 'apify_data' keys.
+        source: Which flow triggered this (e.g. 'bulk_enrichment').
+        data_dir: Override data directory. If None, resolved from settings.
+    """
+    if not entries:
+        return
+
+    try:
+        if data_dir is None:
+            from shared.config import get_config
+            data_dir = get_config().data_dir
+
+        archive_dir = Path(data_dir).expanduser() / 'crawled'
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        archive_path = archive_dir / ARCHIVE_FILENAME
+
+        with open(archive_path, 'a', encoding='utf-8') as f:
+            for entry in entries:
+                line = json.dumps({
+                    'archived_at': datetime.now(timezone.utc).isoformat(),
+                    'linkedin_url': entry['linkedin_url'],
+                    'source': source,
+                    'data': entry['apify_data'],
+                }, ensure_ascii=False, default=str)
+                f.write(line + '\n')
+
+    except Exception:
+        logger.warning('Failed to batch-archive %d Apify responses', len(entries), exc_info=True)

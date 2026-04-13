@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for the Apify JSONL archive utility."""
 import json
+from unittest.mock import patch
 
-from shared.utils.apify_archive import append_apify_archive
+from shared.utils.apify_archive import append_apify_archive, append_apify_archive_batch
 
 SAMPLE_URL = 'https://www.linkedin.com/in/jdoe'
 SAMPLE_DATA = {
@@ -81,3 +82,50 @@ def test_data_fidelity(tmp_path):
     assert line['data'] == complex_data
     assert line['data']['firstName'] == 'Ren\u00e9'
     assert line['data']['location']['parsed']['city'] == 'Z\u00fcrich'
+
+
+# ---------------------------------------------------------------------------
+# append_apify_archive_batch() tests
+# ---------------------------------------------------------------------------
+
+class TestAppendApifyArchiveBatch:
+    """Tests for batch archive writes."""
+
+    def test_batch_writes_multiple_entries(self, tmp_path):
+        """Batch call writes all entries in one I/O cycle with correct fields."""
+        entries = [
+            {'linkedin_url': 'https://linkedin.com/in/alice', 'apify_data': {'firstName': 'Alice'}},
+            {'linkedin_url': 'https://linkedin.com/in/bob', 'apify_data': {'firstName': 'Bob'}},
+            {'linkedin_url': 'https://linkedin.com/in/carol', 'apify_data': {'firstName': 'Carol'}},
+        ]
+
+        append_apify_archive_batch(entries, source='bulk_enrichment', data_dir=tmp_path)
+
+        archive = tmp_path / 'crawled' / 'apify-responses.jsonl'
+        assert archive.exists()
+
+        lines = [json.loads(l) for l in archive.read_text().strip().splitlines()]
+        assert len(lines) == 3
+
+        for i, line in enumerate(lines):
+            assert line['linkedin_url'] == entries[i]['linkedin_url']
+            assert line['source'] == 'bulk_enrichment'
+            assert line['data'] == entries[i]['apify_data']
+            assert 'T' in line['archived_at']
+
+    def test_empty_entries_is_noop(self, tmp_path):
+        """Empty entries list does not create any file."""
+        append_apify_archive_batch([], source='bulk_enrichment', data_dir=tmp_path)
+
+        archive = tmp_path / 'crawled' / 'apify-responses.jsonl'
+        assert not archive.exists()
+
+    def test_fire_and_forget_on_failure(self, tmp_path):
+        """Write failure does not raise — logs warning instead."""
+        entries = [
+            {'linkedin_url': 'https://linkedin.com/in/alice', 'apify_data': {'firstName': 'Alice'}},
+        ]
+
+        with patch('builtins.open', side_effect=PermissionError('denied')):
+            # Should not raise
+            append_apify_archive_batch(entries, source='bulk_enrichment', data_dir=tmp_path)

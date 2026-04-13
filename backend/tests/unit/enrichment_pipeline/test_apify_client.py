@@ -287,3 +287,69 @@ class TestUrlValidation:
         with patch('linkedout.enrichment_pipeline.apify_client.requests.post', return_value=mock_resp):
             result = client.enrich_profile_sync(good_url)
         assert result is not None
+
+
+# ---------------------------------------------------------------------------
+# poll_run_safe() tests
+# ---------------------------------------------------------------------------
+
+class TestPollRunSafe:
+    """Tests for poll_run_safe() — returns (status, dataset_id) without raising."""
+
+    def test_succeeded_returns_status_and_dataset_id(self, client):
+        mock_resp = _mock_response(200, json_data={
+            'data': {'status': 'SUCCEEDED', 'defaultDatasetId': 'ds_123'},
+        })
+
+        with patch('linkedout.enrichment_pipeline.apify_client.requests.get', return_value=mock_resp):
+            status, dataset_id = client.poll_run_safe('run_abc', timeout=10)
+
+        assert status == 'SUCCEEDED'
+        assert dataset_id == 'ds_123'
+
+    def test_failed_returns_without_raising(self, client):
+        running_resp = _mock_response(200, json_data={
+            'data': {'status': 'RUNNING', 'defaultDatasetId': 'ds_456'},
+        })
+        failed_resp = _mock_response(200, json_data={
+            'data': {'status': 'FAILED', 'defaultDatasetId': 'ds_456'},
+        })
+
+        with patch('linkedout.enrichment_pipeline.apify_client.requests.get', side_effect=[running_resp, failed_resp]):
+            with patch('linkedout.enrichment_pipeline.apify_client.time.sleep'):
+                status, dataset_id = client.poll_run_safe('run_abc', timeout=30, poll_interval=5)
+
+        assert status == 'FAILED'
+        assert dataset_id == 'ds_456'
+
+    def test_aborted_returns_without_raising(self, client):
+        aborted_resp = _mock_response(200, json_data={
+            'data': {'status': 'ABORTED', 'defaultDatasetId': 'ds_789'},
+        })
+
+        with patch('linkedout.enrichment_pipeline.apify_client.requests.get', return_value=aborted_resp):
+            status, dataset_id = client.poll_run_safe('run_abc', timeout=10)
+
+        assert status == 'ABORTED'
+        assert dataset_id == 'ds_789'
+
+    def test_timed_out_returns_without_raising(self, client):
+        timed_out_resp = _mock_response(200, json_data={
+            'data': {'status': 'TIMED-OUT', 'defaultDatasetId': 'ds_to'},
+        })
+
+        with patch('linkedout.enrichment_pipeline.apify_client.requests.get', return_value=timed_out_resp):
+            status, dataset_id = client.poll_run_safe('run_abc', timeout=10)
+
+        assert status == 'TIMED-OUT'
+        assert dataset_id == 'ds_to'
+
+    def test_polling_timeout_raises_timeout_error(self, client):
+        running_resp = _mock_response(200, json_data={
+            'data': {'status': 'RUNNING', 'defaultDatasetId': 'ds_nope'},
+        })
+
+        with patch('linkedout.enrichment_pipeline.apify_client.requests.get', return_value=running_resp):
+            with patch('linkedout.enrichment_pipeline.apify_client.time.sleep'):
+                with pytest.raises(TimeoutError, match='did not complete within'):
+                    client.poll_run_safe('run_abc', timeout=2, poll_interval=1)

@@ -17,11 +17,11 @@ from linkedout.crawled_profile.schemas.crawled_profile_api_schema import (
 from linkedout.crawled_profile.services.profile_enrichment_service import ProfileEnrichmentService
 from linkedout.enrichment_event.entities.enrichment_event_entity import EnrichmentEventEntity
 from linkedout.role_alias.repositories.role_alias_repository import RoleAliasRepository
-from shared.utils.apify_archive import append_apify_archive
+from shared.utils.apify_archive import append_apify_archive, append_apify_archive_batch
 from shared.utils.company_matcher import CompanyMatcher
 from shared.utils.company_resolver import resolve_company
 from shared.utils.date_parsing import parse_month_name
-from utilities.llm_manager.embedding_provider import EmbeddingProvider
+from utilities.llm_manager.embedding_provider import EmbeddingProvider, build_embedding_text
 from shared.utilities.logger import get_logger
 
 logger = get_logger(__name__, component="enrichment")
@@ -58,9 +58,10 @@ class PostEnrichmentService:
     def process_enrichment_result(
         self,
         apify_data: dict,
-        enrichment_event_id: str,
+        enrichment_event_id: str | None,
         linkedin_url: str,
         source: str = 'enrichment',
+        skip_archive: bool = False,
     ) -> None:
         """Process a single Apify profile result.
 
@@ -71,7 +72,8 @@ class PostEnrichmentService:
         4. Update enrichment event to completed
         """
         # 0. Archive raw Apify response before any DB work
-        append_apify_archive(linkedin_url, apify_data, source=source)
+        if not skip_archive:
+            append_apify_archive(linkedin_url, apify_data, source=source)
 
         # 1. Race condition guard — re-check cache
         profile = self._session.execute(
@@ -258,11 +260,124 @@ class PostEnrichmentService:
         profile.last_crawled_at = datetime.now(timezone.utc)
         profile.data_source = 'apify'
 
-    def _update_enrichment_event(self, event_id: str, event_type: str, cost: float) -> None:
+    def _update_enrichment_event(self, event_id: str | None, event_type: str, cost: float) -> None:
         """Update an enrichment event status."""
+        if event_id is None:
+            return
         event = self._session.execute(
             select(EnrichmentEventEntity).where(EnrichmentEventEntity.id == event_id)
         ).scalar_one_or_none()
         if event:
             event.event_type = event_type
             event.cost_estimate_usd = cost
+
+    def process_batch(
+        self,
+        results: list[tuple[str, str, dict]],
+        enrichment_event_ids: dict[str, str],
+        skip_embeddings: bool = False,
+        source: str = 'bulk_enrichment',
+    ) -> tuple[int, int]:
+        """Process a batch of Apify results with batched embedding and archiving.
+
+        Flow:
+        1. Per-profile DB writes via process_enrichment_result() (embedding disabled)
+        2. Batch embedding (unless skip_embeddings)
+        3. Batch JSONL archive
+
+        Returns:
+            (enriched_count, failed_count)
+        """
+        # Temporarily disable embedding for per-profile processing (batch later)
+        original_provider = self._embedding_provider
+        self._embedding_provider = None
+
+        enriched_profiles: list[tuple[str, str]] = []
+        archive_entries: list[dict] = []
+        enriched = 0
+        failed = 0
+
+        for profile_id, linkedin_url, apify_data in results:
+            try:
+                with self._session.begin_nested():
+                    event_id = enrichment_event_ids.get(linkedin_url)
+                    self.process_enrichment_result(
+                        apify_data, event_id, linkedin_url,
+                        source=source, skip_archive=True,
+                    )
+                enriched += 1
+                enriched_profiles.append((profile_id, linkedin_url))
+                archive_entries.append({
+                    'linkedin_url': linkedin_url,
+                    'apify_data': apify_data,
+                })
+            except Exception as e:
+                failed += 1
+                logger.error("Failed to process %s: %s", linkedin_url, e)
+
+        # Restore embedding provider
+        self._embedding_provider = original_provider
+
+        # Step 2: Batch embedding
+        if not skip_embeddings and self._embedding_provider and enriched_profiles:
+            try:
+                from utilities.llm_manager.embedding_factory import get_embedding_column_name
+
+                profile_entities = []
+                texts = []
+                for profile_id, linkedin_url in enriched_profiles:
+                    profile = self._session.execute(
+                        select(CrawledProfileEntity).where(
+                            CrawledProfileEntity.id == profile_id
+                        )
+                    ).scalar_one_or_none()
+                    if profile:
+                        exp_dicts = [
+                            {'company_name': exp.company_name or '', 'title': exp.position or ''}
+                            for exp in profile.experiences
+                        ]
+                        profile_dict = {
+                            'full_name': profile.full_name,
+                            'headline': profile.headline,
+                            'about': profile.about,
+                            'experiences': exp_dicts,
+                        }
+                        text = build_embedding_text(profile_dict)
+                        if text.strip():
+                            profile_entities.append(profile)
+                            texts.append(text)
+
+                if texts:
+                    vectors = self._embedding_provider.embed(texts)
+                    column_name = get_embedding_column_name(self._embedding_provider)
+                    for profile, vector in zip(profile_entities, vectors):
+                        setattr(profile, column_name, vector)
+                        profile.embedding_model = self._embedding_provider.model_name()
+                        profile.embedding_dim = self._embedding_provider.dimension()
+                        profile.embedding_updated_at = datetime.now(timezone.utc)
+                    self._session.flush()
+            except Exception as e:
+                logger.error("Batch embedding failed: %s", e)
+                for profile_id, _ in enriched_profiles:
+                    self._log_failed_embedding_entry(profile_id, str(e))
+
+        # Step 3: Batch JSONL archive
+        if archive_entries:
+            append_apify_archive_batch(archive_entries, source=source)
+
+        return enriched, failed
+
+    def _log_failed_embedding_entry(self, profile_id: str, error: str) -> None:
+        """Log a failed embedding to the JSONL file for later retry."""
+        from linkedout.crawled_profile.services.profile_enrichment_service import FAILED_EMBEDDINGS_PATH
+        entry = {
+            'profile_id': profile_id,
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'error': error,
+        }
+        try:
+            FAILED_EMBEDDINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+            with open(FAILED_EMBEDDINGS_PATH, 'a') as f:
+                f.write(json.dumps(entry) + '\n')
+        except Exception as e:
+            logger.error('Failed to log embedding failure: %s', e)

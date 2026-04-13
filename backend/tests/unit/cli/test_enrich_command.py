@@ -2,12 +2,11 @@
 """Unit tests for the ``linkedout enrich`` CLI command.
 
 Tests cover dry-run output, limit option, empty state, missing Apify key,
-signal handler (Ctrl+C), and progress line format.
+skip-embeddings flag, progress callback, and summary output format.
 """
 from __future__ import annotations
 
-import signal
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
@@ -31,11 +30,24 @@ def _mock_db_manager(rows):
     return mock_db
 
 
-def _mock_config(cost_per=0.004):
+def _mock_config(cost_per=0.004, skip_embeddings=True):
     """Create a mock config with enrichment settings."""
     cfg = MagicMock()
     cfg.enrichment.cost_per_profile_usd = cost_per
+    cfg.enrichment.skip_embeddings = skip_embeddings
     return cfg
+
+
+def _mock_enrich_result(enriched=0, failed=0, batches_completed=0,
+                        batches_total=0, stopped_reason=None):
+    """Create a mock EnrichmentResult."""
+    result = MagicMock()
+    result.enriched = enriched
+    result.failed = failed
+    result.batches_completed = batches_completed
+    result.batches_total = batches_total
+    result.stopped_reason = stopped_reason
+    return result
 
 
 class TestDryRun:
@@ -72,40 +84,14 @@ class TestLimitOption:
     """Verify --limit restricts the number of profiles enriched."""
 
     def test_limit_restricts_enrichment_count(self, runner):
-        """--limit N should only enrich N profiles."""
+        """--limit N should only pass N profiles to the pipeline."""
         profiles = [(f'cp_{i}', f'https://linkedin.com/in/user{i}') for i in range(10)]
-        enriched_count = 0
+        mock_result = _mock_enrich_result(enriched=3, batches_completed=1, batches_total=1)
 
-        def mock_enrich_sync(url):
-            nonlocal enriched_count
-            enriched_count += 1
-            return {'firstName': 'Test', 'lastName': 'User'}
-
-        mock_client = MagicMock()
-        mock_client.enrich_profile_sync.side_effect = mock_enrich_sync
-
-        mock_write_session = MagicMock()
-        # Make flush set a fake id on the event
-        def flush_side_effect():
-            for c in mock_write_session.add.call_args_list:
-                obj = c[0][0]
-                if not hasattr(obj, 'id') or obj.id is None:
-                    obj.id = 'ee_fake_001'
-        mock_write_session.flush.side_effect = flush_side_effect
-
-        mock_db = MagicMock()
-        # First call is READ (query), subsequent are WRITE (per-profile)
-        read_session = MagicMock()
-        read_session.execute.return_value.fetchall.return_value = profiles
-
-        mock_db.get_session.return_value.__enter__ = MagicMock(side_effect=[read_session] + [mock_write_session] * 3)
-        mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
-
-        with patch('linkedout.commands.enrich.cli_db_manager', return_value=mock_db), \
+        with patch('linkedout.commands.enrich.cli_db_manager', return_value=_mock_db_manager(profiles)), \
              patch('linkedout.commands.enrich.get_config', return_value=_mock_config()), \
              patch('linkedout.commands.enrich.get_platform_apify_key', return_value='fake_key'), \
-             patch('linkedout.commands.enrich.LinkedOutApifyClient', return_value=mock_client), \
-             patch('linkedout.commands.enrich.PostEnrichmentService') as mock_pes, \
+             patch('linkedout.enrichment_pipeline.bulk_enrichment.enrich_profiles', return_value=mock_result) as mock_enrich, \
              patch('linkedout.commands.enrich.record_metric'), \
              patch('linkedout.commands.enrich.OperationReport') as mock_report:
             mock_report.return_value.save.return_value = MagicMock(
@@ -114,7 +100,9 @@ class TestLimitOption:
             result = runner.invoke(enrich_command, ['--limit', '3'])
 
         assert result.exit_code == 0
-        assert enriched_count == 3
+        # Verify enrich_profiles was called with only 3 profiles
+        call_args = mock_enrich.call_args
+        assert len(call_args.kwargs['profiles']) == 3
 
 
 class TestEmptyState:
@@ -148,88 +136,44 @@ class TestMissingApifyKey:
         assert 'secrets.yaml' in result.output
 
 
-class TestSignalHandler:
-    """Verify Ctrl+C produces a clean exit with partial progress."""
+class TestSkipEmbeddings:
+    """Verify --skip-embeddings flag behavior."""
 
-    def test_interrupt_shows_partial_progress(self, runner):
-        """Ctrl+C during enrichment should show partial progress summary."""
-        profiles = [(f'cp_{i}', f'https://linkedin.com/in/user{i}') for i in range(100)]
-        call_count = 0
+    def test_skip_embeddings_next_steps(self, runner):
+        """--skip-embeddings should include embed in next steps."""
+        profiles = [('cp_1', 'https://linkedin.com/in/alice')]
+        mock_result = _mock_enrich_result(enriched=1, batches_completed=1, batches_total=1)
 
-        def mock_enrich(url):
-            nonlocal call_count
-            call_count += 1
-            if call_count >= 3:
-                # Simulate Ctrl+C by raising KeyboardInterrupt via signal handler
-                import os
-                os.kill(os.getpid(), signal.SIGINT)
-            return {'firstName': 'Test'}
-
-        mock_client = MagicMock()
-        mock_client.enrich_profile_sync.side_effect = mock_enrich
-
-        mock_write_session = MagicMock()
-        def flush_side_effect():
-            for c in mock_write_session.add.call_args_list:
-                obj = c[0][0]
-                if not hasattr(obj, 'id') or obj.id is None:
-                    obj.id = 'ee_fake'
-        mock_write_session.flush.side_effect = flush_side_effect
-
-        mock_db = MagicMock()
-        read_session = MagicMock()
-        read_session.execute.return_value.fetchall.return_value = profiles
-
-        mock_db.get_session.return_value.__enter__ = MagicMock(
-            side_effect=[read_session] + [mock_write_session] * 100
-        )
-        mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
-
-        with patch('linkedout.commands.enrich.cli_db_manager', return_value=mock_db), \
+        with patch('linkedout.commands.enrich.cli_db_manager', return_value=_mock_db_manager(profiles)), \
              patch('linkedout.commands.enrich.get_config', return_value=_mock_config()), \
              patch('linkedout.commands.enrich.get_platform_apify_key', return_value='fake_key'), \
-             patch('linkedout.commands.enrich.LinkedOutApifyClient', return_value=mock_client), \
-             patch('linkedout.commands.enrich.PostEnrichmentService') as mock_pes, \
+             patch('linkedout.enrichment_pipeline.bulk_enrichment.enrich_profiles', return_value=mock_result), \
              patch('linkedout.commands.enrich.record_metric'), \
-             patch('linkedout.commands.enrich.OperationReport'):
-            result = runner.invoke(enrich_command, [])
+             patch('linkedout.commands.enrich.OperationReport') as mock_report:
+            mock_report.return_value.save.return_value = MagicMock(
+                relative_to=MagicMock(return_value='linkedout-data/reports/enrich.json')
+            )
+            result = runner.invoke(enrich_command, ['--skip-embeddings'])
 
-        assert 'Interrupted' in result.output
+        assert result.exit_code == 0
+        assert 'linkedout embed' in result.output
 
 
-class TestProgressLineFormat:
-    """Verify progress lines follow the expected format."""
+class TestSummaryOutput:
+    """Verify summary output for various pipeline results."""
 
-    def test_progress_lines_emitted(self, runner):
-        """Progress lines should appear with count, percentage, cost, and timing."""
-        # Create exactly 25 profiles so we get one progress line at the boundary
-        profiles = [(f'cp_{i}', f'https://linkedin.com/in/user{i}') for i in range(25)]
-
-        mock_client = MagicMock()
-        mock_client.enrich_profile_sync.return_value = {'firstName': 'Test'}
-
-        mock_write_session = MagicMock()
-        def flush_side_effect():
-            for c in mock_write_session.add.call_args_list:
-                obj = c[0][0]
-                if not hasattr(obj, 'id') or obj.id is None:
-                    obj.id = 'ee_fake'
-        mock_write_session.flush.side_effect = flush_side_effect
-
-        mock_db = MagicMock()
-        read_session = MagicMock()
-        read_session.execute.return_value.fetchall.return_value = profiles
-
-        mock_db.get_session.return_value.__enter__ = MagicMock(
-            side_effect=[read_session] + [mock_write_session] * 25
+    def test_all_keys_exhausted(self, runner):
+        """Should show 'all API keys exhausted' when pipeline stops for that reason."""
+        profiles = [('cp_1', 'https://linkedin.com/in/alice')]
+        mock_result = _mock_enrich_result(
+            enriched=0, failed=1, batches_completed=0, batches_total=1,
+            stopped_reason='all_keys_exhausted',
         )
-        mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch('linkedout.commands.enrich.cli_db_manager', return_value=mock_db), \
+        with patch('linkedout.commands.enrich.cli_db_manager', return_value=_mock_db_manager(profiles)), \
              patch('linkedout.commands.enrich.get_config', return_value=_mock_config()), \
              patch('linkedout.commands.enrich.get_platform_apify_key', return_value='fake_key'), \
-             patch('linkedout.commands.enrich.LinkedOutApifyClient', return_value=mock_client), \
-             patch('linkedout.commands.enrich.PostEnrichmentService') as mock_pes, \
+             patch('linkedout.enrichment_pipeline.bulk_enrichment.enrich_profiles', return_value=mock_result), \
              patch('linkedout.commands.enrich.record_metric'), \
              patch('linkedout.commands.enrich.OperationReport') as mock_report:
             mock_report.return_value.save.return_value = MagicMock(
@@ -238,10 +182,29 @@ class TestProgressLineFormat:
             result = runner.invoke(enrich_command, [])
 
         assert result.exit_code == 0
-        # Should contain progress line with 25/25 and percentage
-        assert '25/25' in result.output
-        assert '100.0%' in result.output
-        assert 'spent' in result.output
+        assert 'all API keys exhausted' in result.output
+
+    def test_successful_enrichment_summary(self, runner):
+        """Successful run should show enriched/failed counts and batch info."""
+        profiles = [(f'cp_{i}', f'https://linkedin.com/in/user{i}') for i in range(5)]
+        mock_result = _mock_enrich_result(
+            enriched=4, failed=1, batches_completed=1, batches_total=1,
+        )
+
+        with patch('linkedout.commands.enrich.cli_db_manager', return_value=_mock_db_manager(profiles)), \
+             patch('linkedout.commands.enrich.get_config', return_value=_mock_config()), \
+             patch('linkedout.commands.enrich.get_platform_apify_key', return_value='fake_key'), \
+             patch('linkedout.enrichment_pipeline.bulk_enrichment.enrich_profiles', return_value=mock_result), \
+             patch('linkedout.commands.enrich.record_metric'), \
+             patch('linkedout.commands.enrich.OperationReport') as mock_report:
+            mock_report.return_value.save.return_value = MagicMock(
+                relative_to=MagicMock(return_value='linkedout-data/reports/enrich.json')
+            )
+            result = runner.invoke(enrich_command, [])
+
+        assert result.exit_code == 0
+        assert '4' in result.output
+        assert '1/1 batches' in result.output
 
 
 class TestHelpText:
@@ -252,6 +215,7 @@ class TestHelpText:
         assert result.exit_code == 0
         assert '--limit' in result.output
         assert '--dry-run' in result.output
+        assert '--skip-embeddings' in result.output
 
     def test_help_includes_description(self, runner):
         result = runner.invoke(enrich_command, ['--help'])
@@ -272,3 +236,19 @@ class TestFormatDuration:
     def test_hours(self):
         from linkedout.commands.enrich import _format_duration
         assert _format_duration(3661) == "1h 1m"
+
+
+class TestBuildNextSteps:
+    """Test the _build_next_steps helper."""
+
+    def test_with_embeddings(self):
+        from linkedout.commands.enrich import _build_next_steps
+        steps = _build_next_steps(skip_embeddings=False)
+        assert len(steps) == 1
+        assert 'affinity' in steps[0]
+
+    def test_without_embeddings(self):
+        from linkedout.commands.enrich import _build_next_steps
+        steps = _build_next_steps(skip_embeddings=True)
+        assert len(steps) == 2
+        assert 'embed' in steps[0]

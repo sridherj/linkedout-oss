@@ -1,25 +1,20 @@
 # SPDX-License-Identifier: Apache-2.0
 """``linkedout enrich`` — enrich unenriched LinkedIn profiles via Apify.
 
-Queries ``crawled_profile`` rows that lack enrichment data, calls the Apify
-LinkedIn scraper for each, and processes the results into relational data.
-Supports ``--dry-run`` for cost estimation and ``--limit`` for partial runs.
+Queries ``crawled_profile`` rows that lack enrichment data, dispatches batched
+async enrichment via the Apify LinkedIn scraper, and processes results into
+relational data. Supports ``--dry-run`` for cost estimation, ``--limit`` for
+partial runs, and ``--skip-embeddings`` to defer embedding generation.
 """
-import os
-import signal
 import time
 from pathlib import Path
 
 import click
 from sqlalchemy import text
 
-from dev_tools.db.fixed_data import SYSTEM_BU, SYSTEM_TENANT, SYSTEM_USER_ID
+from dev_tools.db.fixed_data import SYSTEM_USER_ID
 from linkedout.cli_helpers import cli_logged
-from linkedout.enrichment_event.entities.enrichment_event_entity import EnrichmentEventEntity
-from linkedout.enrichment_pipeline.apify_client import (
-    LinkedOutApifyClient,
-    get_platform_apify_key,
-)
+from linkedout.enrichment_pipeline.apify_client import get_platform_apify_key
 from linkedout.enrichment_pipeline.post_enrichment import PostEnrichmentService
 from shared.config import get_config
 from shared.infra.db.cli_db import cli_db_manager
@@ -29,12 +24,6 @@ from shared.utilities.metrics import record_metric
 from shared.utilities.operation_report import OperationCounts, OperationReport
 
 logger = get_logger(__name__, component="cli", operation="enrich")
-
-APP_USER_ID = SYSTEM_USER_ID
-TENANT_ID = SYSTEM_TENANT['id']
-BU_ID = SYSTEM_BU['id']
-
-PROGRESS_INTERVAL = 25
 
 
 def _format_duration(seconds: float) -> str:
@@ -50,13 +39,13 @@ def _format_duration(seconds: float) -> str:
     return f"{hours}h {mins}m"
 
 
-def _get_reports_dir() -> Path:
-    """Return the reports directory path."""
-    reports_dir = os.environ.get(
-        'LINKEDOUT_REPORTS_DIR',
-        str(Path.home() / 'linkedout-data' / 'reports'),
-    )
-    return Path(reports_dir)
+def _build_next_steps(skip_embeddings: bool) -> list[str]:
+    """Build next-steps list based on whether embeddings were skipped."""
+    steps = []
+    if skip_embeddings:
+        steps.append("Run `linkedout embed` to generate embeddings for semantic search")
+    steps.append("Run `linkedout compute-affinity` to calculate affinity scores")
+    return steps
 
 
 @click.command('enrich')
@@ -64,8 +53,10 @@ def _get_reports_dir() -> Path:
               help='Max profiles to enrich (default: all unenriched)')
 @click.option('--dry-run', is_flag=True,
               help='Count unenriched profiles, estimate cost, exit without calling Apify')
+@click.option('--skip-embeddings', is_flag=True,
+              help='Skip embedding generation (can be done later with `linkedout embed`)')
 @cli_logged("enrich")
-def enrich_command(limit: int | None, dry_run: bool):
+def enrich_command(limit: int | None, dry_run: bool, skip_embeddings: bool):
     """Enrich unenriched LinkedIn profiles via Apify."""
     db_manager = cli_db_manager()
     cfg = get_config()
@@ -102,7 +93,7 @@ def enrich_command(limit: int | None, dry_run: bool):
         click.echo("Run `linkedout enrich --limit 1000` to enrich a subset.")
         return
 
-    # 3. Get Apify key (fail early with clean message)
+    # 3. Validate API key (fail early)
     try:
         get_platform_apify_key()
     except ValueError:
@@ -114,128 +105,98 @@ def enrich_command(limit: int | None, dry_run: bool):
         click.echo("Configure in secrets.yaml, .env, or environment variables.")
         raise SystemExit(1)
 
-    # 4. Print cost estimate
+    # 4. Cost estimate
+    effective_skip_embeddings = skip_embeddings or cfg.enrichment.skip_embeddings
     est_cost = total * cost_per
-    click.echo(f"Estimated cost: ~${est_cost:.2f} (~${cost_per * 1000:.2f} per 1,000 profiles)")
-    click.echo()
+    click.echo(f"Enriching {total:,} profiles (~${est_cost:.2f})")
 
-    # 5. Enrichment loop with Ctrl+C safety
-    enriched = 0
-    failed = 0
-    cost_so_far = 0.0
-    interrupted = False
+    # 5. Set up embedding provider (unless --skip-embeddings)
+    embedding_provider = None
+    if not effective_skip_embeddings:
+        from utilities.llm_manager.embedding_factory import get_embedding_provider
+        try:
+            embedding_provider = get_embedding_provider()
+        except Exception as e:
+            click.echo(f"Warning: Could not initialize embedding provider: {e}")
+            click.echo("Continuing without embeddings. Run `linkedout embed` later.")
 
-    def _on_interrupt(signum, frame):
-        nonlocal interrupted
-        interrupted = True
+    # 6. Session factory + post-enrichment factory for the pipeline
+    def db_session_factory():
+        return db_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID)
 
-    old_handler = signal.signal(signal.SIGINT, _on_interrupt)
+    def post_enrichment_factory(session):
+        return PostEnrichmentService(session, embedding_provider=embedding_provider)
 
-    click.echo("Enriching profiles...")
-    try:
-        for i, (profile_id, linkedin_url) in enumerate(profiles):
-            if interrupted:
-                break
-
-            try:
-                api_key = get_platform_apify_key()
-                client = LinkedOutApifyClient(api_key)
-                apify_data = client.enrich_profile_sync(linkedin_url)
-
-                if apify_data is not None:
-                    with db_manager.get_session(DbSessionType.WRITE, app_user_id=SYSTEM_USER_ID) as session:
-                        event = EnrichmentEventEntity(
-                            tenant_id=TENANT_ID,
-                            bu_id=BU_ID,
-                            app_user_id=APP_USER_ID,
-                            crawled_profile_id=profile_id,
-                            event_type='queued',
-                            enrichment_mode='platform',
-                            crawler_name='apify',
-                            cost_estimate_usd=0.0,
-                        )
-                        session.add(event)
-                        session.flush()
-
-                        service = PostEnrichmentService(session, embedding_provider=None)
-                        service.process_enrichment_result(apify_data, event.id, linkedin_url)
-
-                    enriched += 1
-                    cost_so_far += cost_per
-                else:
-                    failed += 1
-                    logger.warning(f"Apify returned None for {linkedin_url}")
-
-            except Exception as e:
-                failed += 1
-                logger.error(f"Enrichment failed for {linkedin_url}: {e}")
-
-            # Progress reporting every PROGRESS_INTERVAL profiles
-            done = i + 1
-            if done % PROGRESS_INTERVAL == 0 or done == total:
-                elapsed = time.time() - start_time
-                pct = done / total * 100
-                if done < total and elapsed > 0:
-                    rate = elapsed / done
-                    remaining = rate * (total - done)
-                    remaining_str = f"~{_format_duration(remaining)} remaining"
-                else:
-                    remaining_str = "done"
-                click.echo(
-                    f"  [{done:>{len(str(total))}}/{total}] "
-                    f"{pct:5.1f}% | ${cost_so_far:.2f} spent | "
-                    f"{elapsed:.0f}s elapsed | {remaining_str}"
-                )
-    finally:
-        signal.signal(signal.SIGINT, old_handler)
-
-    elapsed = time.time() - start_time
-
-    if interrupted:
+    # 7. Progress callback
+    def on_progress(enriched, failed, total_profiles, batch_idx):
+        elapsed = time.time() - start_time
+        done = enriched + failed
+        pct = done / total_profiles * 100 if total_profiles else 0
+        cost_so_far = enriched * cost_per
+        if done < total_profiles and elapsed > 0:
+            rate = elapsed / done
+            remaining = rate * (total_profiles - done)
+            remaining_str = f"~{_format_duration(remaining)} remaining"
+        else:
+            remaining_str = "done"
         click.echo(
-            f"\nInterrupted. {enriched:,}/{total:,} profiles enriched "
-            f"(${cost_so_far:.2f})."
+            f"  Batch {batch_idx}: {done}/{total_profiles} "
+            f"({pct:.1f}%) | ${cost_so_far:.2f} | {remaining_str}"
         )
-        return
 
-    # 6. Record metric
-    record_metric(
-        "profiles_enriched", enriched,
-        duration_ms=elapsed * 1000, failed=failed,
+    # 8. Run the pipeline
+    from linkedout.enrichment_pipeline.bulk_enrichment import enrich_profiles
+
+    result = enrich_profiles(
+        profiles=profiles,
+        db_session_factory=db_session_factory,
+        post_enrichment_factory=post_enrichment_factory,
+        embedding_provider=embedding_provider,
+        skip_embeddings=effective_skip_embeddings,
+        on_progress=on_progress,
     )
 
-    # 7. Build and save operation report
+    # 9. Summary
+    elapsed = time.time() - start_time
+    cost_total = result.enriched * cost_per
+
+    if result.stopped_reason == "all_keys_exhausted":
+        click.echo("\nStopped: all API keys exhausted.")
+    elif result.stopped_reason == "interrupted":
+        click.echo("\nInterrupted by user.")
+
+    click.echo(
+        f"\nEnrichment complete: {result.enriched:,} enriched, "
+        f"{result.failed:,} failed ({result.batches_completed}/{result.batches_total} batches) "
+        f"(${cost_total:.2f}, {_format_duration(elapsed)})"
+    )
+
+    # 10. Metrics + report
+    record_metric(
+        "profiles_enriched", result.enriched,
+        duration_ms=elapsed * 1000, failed=result.failed,
+    )
+
     report = OperationReport(
         operation="enrich",
         duration_ms=elapsed * 1000,
         counts=OperationCounts(
             total=total,
-            succeeded=enriched,
+            succeeded=result.enriched,
             skipped=0,
-            failed=failed,
+            failed=result.failed,
         ),
-        next_steps=[
-            "Run `linkedout embed` to generate embeddings for semantic search",
-            "Run `linkedout compute-affinity` to calculate affinity scores",
-        ],
+        next_steps=_build_next_steps(effective_skip_embeddings),
     )
     report_path = report.save()
 
-    # 8. Final summary
-    click.echo(
-        f"\nEnrichment complete: {enriched:,} profiles enriched "
-        f"(${cost_so_far:.2f}, {_format_duration(elapsed)})"
-    )
-    click.echo()
-    click.echo("Next steps:")
-    click.echo("  -> Run `linkedout embed` to generate embeddings for semantic search")
-    click.echo("  -> Run `linkedout compute-affinity` to calculate affinity scores")
+    # 11. Next steps
+    click.echo("\nNext steps:")
+    for step in _build_next_steps(effective_skip_embeddings):
+        click.echo(f"  -> {step}")
 
     try:
         display = '~/' + str(report_path.relative_to(Path.home()))
     except ValueError:
         display = str(report_path)
     click.echo(f"\nReport saved: {display}")
-
-    # Suppress unused var warning
-    _ = report

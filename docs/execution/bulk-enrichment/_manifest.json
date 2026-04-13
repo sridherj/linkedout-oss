@@ -1,0 +1,35 @@
+{
+  "project": "bulk-enrichment",
+  "plan": "docs/plan/2026-04-13-bulk-enrichment.collab.md",
+  "sub_phases": [
+    {
+      "id": "sp1",
+      "title": "Foundation",
+      "file": "sp1-foundation.ai.md",
+      "depends_on": [],
+      "description": "poll_run_safe(), settings additions, append_apify_archive_batch()"
+    },
+    {
+      "id": "sp2",
+      "title": "Core Pipeline",
+      "file": "sp2-core-pipeline.ai.md",
+      "depends_on": ["sp1"],
+      "description": "New bulk_enrichment.py with state file, lock file, chunking, dispatch-poll-fetch-process loop"
+    },
+    {
+      "id": "sp3",
+      "title": "Integration",
+      "file": "sp3-integration.ai.md",
+      "depends_on": ["sp1", "sp2"],
+      "description": "process_batch() in post_enrichment.py + rewrite commands/enrich.py"
+    },
+    {
+      "id": "sp4",
+      "title": "Tests",
+      "file": "sp4-tests.ai.md",
+      "depends_on": ["sp1", "sp2", "sp3"],
+      "description": "FakeApify + 28 test cases (T1-T28)"
+    }
+  ],
+  "dependency_chain": "sp1 -> sp2 -> sp3 -> sp4"
+}

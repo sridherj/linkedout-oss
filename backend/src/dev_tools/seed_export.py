@@ -26,7 +26,7 @@ from shared.infra.db.cli_db import cli_db_manager
 from shared.infra.db.db_session_manager import DbSessionType
 from shared.utils.checksum import compute_sha256
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 
 # Tables in FK-safe order — company/reference data only.
 # Profile data (crawled_profile, experience, education, profile_skill) ships

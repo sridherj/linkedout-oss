@@ -79,6 +79,8 @@ class EnrichmentConfig(BaseModel):
     run_poll_interval_seconds: int = 5
     fetch_results_timeout_seconds: int = 30
     key_validation_timeout_seconds: int = 15
+    max_batch_size: int = 100
+    skip_embeddings: bool = False
 
 
 class LLMConfig(BaseModel):
