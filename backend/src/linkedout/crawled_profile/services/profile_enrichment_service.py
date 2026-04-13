@@ -40,14 +40,24 @@ class ProfileEnrichmentService:
     - JSONL failure logging for failed embeddings (Q2)
     """
 
-    def __init__(self, session: Session, embedding_provider: Optional[EmbeddingProvider] = None):
+    def __init__(
+        self,
+        session: Session,
+        embedding_provider: Optional[EmbeddingProvider] = None,
+        company_matcher: CompanyMatcher | None = None,
+        company_by_canonical: dict[str, CompanyEntity] | None = None,
+    ):
         self._session = session
         self._repository = CrawledProfileRepository(session)
         self._embedding_provider = embedding_provider
         self._role_alias_repo = RoleAliasRepository(session)
-        self._company_matcher = CompanyMatcher()
-        self._company_by_canonical: dict[str, CompanyEntity] = {}
-        self._preload_companies()
+        if company_matcher is not None:
+            self._company_matcher = company_matcher
+            self._company_by_canonical = company_by_canonical or {}
+        else:
+            self._company_matcher = CompanyMatcher()
+            self._company_by_canonical = {}
+            self._preload_companies()
 
     def _preload_companies(self) -> None:
         """Load existing companies into matcher for dedup."""

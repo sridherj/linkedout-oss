@@ -12,7 +12,7 @@ linked_files:
   - backend/src/utilities/llm_manager/embedding_factory.py
   - backend/src/shared/config/settings.py
   - backend/src/shared/utils/apify_archive.py
-version: 6
+version: 7
 last_verified: "2026-04-13"
 ---
 
@@ -81,7 +81,7 @@ Enrich LinkedIn connection profiles by crawling full profile data via Apify, the
 
 - **JSONL archive of raw Apify responses**: Before any database writes, PostEnrichmentService appends the raw Apify response to `{data_dir}/crawled/apify-responses.jsonl` as a single JSON line with metadata envelope (`archived_at`, `linkedin_url`, `source`, `data`). Archive writes are fire-and-forget — failures are logged but do not block enrichment. This ensures crawled data survives database loss. Verify archive file is appended on each enrichment.
 
-- **Two-phase processing**: PostEnrichmentService handles Apify response mapping and delegates structured row creation to ProfileEnrichmentService.enrich(). The post-enrichment service maps Apify JSON to CrawledProfile columns, then the enrichment service handles experience/education/skill rows, search_vector, and embedding.
+- **Two-phase processing**: PostEnrichmentService handles Apify response mapping and delegates structured row creation to ProfileEnrichmentService.enrich(). The post-enrichment service maps Apify JSON to CrawledProfile columns, then the enrichment service handles experience/education/skill rows, search_vector, and embedding. In batch mode (`process_batch`), a single ProfileEnrichmentService is hoisted before the loop and shared across all profiles to avoid redundant company preloading. In single-profile mode (`process_enrichment_result` without `enrichment_service`), a new service is created per call.
 
 - **Profile field mapping from Apify response**: Maps Apify JSON fields to CrawledProfile columns: full_name (from firstName + lastName), public_identifier, headline, about, location (parsed city/state/country/countryCode from location.parsed), connections_count, follower_count, open_to_work, premium, current_company_name (from currentPosition[0]), current_position (from first experience with end_date "present"), profile_image_url (from profilePicture.url), raw_profile (full JSON). Verify all mapped fields are persisted.
 
@@ -91,7 +91,7 @@ Enrich LinkedIn connection profiles by crawling full profile data via Apify, the
 
 - **Skills extraction from two sources**: Extracts skills from both the "skills" array (dict with .name field) and "topSkills" array (plain strings) in Apify data. Deduplicates by skill name within a profile. Verify no duplicate skills per profile.
 
-- **Company resolution via CompanyMatcher**: Pre-loads all existing companies into an in-memory CompanyMatcher. New companies are created on the fly via resolve_company utility with canonical_name, linkedin_url, and universal_name. Both PostEnrichmentService and ProfileEnrichmentService independently pre-load companies. Verify company dedup works across enrichments.
+- **Company resolution via CompanyMatcher**: Pre-loads all existing companies into an in-memory CompanyMatcher. New companies are created on the fly via resolve_company utility with canonical_name, linkedin_url, and universal_name. ProfileEnrichmentService accepts an optional `company_matcher` + `company_by_canonical` in its constructor — when provided (e.g. from PostEnrichmentService during batch processing), it skips its own preload and shares the caller's matcher. When omitted (single-profile API path), it preloads independently. Verify company dedup works across enrichments.
 
 - **Embedding generation**: Uses the configured EmbeddingProvider (via embedding_factory) to generate a vector embedding from the profile's full_name, headline, about, and experience data (via build_embedding_text). The embedding column is determined dynamically by get_embedding_column_name (e.g., embedding_openai or embedding_nomic). Also sets embedding_model, embedding_dim, and embedding_updated_at. Failed embeddings are logged to data/failed_embeddings.jsonl for later retry. Verify embedding is generated for enriched profiles.
 

@@ -352,6 +352,110 @@ class TestEmbeddingTextFormat:
         assert text == 'John'
 
 
+class TestEnrichmentServiceHoist:
+    """Tests for the hoisted ProfileEnrichmentService in process_batch()
+    and the optional enrichment_service parameter in process_enrichment_result()."""
+
+    def _make_service(self, session=None, embedding_provider=None):
+        session = session or MagicMock()
+        with patch.object(PostEnrichmentService, '_preload_companies'):
+            svc = PostEnrichmentService(session, embedding_provider)
+        svc._company_by_canonical = {}
+        return svc
+
+    @patch('linkedout.enrichment_pipeline.post_enrichment.append_apify_archive_batch')
+    @patch('linkedout.enrichment_pipeline.post_enrichment.ProfileEnrichmentService')
+    def test_process_batch_creates_single_enrichment_service(self, mock_enrich_cls, mock_archive):
+        """ProfileEnrichmentService is constructed once for N profiles, not N times."""
+        session = MagicMock()
+        svc = self._make_service(session)
+
+        mock_enrich_instance = MagicMock()
+        mock_enrich_cls.return_value = mock_enrich_instance
+
+        results = [
+            ('cp_001', 'https://linkedin.com/in/john', _make_apify_profile(firstName='John')),
+            ('cp_002', 'https://linkedin.com/in/jane', _make_apify_profile(firstName='Jane')),
+            ('cp_003', 'https://linkedin.com/in/bob', _make_apify_profile(firstName='Bob')),
+        ]
+
+        svc.process_batch(results, {})
+
+        # Constructor called once (the hoist), not 3 times
+        assert mock_enrich_cls.call_count == 1
+
+    @patch('linkedout.enrichment_pipeline.post_enrichment.append_apify_archive_batch')
+    @patch('linkedout.enrichment_pipeline.post_enrichment.ProfileEnrichmentService')
+    def test_process_batch_passes_company_matcher_to_enrichment_service(self, mock_enrich_cls, mock_archive):
+        """The hoisted service receives the PostEnrichmentService's company matcher."""
+        session = MagicMock()
+        svc = self._make_service(session)
+        svc._company_matcher = MagicMock(name='shared_matcher')
+        svc._company_by_canonical = {'Acme': MagicMock()}
+
+        mock_enrich_cls.return_value = MagicMock()
+
+        results = [('cp_001', 'https://linkedin.com/in/john', _make_apify_profile())]
+        svc.process_batch(results, {})
+
+        _, kwargs = mock_enrich_cls.call_args
+        assert kwargs['company_matcher'] is svc._company_matcher
+        assert kwargs['company_by_canonical'] is svc._company_by_canonical
+
+    @patch('linkedout.enrichment_pipeline.post_enrichment.ProfileEnrichmentService')
+    def test_process_enrichment_result_uses_provided_service(self, mock_enrich_cls):
+        """When enrichment_service is passed, it's used instead of creating a new one."""
+        session = MagicMock()
+        profile = create_autospec(CrawledProfileEntity, instance=True, spec_set=True)
+        profile.has_enriched_data = False
+        profile.id = 'cp_001'
+        profile.full_name = None
+        profile.headline = None
+        profile.about = None
+        profile.search_vector = None
+
+        session.execute.return_value.scalar_one_or_none.side_effect = [
+            profile, MagicMock(),
+        ]
+
+        provided_svc = MagicMock()
+        svc = self._make_service(session)
+        svc.process_enrichment_result(
+            _make_apify_profile(), 'ee_001', 'https://linkedin.com/in/johndoe',
+            enrichment_service=provided_svc,
+        )
+
+        # The provided service was used
+        provided_svc.enrich.assert_called_once()
+        # No new ProfileEnrichmentService was constructed
+        mock_enrich_cls.assert_not_called()
+
+    @patch('linkedout.enrichment_pipeline.post_enrichment.ProfileEnrichmentService')
+    def test_process_enrichment_result_creates_own_service_when_none(self, mock_enrich_cls):
+        """Without enrichment_service, a new one is created (backward compat)."""
+        session = MagicMock()
+        profile = create_autospec(CrawledProfileEntity, instance=True, spec_set=True)
+        profile.has_enriched_data = False
+        profile.id = 'cp_001'
+        profile.full_name = None
+        profile.headline = None
+        profile.about = None
+        profile.search_vector = None
+
+        session.execute.return_value.scalar_one_or_none.side_effect = [
+            profile, MagicMock(),
+        ]
+
+        mock_enrich_cls.return_value = MagicMock()
+        svc = self._make_service(session)
+        svc.process_enrichment_result(
+            _make_apify_profile(), 'ee_001', 'https://linkedin.com/in/johndoe',
+        )
+
+        # A new ProfileEnrichmentService was constructed
+        mock_enrich_cls.assert_called_once()
+
+
 class TestProcessBatch:
     """Tests for the process_batch() method covering per-profile DB writes,
     batch embedding, and batch archiving."""

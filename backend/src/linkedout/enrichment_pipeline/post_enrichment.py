@@ -65,6 +65,7 @@ class PostEnrichmentService:
         source: str = 'enrichment',
         skip_archive: bool = False,
         canonical_url: str | None = None,
+        enrichment_service: ProfileEnrichmentService | None = None,
     ) -> None:
         """Process a single Apify profile result.
 
@@ -132,8 +133,8 @@ class PostEnrichmentService:
 
         # 3. Delegate structured rows, search_vector, and embedding to enrich()
         enrich_request = self._to_enrich_schema(apify_data)
-        enrichment_service = ProfileEnrichmentService(self._session, self._embedding_provider)
-        enrichment_service.enrich(profile.id, enrich_request)
+        svc = enrichment_service or ProfileEnrichmentService(self._session, self._embedding_provider)
+        svc.enrich(profile.id, enrich_request)
 
         # 4. Update enrichment event
         self._update_enrichment_event(enrichment_event_id, 'completed', 0.004)
@@ -316,6 +317,13 @@ class PostEnrichmentService:
         original_provider = self._embedding_provider
         self._embedding_provider = None
 
+        # One shared service for all profiles — avoids 239K-row company preload per profile
+        enrichment_service = ProfileEnrichmentService(
+            self._session, self._embedding_provider,
+            company_matcher=self._company_matcher,
+            company_by_canonical=self._company_by_canonical,
+        )
+
         enriched_profiles: list[tuple[str, str]] = []
         archive_entries: list[dict] = []
         enriched = 0
@@ -330,6 +338,7 @@ class PostEnrichmentService:
                         apify_data, event_id, linkedin_url,
                         source=source, skip_archive=True,
                         canonical_url=canonical_url,
+                        enrichment_service=enrichment_service,
                     )
                 enriched += 1
                 enriched_profiles.append((profile_id, linkedin_url))
