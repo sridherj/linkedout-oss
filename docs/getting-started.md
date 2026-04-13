@@ -79,7 +79,7 @@ Then open your AI assistant and invoke `/linkedout-setup`. It handles the entire
 5. **Imports your LinkedIn data** — parses your exported CSV file
 6. **Downloads seed data** — fetches pre-curated company intelligence (~20 MB)
 7. **Imports seed data** — loads companies, funding rounds, role aliases into your database
-8. **Generates embeddings** — creates vector embeddings for semantic search
+8. **Enriches profiles and generates embeddings** — fetches full LinkedIn profiles and creates vector embeddings for semantic search
 9. **Computes affinity** — calculates relationship strength scores and Dunbar tiers
 10. **Runs readiness check** — verifies everything is working
 

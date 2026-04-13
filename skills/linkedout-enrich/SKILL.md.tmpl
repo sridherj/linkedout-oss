@@ -1,0 +1,163 @@
+---
+name: linkedout-enrich
+description: Enrich, embed, and score LinkedIn profiles — long-running pipeline with background execution and progress monitoring
+tools:
+  - Bash
+  - Read
+---
+
+# /linkedout-enrich — Profile Enrichment Pipeline
+
+Run long-running enrichment operations (enrich, embed, compute-affinity) with background execution, progress monitoring, and graceful restart.
+
+## Preamble
+
+1. **Load credentials and activate the virtual environment:**
+
+```bash
+cd $(git rev-parse --show-toplevel) && source backend/.venv/bin/activate && source {{AGENT_CONTEXT_PATH}}
+```
+
+If `agent-context.env` does not exist, tell the user:
+> Run `/linkedout-setup` first to configure LinkedOut.
+
+2. **Check system health:**
+
+```bash
+{{CLI_PREFIX}} status --json
+```
+
+If the status check fails, suggest `{{CLI_PREFIX}} diagnostics`.
+
+## Commands
+
+`{{CLI_PREFIX}} enrich` is the primary command. It enriches profiles AND generates embeddings in the same run (batch embedding happens after each Apify batch). Use `--skip-embeddings` to defer embedding to a separate `{{CLI_PREFIX}} embed` run.
+
+| Stage | Command | What it does |
+|-------|---------|-------------|
+| **Enrich** | `{{CLI_PREFIX}} enrich` | Fetch full profiles via Apify + generate embeddings (default) |
+| **Embed** | `{{CLI_PREFIX}} embed` | Backfill embeddings for profiles that missed them |
+| **Affinity** | `{{CLI_PREFIX}} compute-affinity` | Calculate affinity scores for all connections |
+
+### Arguments
+
+The user may pass arguments after `/linkedout-enrich`. Route to the right command:
+
+- No args or `enrich` → Run the **Enrich** stage (includes embedding)
+- `embed` → Run the **Embed** stage (backfill only)
+- `affinity` → Run the **Affinity** stage
+- `all` → Run enrich (with embedding), then affinity
+- `status` → Show current pipeline status (see Status section)
+
+## Execution Pattern
+
+All three commands follow the same pattern:
+
+### 1. Dry Run First
+
+Always start with `--dry-run` to show the user what will happen:
+
+```bash
+{{CLI_PREFIX}} enrich --dry-run
+{{CLI_PREFIX}} embed --dry-run
+```
+
+Show the results and ask for confirmation before proceeding. Include:
+- Number of items to process
+- Estimated cost (for enrich)
+- Estimated time
+
+### 2. Run in Background
+
+Run the command using `Bash` with `run_in_background: true` and `timeout: 600000`:
+
+```bash
+{{CLI_PREFIX}} enrich 2>&1
+```
+
+Note the background task ID and output file path for progress monitoring.
+
+### 3. Monitor Progress
+
+Poll the output file to report progress. Use this pattern:
+
+```bash
+# Count completed items
+grep -c 'Enrichment complete' $OUTPUT_FILE
+
+# Get latest batch progress line
+grep '%.*remaining\|Batch.*dispatched\|Batch.*finished' $OUTPUT_FILE | tail -5
+```
+
+Report a summary table:
+
+| Metric | Value |
+|--------|-------|
+| Completed | X / Y (Z%) |
+| Cost | $N.NN |
+| ETA | Xh Ym |
+| Failures | N |
+
+### 4. Automatic Progress Polling
+
+After launching a background command, use `ScheduleWakeup` with `delaySeconds: 120` to check progress every 2 minutes. Continue the loop until the background task completes.
+
+When the task completion notification arrives, read the final output and report the summary.
+
+### 5. Stop and Restart
+
+If the user asks to stop:
+
+```bash
+kill -INT $(ps aux | grep '{{CLI_PREFIX}} enrich' | grep -v grep | awk '{print $2}') 2>/dev/null
+```
+
+SIGINT triggers graceful shutdown — the current batch finishes, then the process exits.
+
+To restart after stopping, just re-run the command. The enrichment pipeline has **crash recovery** — it reads a state file and skips already-completed batches.
+
+### 6. Follow-up Steps
+
+After enrichment completes, suggest the next stage:
+
+- After **enrich** (embeddings included): "Run `/linkedout-enrich affinity` to update affinity scores."
+- After **enrich** (with `--skip-embeddings`): "Run `/linkedout-enrich embed` to generate embeddings, then `/linkedout-enrich affinity`."
+- After **embed**: "Run `/linkedout-enrich affinity` to update affinity scores."
+- After **affinity**: "Done! Your network data is fully up to date."
+
+## Status
+
+When the user asks for pipeline status or passes `status`:
+
+```bash
+# Count enrichment state
+psql "$DATABASE_URL" -c "
+SELECT
+  COUNT(*) AS total,
+  COUNT(*) FILTER (WHERE cp.linkedin_url LIKE 'https://www.linkedin.com/in/%') AS enrichable,
+  COUNT(*) FILTER (WHERE cp.has_enriched_data = true) AS enriched,
+  COUNT(*) FILTER (WHERE cp.has_enriched_data = false AND cp.linkedin_url LIKE 'https://www.linkedin.com/in/%') AS unenriched,
+  COUNT(*) FILTER (WHERE cp.has_enriched_data = false AND cp.linkedin_url NOT LIKE 'https://www.linkedin.com/in/%') AS not_enrichable,
+  COUNT(*) FILTER (WHERE cp.embedding_openai IS NOT NULL) AS has_embedding,
+  COUNT(*) FILTER (WHERE cp.has_enriched_data = true AND cp.embedding_openai IS NULL) AS needs_embedding
+FROM crawled_profile cp
+JOIN connection c ON c.crawled_profile_id = cp.id
+"
+```
+
+**Important:** Only profiles with a valid LinkedIn URL (`https://www.linkedin.com/in/...`) can be enriched via Apify. Profiles imported from Google Contacts or other sources have `stub://` URLs and cannot be enriched. Always use the **enrichable** count as the denominator when reporting enrichment progress — not the total profile count.
+
+Format as:
+
+| Stage | Status |
+|-------|--------|
+| Enrichment | X / Y enrichable (Z%) — N not enrichable (no LinkedIn URL) |
+| Embeddings | X embedded, Y need embedding |
+| Affinity | (check via `{{CLI_PREFIX}} status --json`) |
+
+## Error Handling
+
+- **Apify 502/timeout**: Transient — the pipeline retries automatically.
+- **NUL character errors**: Data issue in specific profiles — logged and skipped.
+- **All keys exhausted (402)**: The pipeline stops. Tell the user their Apify credits are used up.
+- **Batch embedding failures**: Non-fatal — enrichment continues, embeddings can be backfilled with `{{CLI_PREFIX}} embed`.

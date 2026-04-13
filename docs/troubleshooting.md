@@ -183,7 +183,8 @@ linkedout embed --force
 If any of these are missing:
 ```bash
 linkedout import-connections ~/Downloads/Connections.csv   # if no profiles
-linkedout embed                                            # if embeddings missing
+linkedout enrich                                           # fetch full profiles + generate embeddings
+linkedout embed                                            # backfill embeddings if some were missed
 linkedout compute-affinity                                 # if affinity not computed
 ```
 

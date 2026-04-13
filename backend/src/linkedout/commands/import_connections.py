@@ -283,7 +283,6 @@ def import_connections_command(csv_file: str, fmt: str, dry_run: bool, batch_siz
             f'Run `linkedout enrich` to fetch full profiles via Apify '
             f'(~${cost:.2f} for {totals["unenriched"]:,} profiles)'
         )
-    next_steps.append('Run `linkedout embed` to generate embeddings for semantic search')
     next_steps.append('Run `linkedout compute-affinity` to calculate affinity scores')
 
     report = OperationReport(

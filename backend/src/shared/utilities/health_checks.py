@@ -213,9 +213,10 @@ def get_db_stats(
             is None. When both are *None*, ``cli_db_manager()`` is called.
 
     Returns:
-        A dict with keys: ``profiles_total``, ``profiles_with_embeddings``,
-        ``profiles_without_embeddings``, ``companies_total``,
-        ``connections_total``, ``last_enrichment``, ``schema_version``.
+        A dict with keys: ``profiles_total``, ``profiles_enrichable``,
+        ``profiles_with_embeddings``, ``profiles_without_embeddings``,
+        ``companies_total``, ``connections_total``, ``last_enrichment``,
+        ``schema_version``.
     """
     stats: dict = {
         'profiles_total': 0,
@@ -226,6 +227,7 @@ def get_db_stats(
         'last_enrichment': None,
         'schema_version': None,
         # Enrichment
+        'profiles_enrichable': 0,
         'profiles_enriched': 0,
         'profiles_unenriched': 0,
         'enrichment_events_total': 0,
@@ -269,14 +271,20 @@ def get_db_stats(
         stats['profiles_with_embeddings'] = with_embeddings
         stats['profiles_without_embeddings'] = total - with_embeddings
 
-        # Enrichment counts
+        # Enrichment counts — only profiles with valid LinkedIn /in/ URLs are enrichable
+        enrichable = db.execute(
+            func.count(CrawledProfileEntity.id).select().where(
+                CrawledProfileEntity.linkedin_url.like('https://www.linkedin.com/in/%'),
+            ),
+        ).scalar() or 0
         enriched = db.execute(
             func.count(CrawledProfileEntity.id).select().where(
                 CrawledProfileEntity.has_enriched_data.is_(True),
             ),
         ).scalar() or 0
+        stats['profiles_enrichable'] = enrichable
         stats['profiles_enriched'] = enriched
-        stats['profiles_unenriched'] = total - enriched
+        stats['profiles_unenriched'] = enrichable - enriched
 
         stats['enrichment_events_total'] = db.execute(
             func.count(EnrichmentEventEntity.id).select(),

@@ -63,20 +63,23 @@ diag = json.loads('''$DIAG_JSON''')
 db = diag.get('database', {})
 
 profiles = db.get('profiles_total', 0)
+enrichable = db.get('profiles_enrichable', profiles)
 enriched = db.get('profiles_enriched', 0)
 with_emb = db.get('profiles_with_embeddings', 0)
+not_enrichable = profiles - enrichable
 conns = db.get('connections_total', 0)
 with_aff = db.get('connections_with_affinity', 0)
 companies = db.get('companies_total', 0)
 funding = db.get('funding_rounds_total', 0)
 
-enr_pct = (enriched / profiles * 100) if profiles > 0 else 0
-emb_pct = (with_emb / profiles * 100) if profiles > 0 else 0
+enr_pct = (enriched / enrichable * 100) if enrichable > 0 else 0
+emb_pct = (with_emb / enrichable * 100) if enrichable > 0 else 0
 aff_pct = (with_aff / conns * 100) if conns > 0 else 0
 
 print(f'Profiles:              {profiles:,}')
-print(f'  Enriched:            {enr_pct:.1f}% ({enriched:,}/{profiles:,})')
-print(f'  With embeddings:     {emb_pct:.1f}% ({with_emb:,}/{profiles:,})')
+print(f'  Enrichable:          {enrichable:,} ({not_enrichable:,} without LinkedIn URL)')
+print(f'  Enriched:            {enr_pct:.1f}% ({enriched:,}/{enrichable:,})')
+print(f'  With embeddings:     {emb_pct:.1f}% ({with_emb:,}/{enrichable:,})')
 print(f'Connections:           {conns:,}')
 print(f'  With affinity:       {aff_pct:.1f}% ({with_aff:,}/{conns:,})')
 print(f'Companies:             {companies:,}')
@@ -90,8 +93,9 @@ Format as:
 == Network Overview ==
 
 Profiles:              3,847
-  Enriched:            82.3% (3,167/3,847)
-  With embeddings:     95.9% (3,691/3,847)
+  Enrichable:          3,200 (647 without LinkedIn URL)
+  Enriched:            99.0% (3,167/3,200)
+  With embeddings:     95.9% (3,069/3,200)
 Connections:           3,847
   With affinity:       45.2% (1,739/3,847)
 Companies:             52,000
@@ -371,7 +375,7 @@ Omit sections from the JSON where data is unavailable (do not include null or em
 ## Follow-ups
 
 After the report, suggest relevant next actions based on findings:
-- If embedding coverage is low: "Run `linkedout embed` to generate embeddings for uncovered profiles."
+- If embedding coverage is low: "Run `/linkedout-enrich embed` to backfill embeddings for uncovered profiles."
 - If no query history: "Start querying with `/linkedout \"who do I know at Google?\"` to build up query history."
 - If no imports: "Run `linkedout load-linkedin-csv <your-connections.csv>` to import your network."
 - If issues exist: "Run `/linkedout-setup-report` for a full system health check."

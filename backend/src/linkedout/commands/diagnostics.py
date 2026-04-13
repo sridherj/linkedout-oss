@@ -219,7 +219,7 @@ def _print_human_readable(report: dict) -> None:
         recommendations.append('Database is not connected. Check DATABASE_URL and PostgreSQL status.')
     if db.get('profiles_without_embeddings', 0) > 0:
         count = db['profiles_without_embeddings']
-        recommendations.append(f'{count:,} profiles without embeddings. Run `linkedout embed`.')
+        recommendations.append(f'{count:,} profiles without embeddings. Run `linkedout enrich` (embeddings are generated inline), or `linkedout embed` to backfill.')
     for c in checks:
         if c['status'] == 'fail' and c['check'] == 'disk_space':
             recommendations.append('Low disk space. Free up space in the data directory.')
@@ -243,8 +243,8 @@ def _run_repair(report: dict) -> None:
     without_emb = db.get('profiles_without_embeddings', 0)
     if without_emb > 0:
         fixes_offered += 1
-        if click.confirm(f'\n{without_emb:,} profiles lack embeddings. Run `linkedout embed` now?'):
-            click.echo('Running: linkedout embed')
+        if click.confirm(f'\n{without_emb:,} profiles lack embeddings. Backfill with `linkedout embed` now?'):
+            click.echo('Running: linkedout embed (backfill)')
             try:
                 subprocess.run(['linkedout', 'embed'], check=False)
             except Exception as e:

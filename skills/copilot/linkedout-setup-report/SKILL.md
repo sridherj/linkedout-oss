@@ -57,10 +57,12 @@ Read `health_status.badge` and display:
 From the `database` section, display:
 
 ```
-Network: X profiles | Y enriched | Z with embeddings (W%)
+Network: X profiles | Y enrichable | Z enriched (W%) | V with embeddings (W%)
 Connections: X total | Y with affinity scores (W%)
 Companies: X | Funding rounds: Y
 ```
+
+Only profiles with a valid LinkedIn URL (`https://www.linkedin.com/in/...`) are enrichable. Use `profiles_enrichable` (not `profiles_total`) as the denominator for enrichment and embedding percentages.
 
 Use comma separators for numbers (e.g., 4,012). Percentages to one decimal (e.g., 70.9%).
 
@@ -82,7 +84,7 @@ Issues:
      Fix: linkedout setup --demo  # or --full
 
   [WARNING] 1,200 profiles without embeddings -- semantic search won't find them
-     Fix: linkedout embed
+     Fix: linkedout enrich  # embeddings are generated inline; or `linkedout embed` to backfill
 ```
 
 If there are no issues, show:

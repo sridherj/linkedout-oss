@@ -123,16 +123,18 @@ The quality of query results depends directly on how much data is in your databa
 - **Chrome extension** — captures detailed experience, education, and skills data that isn't in the CSV export.
 - **Seed data** — provides company intelligence (funding, industry, size) even for companies your connections haven't worked at.
 
-### Compute affinity and embeddings
+### Enrich and compute affinity
 
 After importing data, run these commands to unlock the full query capabilities:
 
 ```bash
+linkedout enrich              # Fetch full profiles via Apify + generate embeddings
 linkedout compute-affinity    # Calculate relationship strength scores
-linkedout embed               # Generate vector embeddings for semantic search
 ```
 
-Without affinity scores, queries like "strongest connections" won't work. Without embeddings, semantic similarity searches won't return results.
+Enrichment fetches full LinkedIn profiles and generates embeddings in the same step. Without enrichment, you only have basic CSV stub data. Without affinity scores, queries like "strongest connections" won't work. Without embeddings, semantic similarity searches won't return results.
+
+If some profiles are missing embeddings after enrichment, run `linkedout embed` to backfill.
 
 ### Be specific in queries
 

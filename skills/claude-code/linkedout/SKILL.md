@@ -50,7 +50,7 @@ If the status check fails or reports errors, explain what's wrong and suggest:
 Interpret the status results and give contextual guidance:
 
 - **0 profiles:** "Your network is empty. Run `/linkedout-setup` to import your connections."
-- **0 embeddings but profiles > 0:** "Semantic search is unavailable — run `linkedout embed` first. Structured queries (by company, role, location) still work."
+- **0 embeddings but profiles > 0:** "Semantic search is unavailable — run `/linkedout-enrich embed` to backfill embeddings. Structured queries (by company, role, location) still work."
 - **Demo mode:** "Running in demo mode with sample data. Run `/linkedout-setup` to switch to your real network."
 
 3. **Check for updates (silent):**
@@ -336,6 +336,7 @@ If the command fails or returns an error, skip silently and proceed to the query
 - Always JOIN through `connection` to access profiles: `FROM crawled_profile cp JOIN connection c ON c.crawled_profile_id = cp.id`.
 - All connections have a `crawled_profile` (stub or enriched). Check `cp.has_enriched_data` to distinguish.
 - Stub profiles (`has_enriched_data = FALSE`) have basic CSV data (name, company, title) but no embedding, no about, no experience/education.
+- Only profiles with a valid LinkedIn URL (`linkedin_url LIKE 'https://www.linkedin.com/in/%'`) can be enriched. Profiles from Google Contacts or other non-LinkedIn sources have `stub://` URLs and are not enrichable. When reporting enrichment stats, use the enrichable count as the denominator — not total profiles.
 - `experience` and `education` link to `crawled_profile` via `crawled_profile_id`.
 - `company` links via `company_id` on both `crawled_profile` and `experience`.
 - `role_alias` maps title variants to canonical titles with seniority_level and function_area.

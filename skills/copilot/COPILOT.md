@@ -39,6 +39,11 @@ Invoke when the user asks to set up, install, or configure the LinkedOut Chrome 
 **Trigger patterns:** "set up the extension", "install the extension", "Chrome extension", "sideload extension", "extension setup", "start crawling LinkedIn"
 **Skill path:** `.github/skills/linkedout-extension-setup/SKILL.md`
 
+### /linkedout-enrich — Profile Enrichment Pipeline
+Invoke when the user asks to enrich profiles, generate embeddings, compute affinity scores, or run the data pipeline.
+**Trigger patterns:** "enrich profiles", "run enrichment", "linkedout enrich", "generate embeddings", "linkedout embed", "compute affinity", "update affinity scores", "run the pipeline", "enrich my network"
+**Skill path:** `.github/skills/linkedout-enrich/SKILL.md`
+
 ### /linkedout-setup-report — System Health
 Invoke when the user asks for system diagnostics or a health check.
 **Trigger patterns:** "LinkedOut diagnostics", "system health", "LinkedOut status", "troubleshoot LinkedOut"
