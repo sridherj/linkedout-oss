@@ -80,6 +80,7 @@ class EnrichmentConfig(BaseModel):
     fetch_results_timeout_seconds: int = 30
     key_validation_timeout_seconds: int = 15
     max_batch_size: int = 100
+    max_parallel_batches: int = 5
     skip_embeddings: bool = False
 
 

@@ -293,6 +293,48 @@ class TestUrlValidation:
 # poll_run_safe() tests
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# check_run_status() tests (T-concurrent-7)
+# ---------------------------------------------------------------------------
+
+class TestCheckRunStatus:
+    """Tests for check_run_status() — single non-blocking status check."""
+
+    @pytest.mark.parametrize('apify_status,expected', [
+        ('RUNNING', None),
+        ('READY', None),
+    ])
+    def test_non_terminal_returns_none(self, client, apify_status, expected):
+        mock_resp = _mock_response(200, json_data={
+            'data': {'status': apify_status, 'defaultDatasetId': 'ds_ignored'},
+        })
+
+        with patch('linkedout.enrichment_pipeline.apify_client.requests.get', return_value=mock_resp) as mock_get:
+            result = client.check_run_status('run_abc')
+
+        assert result is None
+        # Verify correct URL and token
+        call_args = mock_get.call_args
+        assert 'actor-runs/run_abc' in call_args[0][0]
+        assert call_args[1]['params']['token'] == 'test_key'
+
+    @pytest.mark.parametrize('apify_status,dataset_id', [
+        ('SUCCEEDED', 'ds1'),
+        ('FAILED', 'ds2'),
+        ('ABORTED', 'ds3'),
+        ('TIMED-OUT', 'ds4'),
+    ])
+    def test_terminal_returns_status_and_dataset(self, client, apify_status, dataset_id):
+        mock_resp = _mock_response(200, json_data={
+            'data': {'status': apify_status, 'defaultDatasetId': dataset_id},
+        })
+
+        with patch('linkedout.enrichment_pipeline.apify_client.requests.get', return_value=mock_resp):
+            result = client.check_run_status('run_abc')
+
+        assert result == (apify_status, dataset_id)
+
+
 class TestPollRunSafe:
     """Tests for poll_run_safe() — returns (status, dataset_id) without raising."""
 

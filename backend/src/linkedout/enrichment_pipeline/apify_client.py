@@ -286,6 +286,17 @@ class LinkedOutApifyClient:
             elapsed += poll_interval
         raise TimeoutError(f'Apify run {run_id} did not complete within {timeout}s')
 
+    def check_run_status(self, run_id: str) -> tuple[str, str] | None:
+        """Single non-blocking status check. Returns (status, dataset_id) if terminal, None if still running."""
+        url = f'{self.base_url}/actor-runs/{run_id}'
+        resp = requests.get(url, params={'token': self.api_key}, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()['data']
+        status = data['status']
+        if status in ('SUCCEEDED', 'FAILED', 'ABORTED', 'TIMED-OUT'):
+            return (status, data['defaultDatasetId'])
+        return None
+
     def fetch_results(self, dataset_id: str) -> list[dict]:
         """Fetch results from a completed dataset."""
         url = f'{self.base_url}/datasets/{dataset_id}/items'

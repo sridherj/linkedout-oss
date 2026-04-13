@@ -1,0 +1,35 @@
+{
+  "project": "concurrent-batches",
+  "plan": "docs/plan/2026-04-13-concurrent-batches.collab.md",
+  "sub_phases": [
+    {
+      "id": "sp1",
+      "title": "Foundation",
+      "file": "sp1-foundation.ai.md",
+      "depends_on": [],
+      "description": "Add max_parallel_batches config to EnrichmentConfig, add check_run_status() to LinkedOutApifyClient"
+    },
+    {
+      "id": "sp2",
+      "title": "Resume Helper",
+      "file": "sp2-resume-helper.ai.md",
+      "depends_on": [],
+      "description": "Add BatchResumeResult dataclass and _check_batch_resume() helper function to bulk_enrichment.py"
+    },
+    {
+      "id": "sp3",
+      "title": "Dispatch-Pool Loop",
+      "file": "sp3-dispatch-pool.ai.md",
+      "depends_on": ["sp1", "sp2"],
+      "description": "Replace sequential batch loop with dispatch-pool pattern, delete _poll_fetch_save()"
+    },
+    {
+      "id": "sp4",
+      "title": "Tests",
+      "file": "sp4-tests.ai.md",
+      "depends_on": ["sp1", "sp2", "sp3"],
+      "description": "21 tests across 6 categories: concurrency, client, money-protection, crash recovery, error isolation, resume helper"
+    }
+  ],
+  "dependency_chain": "sp1 + sp2 (parallel) -> sp3 -> sp4"
+}

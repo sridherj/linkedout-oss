@@ -10,6 +10,7 @@ import atexit
 import json
 import os
 import time
+from collections import deque
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -68,6 +69,16 @@ class BatchState:
     result_count: int | None = None
     processed_urls: set[str] = field(default_factory=set)
     completed: bool = False
+
+
+@dataclass
+class BatchResumeResult:
+    """What to do with a batch based on its state file history."""
+
+    action: str  # 'skip' | 'process' | 'poll' | 'dispatch'
+    run_id: str | None = None
+    results: list[dict] | None = None
+    already_processed: set[str] = field(default_factory=set)
 
 
 # ---------------------------------------------------------------------------
@@ -355,6 +366,7 @@ def enrich_profiles(
 
     cfg = get_config().enrichment
     batch_size = cfg.max_batch_size
+    max_parallel_batches = cfg.max_parallel_batches
 
     # Build profile_id lookup for later use
     profile_id_by_url: dict[str, str] = {}
@@ -371,37 +383,38 @@ def enrich_profiles(
         batches = _chunk_profiles(profiles, batch_size)
         batches_total = len(batches)
 
-        for batch_idx, batch_profiles in enumerate(batches):
-            batch_urls = [url for _, url in batch_profiles]
-            batch_state = existing_state.get(batch_idx)
+        pending = deque(enumerate(batches))  # [(batch_idx, batch_profiles), ...]
+        inflight: dict[int, tuple[str, list[str], float]] = {}  # {batch_idx: (run_id, batch_urls, dispatch_time)}
 
-            # ── Already completed ──────────────────────────────
-            if batch_state and batch_state.completed:
-                logger.info('Batch {} already completed, skipping', batch_idx)
-                # Reconstruct counts from state events — we don't store them
-                # on BatchState directly, so count processed_urls
-                batches_completed += 1
-                # We can't know exact enriched/failed from state alone without
-                # re-reading events, so count processed as enriched (conservative)
-                total_enriched += len(batch_state.processed_urls)
-                if on_progress:
-                    on_progress(total_enriched, total_failed, len(profiles), batch_idx)
-                continue
+        while pending or inflight:
+            # ── Fill slots ──
+            while len(inflight) < max_parallel_batches and pending:
+                batch_idx, batch_profiles = pending.popleft()
+                batch_urls = [url for _, url in batch_profiles]
 
-            # ── Fetched but not fully processed (resume processing) ──
-            if batch_state and batch_state.dataset_id and batch_state.run_id:
-                logger.info(
-                    'Batch %d fetched but not fully processed (%d/%d), resuming processing',
-                    batch_idx, len(batch_state.processed_urls), len(batch_urls),
-                )
-                saved_results = _load_results(results_dir, batch_state.run_id)
-                if saved_results is not None:
+                resume = _check_batch_resume(batch_idx, batch_urls, existing_state, results_dir)
+
+                if resume.action == 'skip':
+                    # Already completed — count and continue
+                    logger.info('Batch {} already completed, skipping', batch_idx)
+                    batches_completed += 1
+                    total_enriched += len(resume.already_processed)
+                    if on_progress:
+                        on_progress(total_enriched, total_failed, len(profiles), batch_idx)
+                    continue
+
+                elif resume.action == 'process':
+                    # Fetched but not fully processed — process from disk
+                    logger.info(
+                        'Batch %d fetched but not fully processed (%d/%d), resuming',
+                        batch_idx, len(resume.already_processed), len(batch_urls),
+                    )
                     enriched, failed = _process_batch_results(
                         batch_idx=batch_idx,
                         batch_urls=batch_urls,
-                        apify_results=saved_results,
+                        apify_results=resume.results,
                         profile_id_by_url=profile_id_by_url,
-                        already_processed=batch_state.processed_urls,
+                        already_processed=resume.already_processed,
                         state_path=state_path,
                         db_session_factory=db_session_factory,
                         post_enrichment_factory=post_enrichment_factory,
@@ -419,33 +432,83 @@ def enrich_profiles(
                     if on_progress:
                         on_progress(total_enriched, total_failed, len(profiles), batch_idx)
                     continue
-                else:
-                    # Results file missing — need to re-fetch
-                    logger.warning(
-                        'Batch %d results file missing for run %s, will re-fetch',
-                        batch_idx, batch_state.run_id,
+
+                elif resume.action == 'poll':
+                    # Started but not fetched — add to inflight for polling (NO re-dispatch)
+                    logger.info('Batch {} resuming poll (run {})', batch_idx, resume.run_id)
+                    inflight[batch_idx] = (resume.run_id, batch_urls, time.time())
+
+                else:  # 'dispatch'
+                    run_id = _dispatch_batch(
+                        batch_idx=batch_idx,
+                        batch_urls=batch_urls,
+                        key_tracker=key_tracker,
+                        state_path=state_path,
                     )
-                    # Fall through to poll+fetch path below
-                    run_id = batch_state.run_id
-                    api_key = _get_key(key_tracker)
-                    if api_key is None:
+                    if run_id is None:
                         stopped_reason = 'all_keys_exhausted'
                         break
-                    client = LinkedOutApifyClient(api_key)
-                    try:
-                        _status, _ds_id, results = _poll_fetch_save(
-                            client, run_id, results_dir, batch_idx, state_path,
-                        )
-                    except Exception as e:
-                        logger.error('Batch {} fetch failed: {}', batch_idx, e)
-                        continue
+                    inflight[batch_idx] = (run_id, batch_urls, time.time())
+
+            # Break out of outer while if all keys exhausted during fill
+            if stopped_reason:
+                break
+
+            # ── Poll all inflight ──
+            if not inflight:
+                continue
+
+            # Any healthy key can poll any run (Decision #2)
+            api_key = _get_key(key_tracker)
+            if api_key is None and inflight:
+                # All keys dead — can't poll. Inflight batches stay in state for resume.
+                stopped_reason = 'all_keys_exhausted'
+                break
+            client = LinkedOutApifyClient(api_key)
+
+            for batch_idx in list(inflight):
+                run_id, batch_urls, dispatch_time = inflight[batch_idx]
+                try:
+                    result = client.check_run_status(run_id)
+                except Exception:
+                    # Per-batch error isolation — log, retry next poll cycle
+                    logger.warning('Batch {} poll error for run {}, will retry', batch_idx, run_id)
+                    continue
+
+                if result is not None:
+                    status, dataset_id = result
+                    logger.info('Batch {} run {} finished: status={}', batch_idx, run_id, status)
+
+                    # Disk cache before fetch (Decision #3)
+                    results = _load_results(results_dir, run_id)
+                    if results is None:
+                        try:
+                            results = client.fetch_results(dataset_id)
+                        except Exception:
+                            # Fetch failed — leave in inflight, retry next cycle
+                            logger.warning('Batch {} fetch failed for run {}, will retry', batch_idx, run_id)
+                            continue
+                    _save_results(results_dir, run_id, results)
+
+                    _append_state(state_path, {
+                        'type': 'batch_fetched',
+                        'batch_idx': batch_idx,
+                        'run_id': run_id,
+                        'dataset_id': dataset_id,
+                        'run_status': status,
+                        'result_count': len(results),
+                    })
+
+                    # Get already_processed from state (may have partial processing from prior crash)
+                    batch_state = existing_state.get(batch_idx)
+                    already_processed = batch_state.processed_urls if batch_state else set()
 
                     enriched, failed = _process_batch_results(
                         batch_idx=batch_idx,
                         batch_urls=batch_urls,
                         apify_results=results,
                         profile_id_by_url=profile_id_by_url,
-                        already_processed=batch_state.processed_urls,
+                        already_processed=already_processed,
                         state_path=state_path,
                         db_session_factory=db_session_factory,
                         post_enrichment_factory=post_enrichment_factory,
@@ -462,99 +525,20 @@ def enrich_profiles(
                     batches_completed += 1
                     if on_progress:
                         on_progress(total_enriched, total_failed, len(profiles), batch_idx)
-                    continue
 
-            # ── Started but not fetched (resume polling) ──────
-            if batch_state and batch_state.run_id and not batch_state.dataset_id:
-                logger.info('Batch {} started (run {}) but not fetched, resuming poll',
-                            batch_idx, batch_state.run_id)
-                run_id = batch_state.run_id
-                api_key = _get_key(key_tracker)
-                if api_key is None:
-                    stopped_reason = 'all_keys_exhausted'
-                    break
-                client = LinkedOutApifyClient(api_key)
-                try:
-                    _status, _ds_id, results = _poll_fetch_save(
-                        client, run_id, results_dir, batch_idx, state_path,
-                    )
-                except Exception as e:
-                    logger.error('Batch {} poll/fetch failed: {}', batch_idx, e)
-                    continue
+                    del inflight[batch_idx]
 
-                already_processed = batch_state.processed_urls if batch_state else set()
-                enriched, failed = _process_batch_results(
-                    batch_idx=batch_idx,
-                    batch_urls=batch_urls,
-                    apify_results=results,
-                    profile_id_by_url=profile_id_by_url,
-                    already_processed=already_processed,
-                    state_path=state_path,
-                    db_session_factory=db_session_factory,
-                    post_enrichment_factory=post_enrichment_factory,
-                    skip_embeddings=skip_embeddings,
-                )
-                total_enriched += enriched
-                total_failed += failed
-                _append_state(state_path, {
-                    'type': 'batch_completed',
-                    'batch_idx': batch_idx,
-                    'enriched': enriched,
-                    'failed': failed,
-                })
-                batches_completed += 1
-                if on_progress:
-                    on_progress(total_enriched, total_failed, len(profiles), batch_idx)
-                continue
+            # ── Timeout check ──
+            poll_timeout = cfg.run_poll_timeout_seconds
+            for batch_idx in list(inflight):
+                run_id, batch_urls, dispatch_time = inflight[batch_idx]
+                if time.time() - dispatch_time > poll_timeout:
+                    logger.error('Batch {} timed out (run {})', batch_idx, run_id)
+                    del inflight[batch_idx]
 
-            # ── Not started — dispatch new batch ──────────────
-            run_id = _dispatch_batch(
-                batch_idx=batch_idx,
-                batch_urls=batch_urls,
-                key_tracker=key_tracker,
-                state_path=state_path,
-            )
-            if run_id is None:
-                stopped_reason = 'all_keys_exhausted'
-                break
-
-            # Get a client for polling (may use different key)
-            api_key = _get_key(key_tracker)
-            if api_key is None:
-                stopped_reason = 'all_keys_exhausted'
-                break
-            client = LinkedOutApifyClient(api_key)
-
-            try:
-                _status, _ds_id, results = _poll_fetch_save(
-                    client, run_id, results_dir, batch_idx, state_path,
-                )
-            except Exception as e:
-                logger.error('Batch {} poll/fetch failed: {}', batch_idx, e)
-                continue
-
-            enriched, failed = _process_batch_results(
-                batch_idx=batch_idx,
-                batch_urls=batch_urls,
-                apify_results=results,
-                profile_id_by_url=profile_id_by_url,
-                already_processed=set(),
-                state_path=state_path,
-                db_session_factory=db_session_factory,
-                post_enrichment_factory=post_enrichment_factory,
-                skip_embeddings=skip_embeddings,
-            )
-            total_enriched += enriched
-            total_failed += failed
-            _append_state(state_path, {
-                'type': 'batch_completed',
-                'batch_idx': batch_idx,
-                'enriched': enriched,
-                'failed': failed,
-            })
-            batches_completed += 1
-            if on_progress:
-                on_progress(total_enriched, total_failed, len(profiles), batch_idx)
+            # ── Sleep before next poll cycle ──
+            if inflight:
+                time.sleep(cfg.run_poll_interval_seconds)
 
     return EnrichmentResult(
         total_profiles=len(profiles),
@@ -579,6 +563,64 @@ def _get_key(key_tracker: KeyHealthTracker | None) -> str | None:
     except AllKeysExhaustedError:
         logger.error('All Apify API keys are exhausted or invalid')
         return None
+
+
+def _check_batch_resume(
+    batch_idx: int,
+    batch_urls: list[str],
+    existing_state: dict[int, BatchState],
+    results_dir: Path,
+) -> BatchResumeResult:
+    """Determine what action to take for a batch based on prior state.
+
+    Checks state file history and disk cache to classify the batch into one of:
+    - skip: fully completed in a prior run
+    - process: results fetched and on disk, but not all profiles processed
+    - poll: dispatched to Apify but results not fetched yet
+    - dispatch: not started, needs fresh Apify dispatch
+    """
+    batch_state = existing_state.get(batch_idx)
+
+    # ── Not started ──
+    if batch_state is None:
+        return BatchResumeResult(action='dispatch')
+
+    # ── Already completed ──
+    if batch_state.completed:
+        return BatchResumeResult(
+            action='skip',
+            already_processed=batch_state.processed_urls,
+        )
+
+    # ── Fetched but not fully processed ──
+    if batch_state.dataset_id and batch_state.run_id:
+        saved_results = _load_results(results_dir, batch_state.run_id)
+        if saved_results is not None:
+            return BatchResumeResult(
+                action='process',
+                run_id=batch_state.run_id,
+                results=saved_results,
+                already_processed=batch_state.processed_urls,
+            )
+        else:
+            # Results file missing — need to re-fetch via polling
+            # (dataset_id is set, so Apify completed, but we lost the file)
+            return BatchResumeResult(
+                action='poll',
+                run_id=batch_state.run_id,
+                already_processed=batch_state.processed_urls,
+            )
+
+    # ── Started but not fetched ──
+    if batch_state.run_id:
+        return BatchResumeResult(
+            action='poll',
+            run_id=batch_state.run_id,
+            already_processed=batch_state.processed_urls,
+        )
+
+    # ── Defensive: state exists but no run_id (shouldn't happen) ──
+    return BatchResumeResult(action='dispatch')
 
 
 def _dispatch_batch(
@@ -632,38 +674,6 @@ def _dispatch_batch(
             logger.warning('Batch {}: rate limited (429), backing off {}s', batch_idx, delay)
             time.sleep(delay)
             continue
-
-
-def _poll_fetch_save(
-    client: LinkedOutApifyClient,
-    run_id: str,
-    results_dir: Path,
-    batch_idx: int,
-    state_path: Path,
-) -> tuple[str, str, list[dict]]:
-    """Poll for run completion, fetch results, save to disk.
-
-    Returns (run_status, dataset_id, results).
-    Does NOT write batch_fetched to state if fetch fails (enables clean resume).
-    """
-    status, dataset_id = client.poll_run_safe(run_id)
-    logger.info('Batch {} run {} finished: status={}, dataset={}', batch_idx, run_id, status, dataset_id)
-
-    results = client.fetch_results(dataset_id)
-
-    # R1: persist raw results to disk BEFORE any other processing
-    _save_results(results_dir, run_id, results)
-
-    _append_state(state_path, {
-        'type': 'batch_fetched',
-        'batch_idx': batch_idx,
-        'run_id': run_id,
-        'dataset_id': dataset_id,
-        'run_status': status,
-        'result_count': len(results),
-    })
-
-    return status, dataset_id, results
 
 
 def _process_batch_results(

@@ -13,7 +13,7 @@
 | LinkedOut Data Model | [linkedout_data_model.collab.md](linkedout_data_model.collab.md) | core | 1 | 2026-04-09 |
 | LinkedOut CRUD Layer | [linkedout_crud.collab.md](linkedout_crud.collab.md) | backend/src/linkedout | 1 | 2026-04-09 |
 | LinkedOut Import Pipeline | [linkedout_import_pipeline.collab.md](linkedout_import_pipeline.collab.md) | backend/src/linkedout/import_pipeline | 1 | 2026-04-09 |
-| LinkedOut Enrichment Pipeline | [linkedout_enrichment_pipeline.collab.md](linkedout_enrichment_pipeline.collab.md) | backend/src/linkedout/enrichment_pipeline | 1 | 2026-04-09 |
+| LinkedOut Enrichment Pipeline | [linkedout_enrichment_pipeline.collab.md](linkedout_enrichment_pipeline.collab.md) | backend/src/linkedout/enrichment_pipeline | 5 | 2026-04-13 |
 | LinkedOut Intelligence | [linkedout_intelligence.collab.md](linkedout_intelligence.collab.md) | backend/src/linkedout/intelligence | 1 | 2026-04-09 |
 | LinkedOut Affinity Scoring | [linkedout_affinity_scoring.collab.md](linkedout_affinity_scoring.collab.md) | backend/src/linkedout/intelligence/scoring | 1 | 2026-04-09 |
 | LinkedOut Dashboard | [linkedout_dashboard.collab.md](linkedout_dashboard.collab.md) | backend/src/linkedout/dashboard | 1 | 2026-04-09 |

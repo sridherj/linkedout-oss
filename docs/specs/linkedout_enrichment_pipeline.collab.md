@@ -4,6 +4,7 @@ module: backend/src/linkedout/enrichment_pipeline
 linked_files:
   - backend/src/linkedout/enrichment_pipeline/controller.py
   - backend/src/linkedout/enrichment_pipeline/apify_client.py
+  - backend/src/linkedout/enrichment_pipeline/bulk_enrichment.py
   - backend/src/linkedout/enrichment_pipeline/post_enrichment.py
   - backend/src/linkedout/enrichment_pipeline/schemas.py
   - backend/src/linkedout/crawled_profile/services/profile_enrichment_service.py
@@ -11,7 +12,7 @@ linked_files:
   - backend/src/utilities/llm_manager/embedding_factory.py
   - backend/src/shared/config/settings.py
   - backend/src/shared/utils/apify_archive.py
-version: 4
+version: 5
 last_verified: "2026-04-13"
 ---
 
@@ -21,7 +22,7 @@ last_verified: "2026-04-13"
 
 ## Intent
 
-Enrich LinkedIn connection profiles by crawling full profile data via Apify, then extracting experiences, education, skills, and companies into relational tables. Supports two modes: platform-managed API keys (round-robin across multiple keys) and BYOK (bring your own key) where the user provides their own Apify key. Includes a 90-day cache to avoid redundant crawls, cost tracking via enrichment events, and post-enrichment processing (embedding generation, search vector population, seniority/function area resolution).
+Enrich LinkedIn connection profiles by crawling full profile data via Apify, then extracting experiences, education, skills, and companies into relational tables. Supports two modes: platform-managed API keys (round-robin across multiple keys) and BYOK (bring your own key) where the user provides their own Apify key. Includes a 90-day cache to avoid redundant crawls, cost tracking via enrichment events, and post-enrichment processing (embedding generation, search vector population, seniority/function area resolution). Bulk enrichment dispatches up to N batches concurrently to Apify, polling all in a single loop, with crash-safe resume from an append-only state file.
 
 ## Behaviors
 
@@ -45,7 +46,27 @@ Enrich LinkedIn connection profiles by crawling full profile data via Apify, the
 
 - **Apify actor input format**: The actor (LpVuK3Zozwuipa5bp) requires profileScraperMode and queries fields. The queries field is a list of LinkedIn profile URLs. The scraper mode is hardcoded to "Profile details no email ($4 per 1k)". Verify the input payload uses queries, not startUrls.
 
-- **Async multi-profile support**: An alternative path starts an async Apify run for multiple URLs and polls for completion with configurable timeout (run_poll_timeout_seconds default 300s, run_poll_interval_seconds default 5s). Results are fetched from the dataset after completion. Verify polling respects timeout and handles FAILED/ABORTED/TIMED-OUT statuses.
+- **Async multi-profile support**: An alternative path starts an async Apify run for multiple URLs and polls for completion with configurable timeout (run_poll_timeout_seconds default 900s, run_poll_interval_seconds default 5s). Results are fetched from the dataset after completion. Verify polling respects timeout and handles FAILED/ABORTED/TIMED-OUT statuses.
+
+- **Non-blocking status check**: `check_run_status()` performs a single non-blocking GET to the Apify actor-runs endpoint. Returns `(status, dataset_id)` for terminal states (SUCCEEDED, FAILED, ABORTED, TIMED-OUT) or `None` if still running. This is the primitive used by the concurrent dispatch-pool — the caller controls polling cadence. Verify it does not sleep or loop.
+
+### Bulk Batch Enrichment
+
+- **Dispatch-pool pattern**: `enrich_profiles()` maintains a pool of up to `max_parallel_batches` (default 5, configurable in `EnrichmentConfig`) concurrent Apify runs. A `pending` deque holds undispatched batches; an `inflight` dict tracks dispatched runs by batch index. The loop fills empty slots from pending, polls all inflight batches via `check_run_status()`, processes completed batches immediately (serialized in the main thread), and sleeps `run_poll_interval_seconds` between poll cycles. Post-processing (DB writes, embeddings) stays serialized — concurrency is only in the Apify wait time. Verify that with `max_parallel_batches=1`, behavior is identical to sequential execution.
+
+- **Crash-safe resume via append-only JSONL state file**: Each batch progresses through `batch_started` → `batch_fetched` → `profile_processed` (per profile) → `batch_completed` events, written to `{data_dir}/enrichment/enrich-state.jsonl`. On resume, `_load_state()` reconstructs per-batch state indexed by `batch_idx`. Events from concurrent batches may interleave — this is safe because the index is per-batch. Verify that a crash at any point (mid-dispatch, mid-poll, mid-processing) resumes correctly without re-dispatching existing Apify runs.
+
+- **Resume classification via `_check_batch_resume()`**: A pure function that classifies each batch into one of four actions based on state file history: `skip` (already completed), `process` (results on disk, not all profiles processed), `poll` (dispatched but not fetched — add to inflight, NO re-dispatch), `dispatch` (not started). Returns a `BatchResumeResult` dataclass with action, run_id, cached results, and already-processed URL set. Verify each resume action independently.
+
+- **Disk cache before fetch**: Before calling `fetch_results()` on a completed run, the loop checks `_load_results()` for previously-saved results on disk. If results exist (from a prior session that fetched but crashed before writing `batch_fetched`), the Apify API call is skipped. Verify that resume with results on disk does not call `fetch_results()`.
+
+- **Decoupled poll key**: Each poll cycle calls `_get_key()` for any healthy key — the poll key is not tied to the dispatch key. Any Apify key can poll any run (polling is a GET, not billable). If a key is revoked after dispatch, polling continues with other healthy keys. Verify that key revocation mid-flight does not block polling of in-flight batches.
+
+- **Per-batch error isolation**: Each `check_run_status()` and `fetch_results()` call is wrapped in try/except. One batch's HTTP error does not affect other batches in the same poll cycle — the errored batch is retried next cycle. Verify that a poll error for one batch does not block processing of another batch that completed in the same cycle.
+
+- **Timeout per batch**: Each inflight batch tracks its dispatch time. If `time.time() - dispatch_time > run_poll_timeout_seconds`, the batch is removed from inflight (not re-dispatched). It remains in state as `batch_started` and can be resumed in a future run. Verify that timed-out batches do not block other inflight batches.
+
+- **Key exhaustion handling**: If all keys become exhausted or invalid during the fill phase, dispatch stops (`stopped_reason = 'all_keys_exhausted'`). If all keys die during the poll phase, the loop breaks — inflight batches are tracked in state for future resume. Verify that key exhaustion stops new dispatches but does not lose track of inflight batches.
 
 ### Post-Enrichment Processing
 
@@ -116,6 +137,16 @@ Enrich LinkedIn connection profiles by crawling full profile data via Apify, the
 **Over:** Procrastinate task queue for async enrichment (internal version)
 **Because:** OSS removed the Procrastinate dependency. Synchronous with retry (3 attempts, exponential backoff) is simpler for single-user deployments.
 
+### Concurrent dispatch-pool over sequential batch loop — 2026-04-13
+**Chose:** Synchronous dispatch-pool with `time.sleep()` polling in a single thread
+**Over:** asyncio event loop with async HTTP client and async DB sessions
+**Because:** The bottleneck is Apify processing time (5-13 min per batch), not our poll overhead (~250ms for 5 batches). asyncio would require async DB sessions and HTTP client for ~250ms savings per 5s cycle — not worth the complexity. The dispatch-pool overlaps Apify wait time across N batches, reducing wall-clock from ~5h to ~1-1.5h for 1,759 profiles.
+
+### `_check_batch_resume()` pure function for resume classification — 2026-04-13
+**Chose:** Extract resume logic into a pure function returning a `BatchResumeResult` dataclass
+**Over:** Inline 4-way branching in the main loop (~130 lines)
+**Because:** The main dispatch-pool loop is already complex. A pure function with 4 clear return values is independently testable (5 unit tests) and keeps the loop body focused on dispatch/poll/process.
+
 ### `previous_linkedin_url` for redirect tracking — 2026-04-13
 **Chose:** Single `previous_linkedin_url` column on CrawledProfile
 **Over:** JSONB array of aliases or separate alias table
@@ -125,10 +156,12 @@ Enrich LinkedIn connection profiles by crawling full profile data via Apify, the
 
 - **Similar-slug collision in fuzzy matching**: If two profiles with similar slugs (e.g. `abhishek-mishra-developer` and `abhishek-mishra1-engineer`) both redirect in the same batch, the rapidfuzz greedy matcher could cross-pair them. This requires: similar slugs + same batch + both redirect — extremely rare in practice since LinkedIn CSV is date-sorted (not alphabetical) so similar names are naturally spread across batches. Accepted risk; revisit if observed in production.
 
+- **Dispatch-state-write gap (~10ms)**: If the process dies after Apify accepts a run but before `batch_started` is written to the state file, the run is orphaned. On resume, the same URLs would be re-dispatched (~$0.40 worst case per batch of 100). The window is ~10ms between HTTP response and local file write. Pre-existing in the sequential code; not worsened by concurrent batches. Documented for future hardening (e.g. pre-dispatch events or Apify run list queries on resume).
+
 ## Not Included
 
 - Procrastinate/task queue for async enrichment (removed in OSS; enrichment runs synchronously)
-- Webhook-based enrichment for large batches
 - Proactive cache refresh cron
 - Materialized view for enrichment stats
 - Enrichment scheduling or priority queue
+- Dispatch-state-write gap hardening (pre-dispatch events, Apify run list queries on resume)
