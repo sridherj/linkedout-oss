@@ -73,6 +73,11 @@ seed-data/seed-manifest.json
 # ---------- Personal Claude Code config (machine-specific hook paths) ----------
 .claude/settings.json
 .claude/hooks/
+.claude/scheduled_tasks.lock
+.claude/skills/taskos-*
+
+# ---------- Runtime data artifacts ----------
+data/
 
 # ---------- Private second-brain symlinks (machine-specific) ----------
 backend/.claude/

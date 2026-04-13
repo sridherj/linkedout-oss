@@ -1,0 +1,35 @@
+{
+  "project": "slug-redirect-fix",
+  "plan": "docs/plan/2026-04-13-slug-redirect-fix.collab.md",
+  "sub_phases": [
+    {
+      "id": "sp1",
+      "title": "Loguru Format Fix",
+      "file": "sp1-loguru-fix.ai.md",
+      "depends_on": [],
+      "description": "Fix 17 logger calls using %s/%d to use loguru {} formatting. Already in working tree — just verify and commit."
+    },
+    {
+      "id": "sp2",
+      "title": "Migration + Entity",
+      "file": "sp2-migration-entity.ai.md",
+      "depends_on": [],
+      "description": "Add previous_linkedin_url column to CrawledProfileEntity + Alembic migration + index"
+    },
+    {
+      "id": "sp3",
+      "title": "Redirect Matching + URL Update",
+      "file": "sp3-matching-url-update.ai.md",
+      "depends_on": ["sp2"],
+      "description": "Redirect-aware _match_results with rapidfuzz + URL update in post-enrichment + tests T1-T8"
+    },
+    {
+      "id": "sp4",
+      "title": "Import Dedup + Spec",
+      "file": "sp4-import-dedup-spec.ai.md",
+      "depends_on": ["sp2", "sp3"],
+      "description": "Import dedup checks previous_linkedin_url + spec update + test T9"
+    }
+  ],
+  "dependency_chain": "sp1 (independent) | sp2 -> sp3 -> sp4"
+}
