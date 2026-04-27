@@ -62,7 +62,19 @@ import organization.entities.app_user_tenant_role_entity  # noqa
 
 # LinkedOut domain entities
 import linkedout.company.entities.company_entity  # noqa
+import linkedout.company_alias.entities.company_alias_entity  # noqa
+import linkedout.connection.entities.connection_entity  # noqa
+import linkedout.contact_source.entities.contact_source_entity  # noqa
+import linkedout.crawled_profile.entities.crawled_profile_entity  # noqa
+import linkedout.education.entities.education_entity  # noqa
+import linkedout.enrichment_event.entities.enrichment_event_entity  # noqa
+import linkedout.experience.entities.experience_entity  # noqa
+import linkedout.import_job.entities.import_job_entity  # noqa
+import linkedout.profile_skill.entities.profile_skill_entity  # noqa
 import linkedout.role_alias.entities.role_alias_entity  # noqa
+import linkedout.search_session.entities.search_session_entity  # noqa
+import linkedout.search_session.entities.search_turn_entity  # noqa
+import linkedout.search_tag.entities.search_tag_entity  # noqa
 
 logger = get_logger(__name__)
 
