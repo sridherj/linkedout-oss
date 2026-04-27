@@ -59,6 +59,7 @@ import common.entities.agent_run_entity  # noqa
 
 import organization.entities.app_user_entity  # noqa
 import organization.entities.app_user_tenant_role_entity  # noqa
+import organization.enrichment_config.entities.enrichment_config_entity  # noqa
 
 # LinkedOut domain entities
 import linkedout.company.entities.company_entity  # noqa

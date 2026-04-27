@@ -23,6 +23,25 @@ class TestSearchSessionControllerIntegration:
     def _base_url(self, tenant_id: str, bu_id: str) -> str:
         return f'/tenants/{tenant_id}/bus/{bu_id}/search-sessions'
 
+    def _create_session(
+        self,
+        test_client: TestClient,
+        test_tenant_id: str,
+        test_bu_id: str,
+        app_user: str,
+        initial_query: str | None = None,
+    ) -> dict:
+        suffix = uuid.uuid4().hex[:8]
+        resp = test_client.post(
+            self._base_url(test_tenant_id, test_bu_id),
+            json={
+                'app_user_id': app_user,
+                'initial_query': initial_query or f'session {suffix}',
+            },
+        )
+        assert resp.status_code == 201
+        return resp.json()['search_session']
+
     def test_create_search_session_success(
         self,
         test_client: TestClient,
@@ -135,25 +154,22 @@ class TestSearchSessionControllerIntegration:
     ):
         # Arrange
         suffix = uuid.uuid4().hex[:8]
-        create_payload = {
-            'app_user_id': app_user,
-            'initial_query': f'get-by-id query {suffix}',
-        }
-        create_resp = test_client.post(self._base_url(test_tenant_id, test_bu_id), json=create_payload)
-        assert create_resp.status_code == 201
-        session_id = create_resp.json()['search_session']['id']
+        initial_query = f'get-by-id query {suffix}'
+        created = self._create_session(
+            test_client, test_tenant_id, test_bu_id, app_user, initial_query=initial_query
+        )
+        session_id = created['id']
 
         # Act
         response = test_client.get(
             f'{self._base_url(test_tenant_id, test_bu_id)}/{session_id}',
-            headers={'X-App-User-Id': app_user},
         )
 
         # Assert
         assert response.status_code == 200
         session = response.json()['search_session']
         assert session['id'] == session_id
-        assert session['initial_query'] == create_payload['initial_query']
+        assert session['initial_query'] == initial_query
         assert session['app_user_id'] == app_user
 
     def test_get_search_session_not_found(
@@ -161,12 +177,10 @@ class TestSearchSessionControllerIntegration:
         test_client: TestClient,
         test_tenant_id: str,
         test_bu_id: str,
-        app_user: str,
     ):
         # Act
         response = test_client.get(
             f'{self._base_url(test_tenant_id, test_bu_id)}/ss_nonexistent',
-            headers={'X-App-User-Id': app_user},
         )
 
         # Assert
@@ -181,19 +195,17 @@ class TestSearchSessionControllerIntegration:
     ):
         # Arrange
         suffix = uuid.uuid4().hex[:8]
-        ids = []
-        for i in range(2):
-            resp = test_client.post(self._base_url(test_tenant_id, test_bu_id), json={
-                'app_user_id': app_user,
-                'initial_query': f'list test {suffix} #{i}',
-            })
-            assert resp.status_code == 201
-            ids.append(resp.json()['search_session']['id'])
+        ids = [
+            self._create_session(
+                test_client, test_tenant_id, test_bu_id, app_user,
+                initial_query=f'list test {suffix} #{i}',
+            )['id']
+            for i in range(2)
+        ]
 
         # Act
         response = test_client.get(
             self._base_url(test_tenant_id, test_bu_id),
-            headers={'X-App-User-Id': app_user},
             params={'limit': 100},
         )
 
@@ -215,24 +227,18 @@ class TestSearchSessionControllerIntegration:
     ):
         # Arrange
         suffix = uuid.uuid4().hex[:8]
-        user0_resp = test_client.post(self._base_url(test_tenant_id, test_bu_id), json={
-            'app_user_id': app_user,
-            'initial_query': f'filter user0 {suffix}',
-        })
-        assert user0_resp.status_code == 201
-        user0_id = user0_resp.json()['search_session']['id']
-
-        user1_resp = test_client.post(self._base_url(test_tenant_id, test_bu_id), json={
-            'app_user_id': app_user_2,
-            'initial_query': f'filter user1 {suffix}',
-        })
-        assert user1_resp.status_code == 201
-        user1_id = user1_resp.json()['search_session']['id']
+        app_user_session_id = self._create_session(
+            test_client, test_tenant_id, test_bu_id, app_user,
+            initial_query=f'filter user a {suffix}',
+        )['id']
+        app_user_2_session_id = self._create_session(
+            test_client, test_tenant_id, test_bu_id, app_user_2,
+            initial_query=f'filter user b {suffix}',
+        )['id']
 
         # Act
         response = test_client.get(
             self._base_url(test_tenant_id, test_bu_id),
-            headers={'X-App-User-Id': app_user},
             params={'app_user_id': app_user, 'limit': 100},
         )
 
@@ -242,8 +248,8 @@ class TestSearchSessionControllerIntegration:
         for session in sessions:
             assert session['app_user_id'] == app_user
         returned_ids = {s['id'] for s in sessions}
-        assert user0_id in returned_ids
-        assert user1_id not in returned_ids
+        assert app_user_session_id in returned_ids
+        assert app_user_2_session_id not in returned_ids
 
     def test_list_search_sessions_pagination(
         self,
@@ -252,27 +258,34 @@ class TestSearchSessionControllerIntegration:
         test_bu_id: str,
         app_user: str,
     ):
-        # Arrange
+        # Arrange — create 3 sessions
         suffix = uuid.uuid4().hex[:8]
         for i in range(3):
-            resp = test_client.post(self._base_url(test_tenant_id, test_bu_id), json={
-                'app_user_id': app_user,
-                'initial_query': f'pagination {suffix} #{i}',
-            })
-            assert resp.status_code == 201
+            self._create_session(
+                test_client, test_tenant_id, test_bu_id, app_user,
+                initial_query=f'pagination {suffix} #{i}',
+            )
 
-        # Act
-        response = test_client.get(
+        # Act — fetch page 1 and page 2 with limit=1
+        page_1 = test_client.get(
             self._base_url(test_tenant_id, test_bu_id),
-            headers={'X-App-User-Id': app_user},
-            params={'limit': 1},
+            params={'limit': 1, 'offset': 0},
+        )
+        page_2 = test_client.get(
+            self._base_url(test_tenant_id, test_bu_id),
+            params={'limit': 1, 'offset': 1},
         )
 
-        # Assert
-        assert response.status_code == 200
-        data = response.json()
-        assert len(data['search_sessions']) <= 1
-        assert data['total'] >= 3
+        # Assert — pagination returns exactly one item per page and the items
+        # differ between pages
+        assert page_1.status_code == 200
+        assert page_2.status_code == 200
+        page_1_data = page_1.json()
+        page_2_data = page_2.json()
+        assert len(page_1_data['search_sessions']) == 1
+        assert len(page_2_data['search_sessions']) == 1
+        assert page_1_data['search_sessions'][0]['id'] != page_2_data['search_sessions'][0]['id']
+        assert page_1_data['total'] >= 3
 
     def test_update_search_session_turn_count(
         self,
@@ -282,13 +295,9 @@ class TestSearchSessionControllerIntegration:
         app_user: str,
     ):
         # Arrange
-        suffix = uuid.uuid4().hex[:8]
-        create_resp = test_client.post(self._base_url(test_tenant_id, test_bu_id), json={
-            'app_user_id': app_user,
-            'initial_query': f'update turn count {suffix}',
-        })
-        assert create_resp.status_code == 201
-        session_id = create_resp.json()['search_session']['id']
+        session_id = self._create_session(
+            test_client, test_tenant_id, test_bu_id, app_user,
+        )['id']
 
         # Act
         response = test_client.patch(
@@ -316,44 +325,61 @@ class TestSearchSessionControllerIntegration:
         # Assert
         assert response.status_code == 404
 
-    def test_update_search_session_is_saved_not_applied(
+    def test_update_search_session_is_saved(
         self,
         test_client: TestClient,
         test_tenant_id: str,
         test_bu_id: str,
         app_user: str,
     ):
-        # This test documents current behavior: the API schema accepts `is_saved`
-        # and `saved_name` on PATCH, but the service's `_update_entity_from_request`
-        # does NOT apply those fields, so they are silently ignored.
         # Arrange
-        suffix = uuid.uuid4().hex[:8]
-        create_resp = test_client.post(self._base_url(test_tenant_id, test_bu_id), json={
-            'app_user_id': app_user,
-            'initial_query': f'is_saved gap test {suffix}',
-        })
-        assert create_resp.status_code == 201
-        session_id = create_resp.json()['search_session']['id']
+        session_id = self._create_session(
+            test_client, test_tenant_id, test_bu_id, app_user,
+        )['id']
 
-        # Act
+        # Act — save the session with a name
         patch_resp = test_client.patch(
             f'{self._base_url(test_tenant_id, test_bu_id)}/{session_id}',
-            json={'is_saved': True},
+            json={'is_saved': True, 'saved_name': 'My Saved Search'},
         )
         assert patch_resp.status_code == 200
 
         get_resp = test_client.get(
             f'{self._base_url(test_tenant_id, test_bu_id)}/{session_id}',
-            headers={'X-App-User-Id': app_user},
         )
 
         # Assert
         assert get_resp.status_code == 200
         session = get_resp.json()['search_session']
-        assert session['is_saved'] is False, (
-            'Documents current behavior: _update_entity_from_request does not '
-            'apply `is_saved` even though the API schema accepts it.'
+        assert session['is_saved'] is True
+        assert session['saved_name'] == 'My Saved Search'
+
+    def test_update_search_session_unsave(
+        self,
+        test_client: TestClient,
+        test_tenant_id: str,
+        test_bu_id: str,
+        app_user: str,
+    ):
+        # Arrange — create a session and save it
+        session_id = self._create_session(
+            test_client, test_tenant_id, test_bu_id, app_user,
+        )['id']
+        test_client.patch(
+            f'{self._base_url(test_tenant_id, test_bu_id)}/{session_id}',
+            json={'is_saved': True, 'saved_name': 'Temporary Save'},
         )
+
+        # Act — unsave it
+        patch_resp = test_client.patch(
+            f'{self._base_url(test_tenant_id, test_bu_id)}/{session_id}',
+            json={'is_saved': False},
+        )
+        assert patch_resp.status_code == 200
+
+        # Assert
+        session = patch_resp.json()['search_session']
+        assert session['is_saved'] is False
 
     def test_delete_search_session(
         self,
@@ -363,13 +389,9 @@ class TestSearchSessionControllerIntegration:
         app_user: str,
     ):
         # Arrange
-        suffix = uuid.uuid4().hex[:8]
-        create_resp = test_client.post(self._base_url(test_tenant_id, test_bu_id), json={
-            'app_user_id': app_user,
-            'initial_query': f'delete test {suffix}',
-        })
-        assert create_resp.status_code == 201
-        session_id = create_resp.json()['search_session']['id']
+        session_id = self._create_session(
+            test_client, test_tenant_id, test_bu_id, app_user,
+        )['id']
 
         # Act
         delete_resp = test_client.delete(
@@ -381,7 +403,6 @@ class TestSearchSessionControllerIntegration:
 
         get_resp = test_client.get(
             f'{self._base_url(test_tenant_id, test_bu_id)}/{session_id}',
-            headers={'X-App-User-Id': app_user},
         )
         assert get_resp.status_code == 404
 

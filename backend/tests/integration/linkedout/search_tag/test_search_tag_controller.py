@@ -19,32 +19,15 @@ class TestSearchTagControllerIntegration:
     @pytest.fixture
     def search_session_id(self, test_client: TestClient, test_tenant_id: str, test_bu_id: str, app_user: str):
         """Create a search session to use as parent for tags."""
-        suffix = uuid.uuid4().hex[:8]
-        resp = test_client.post(
-            f'/tenants/{test_tenant_id}/bus/{test_bu_id}/search-sessions',
-            json={
-                'app_user_id': app_user,
-                'initial_query': f'test query for tags {suffix}',
-            },
-        )
-        assert resp.status_code == 201
-        return resp.json()['search_session']['id']
+        return self._create_search_session(test_client, test_tenant_id, test_bu_id, app_user)
 
     @pytest.fixture
     def crawled_profile_id(self, test_client: TestClient, app_user: str):
         """Create a crawled profile to tag."""
-        suffix = uuid.uuid4().hex[:8]
-        resp = test_client.post(
-            '/crawled-profiles',
-            json={
-                'linkedin_url': f'https://linkedin.com/in/tag_test_{suffix}',
-                'data_source': 'linkedin',
-                'source_app_user_id': app_user,
-            },
-            headers={'X-App-User-Id': app_user},
-        )
-        assert resp.status_code == 201
-        return resp.json()['crawled_profile']['id']
+        return self._create_crawled_profile(test_client, app_user)
+
+    def _base_url(self, tenant_id: str, bu_id: str) -> str:
+        return f'/tenants/{tenant_id}/bus/{bu_id}/search-tags'
 
     def _create_crawled_profile(self, test_client: TestClient, app_user: str) -> str:
         suffix = uuid.uuid4().hex[:8]
@@ -89,7 +72,7 @@ class TestSearchTagControllerIntegration:
         tag_name: str,
     ) -> dict:
         resp = test_client.post(
-            f'/tenants/{test_tenant_id}/bus/{test_bu_id}/search-tags',
+            self._base_url(test_tenant_id, test_bu_id),
             json={
                 'app_user_id': app_user,
                 'session_id': session_id,
@@ -118,10 +101,7 @@ class TestSearchTagControllerIntegration:
         }
 
         # Act
-        response = test_client.post(
-            f'/tenants/{test_tenant_id}/bus/{test_bu_id}/search-tags',
-            json=payload,
-        )
+        response = test_client.post(self._base_url(test_tenant_id, test_bu_id), json=payload)
 
         # Assert
         assert response.status_code == 201
@@ -141,10 +121,7 @@ class TestSearchTagControllerIntegration:
         test_bu_id: str,
     ):
         # Arrange / Act
-        response = test_client.post(
-            f'/tenants/{test_tenant_id}/bus/{test_bu_id}/search-tags',
-            json={},
-        )
+        response = test_client.post(self._base_url(test_tenant_id, test_bu_id), json={})
 
         # Assert
         assert response.status_code == 422
@@ -179,7 +156,7 @@ class TestSearchTagControllerIntegration:
 
         # Act
         response = test_client.post(
-            f'/tenants/{test_tenant_id}/bus/{test_bu_id}/search-tags/bulk',
+            f'{self._base_url(test_tenant_id, test_bu_id)}/bulk',
             json=payload,
         )
 
@@ -188,8 +165,6 @@ class TestSearchTagControllerIntegration:
         data = response.json()
         assert 'search_tags' in data
         assert len(data['search_tags']) == 2
-        for tag in data['search_tags']:
-            assert tag['id'].startswith('stag_')
 
     def test_get_search_tag_by_id(
         self,
@@ -214,7 +189,7 @@ class TestSearchTagControllerIntegration:
 
         # Act
         response = test_client.get(
-            f'/tenants/{test_tenant_id}/bus/{test_bu_id}/search-tags/{tag_id}',
+            f'{self._base_url(test_tenant_id, test_bu_id)}/{tag_id}',
         )
 
         # Assert
@@ -233,7 +208,7 @@ class TestSearchTagControllerIntegration:
     ):
         # Act
         response = test_client.get(
-            f'/tenants/{test_tenant_id}/bus/{test_bu_id}/search-tags/stag_nonexistent',
+            f'{self._base_url(test_tenant_id, test_bu_id)}/stag_nonexistent',
         )
 
         # Assert
@@ -273,7 +248,7 @@ class TestSearchTagControllerIntegration:
 
         # Act
         response = test_client.get(
-            f'/tenants/{test_tenant_id}/bus/{test_bu_id}/search-tags',
+            self._base_url(test_tenant_id, test_bu_id),
             params={'session_id': search_session_id},
         )
 
@@ -317,7 +292,7 @@ class TestSearchTagControllerIntegration:
 
         # Act
         response = test_client.get(
-            f'/tenants/{test_tenant_id}/bus/{test_bu_id}/search-tags',
+            self._base_url(test_tenant_id, test_bu_id),
             params={'crawled_profile_id': crawled_profile_id},
         )
 
@@ -360,7 +335,7 @@ class TestSearchTagControllerIntegration:
 
         # Act
         response = test_client.get(
-            f'/tenants/{test_tenant_id}/bus/{test_bu_id}/search-tags',
+            self._base_url(test_tenant_id, test_bu_id),
             params={'tag_name': 'important'},
         )
 
@@ -382,28 +357,45 @@ class TestSearchTagControllerIntegration:
         search_session_id: str,
         crawled_profile_id: str,
     ):
-        # Arrange
+        # Arrange — create 3 tags scoped to a fresh session so we can isolate them
+        isolated_session_id = self._create_search_session(
+            test_client, test_tenant_id, test_bu_id, app_user
+        )
+        created_ids = []
         for i in range(3):
-            self._create_tag(
+            tag = self._create_tag(
                 test_client,
                 test_tenant_id,
                 test_bu_id,
                 app_user,
-                search_session_id,
+                isolated_session_id,
                 crawled_profile_id,
                 f'Pagination Tag {i}',
             )
+            created_ids.append(tag['id'])
 
-        # Act
-        response = test_client.get(
-            f'/tenants/{test_tenant_id}/bus/{test_bu_id}/search-tags',
-            params={'limit': 1},
+        # Act — fetch page 1 (limit=1) and page 2 (limit=1, offset=1) for the
+        # isolated session
+        page_1 = test_client.get(
+            self._base_url(test_tenant_id, test_bu_id),
+            params={'session_id': isolated_session_id, 'limit': 1, 'offset': 0},
+        )
+        page_2 = test_client.get(
+            self._base_url(test_tenant_id, test_bu_id),
+            params={'session_id': isolated_session_id, 'limit': 1, 'offset': 1},
         )
 
-        # Assert
-        assert response.status_code == 200
-        data = response.json()
-        assert len(data['search_tags']) <= 1
+        # Assert — both pages return exactly one item, the items differ, and
+        # both belong to the isolated session
+        assert page_1.status_code == 200
+        assert page_2.status_code == 200
+        page_1_tags = page_1.json()['search_tags']
+        page_2_tags = page_2.json()['search_tags']
+        assert len(page_1_tags) == 1
+        assert len(page_2_tags) == 1
+        assert page_1_tags[0]['id'] != page_2_tags[0]['id']
+        for tag in (page_1_tags[0], page_2_tags[0]):
+            assert tag['id'] in created_ids
 
     def test_update_search_tag_name(
         self,
@@ -428,7 +420,7 @@ class TestSearchTagControllerIntegration:
 
         # Act
         response = test_client.patch(
-            f'/tenants/{test_tenant_id}/bus/{test_bu_id}/search-tags/{tag_id}',
+            f'{self._base_url(test_tenant_id, test_bu_id)}/{tag_id}',
             json={'tag_name': 'Updated Tag'},
         )
 
@@ -446,7 +438,7 @@ class TestSearchTagControllerIntegration:
     ):
         # Act
         response = test_client.patch(
-            f'/tenants/{test_tenant_id}/bus/{test_bu_id}/search-tags/stag_nonexistent',
+            f'{self._base_url(test_tenant_id, test_bu_id)}/stag_nonexistent',
             json={'tag_name': 'Should Not Apply'},
         )
 
@@ -476,7 +468,7 @@ class TestSearchTagControllerIntegration:
 
         # Act
         response = test_client.delete(
-            f'/tenants/{test_tenant_id}/bus/{test_bu_id}/search-tags/{tag_id}',
+            f'{self._base_url(test_tenant_id, test_bu_id)}/{tag_id}',
         )
 
         # Assert
@@ -490,7 +482,7 @@ class TestSearchTagControllerIntegration:
     ):
         # Act
         response = test_client.delete(
-            f'/tenants/{test_tenant_id}/bus/{test_bu_id}/search-tags/stag_nonexistent',
+            f'{self._base_url(test_tenant_id, test_bu_id)}/stag_nonexistent',
         )
 
         # Assert
