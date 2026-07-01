@@ -79,17 +79,22 @@ def render_skill(tmpl_path: Path, host_config: dict, variables: dict[str, str]) 
     # Render template (conditionals + variables)
     rendered = render_template(template, skill_vars)
 
-    # Process frontmatter per host rules
+    # Process frontmatter per host rules. The generated-header comment goes into the
+    # body, after the frontmatter's closing delimiter — never before the opening
+    # ``---``, or frontmatter parsers (which require it on line 1) miss the whole
+    # block, including ``description``.
     frontmatter, body = split_frontmatter(rendered)
     if frontmatter:
         processed_fm = process_frontmatter(frontmatter, host_config)
-        rendered = join_frontmatter(processed_fm, body)
+        rendered = join_frontmatter(processed_fm, GENERATED_HEADER + body)
+    else:
+        rendered = GENERATED_HEADER + rendered
 
     # Apply path and tool rewrites
     rendered = apply_path_rewrites(rendered, host_config)
     rendered = apply_tool_rewrites(rendered, host_config)
 
-    return GENERATED_HEADER + rendered
+    return rendered
 
 
 def render_routing(tmpl_path: Path, host_config: dict, variables: dict[str, str]) -> str:
@@ -98,6 +103,8 @@ def render_routing(tmpl_path: Path, host_config: dict, variables: dict[str, str]
     rendered = render_template(template, variables)
     rendered = apply_path_rewrites(rendered, host_config)
     rendered = apply_tool_rewrites(rendered, host_config)
+    # Routing files (CLAUDE.md/AGENTS.md/COPILOT.md) carry no frontmatter, so the
+    # header is safe to prepend directly.
     return GENERATED_HEADER + rendered
 
 
