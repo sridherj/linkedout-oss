@@ -40,6 +40,10 @@ class SearchSessionService(BaseService[SearchSessionEntity, SearchSessionSchema,
             entity.turn_count = update_request.turn_count
         if update_request.last_active_at is not None:
             entity.last_active_at = update_request.last_active_at
+        if update_request.is_saved is not None:
+            entity.is_saved = update_request.is_saved
+        if update_request.saved_name is not None:
+            entity.saved_name = update_request.saved_name
 
     # -- Custom methods for session management --
 
